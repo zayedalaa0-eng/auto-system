@@ -1,0 +1,18 @@
+
+> web@0.1.0 dev
+> next dev --hostname 127.0.0.1 --port 3000
+
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://127.0.0.1:3000
+- Network:       http://127.0.0.1:3000
+✓ Ready in 1915ms
+
+○ Compiling / ...
+ GET / 307 in 7.1s (next.js: 5.6s, proxy.ts: 858ms, application-code: 710ms)
+ GET /dashboard/setup 200 in 1717ms (next.js: 1413ms, proxy.ts: 11ms, application-code: 293ms)
+ GET / 307 in 2.3s (next.js: 15ms, proxy.ts: 22ms, application-code: 2.3s)
+ GET /dashboard/setup 200 in 1012ms (next.js: 82ms, proxy.ts: 64ms, application-code: 866ms)
+ GET /login 200 in 2.7s (next.js: 2.5s, proxy.ts: 18ms, application-code: 176ms)
+ POST /dashboard/setup 303 in 2.8s (next.js: 10ms, proxy.ts: 18ms, application-code: 2.8s)
+  └─ ƒ signOutAction() in 2ms src/app/dashboard/actions.ts
+✓ Finished filesystem cache database compaction in 12.8s

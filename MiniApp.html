@@ -1,0 +1,2261 @@
+<!DOCTYPE html>
+
+<html dir="rtl" lang="ar">
+
+<head>
+
+<meta charset="UTF-8" />
+
+<title>أوتو سيستم | التطبيق المصغر</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" rel="stylesheet" />
+
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<style>
+
+:root {
+
+--primary: var(--tg-theme-button-color, #0f172a);
+
+--accent: #38bdf8;
+
+--success: #10b981;
+
+--danger: #ef4444;
+
+--warning: #f59e0b;
+
+--info: #6366f1;
+
+--bg: var(--tg-theme-bg-color, #f8fafc);
+
+--card-bg: var(--tg-theme-secondary-bg-color, #ffffff);
+
+--text: var(--tg-theme-text-color, #1e293b);
+
+--hint: var(--tg-theme-hint-color, #94a3b8);
+
+--shadow: 0 4px 15px rgba(0,0,0,0.05);
+
+}
+
+body { background-color: var(--bg); color: var(--text); font-family: 'Times New Roman', serif !important; padding-top: 15px; padding-bottom: 90px; overflow-x: hidden; font-size: 15px; }
+
+.form-control, .form-select, .btn, .badge { font-family: 'Times New Roman', serif !important; }
+
+.bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%;
+background: var(--card-bg); display: flex; justify-content: space-around; padding: 10px 5px; box-shadow: 0 -2px 15px rgba(0,0,0,0.1); z-index: 1000; overflow-x: auto; white-space: nowrap;
+border-top: 1px solid rgba(0,0,0,0.05); }
+
+.bottom-nav::-webkit-scrollbar { display: none; }
+
+.nav-item-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--hint); text-decoration: none; font-size: 0.8rem; font-weight: bold; width: 70px; cursor: pointer; transition: 0.3s; }
+
+.nav-item-btn i { font-size: 1.4rem; margin-bottom: 4px; }
+
+.nav-item-btn.active { color: var(--primary); }
+
+.nav-item-btn.active i { transform: translateY(-3px); }
+
+.section-view { display: none; animation: fadeIn 0.3s; padding: 5px 15px; }
+
+.section-view.active { display: block; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+.card-stat { border-radius: 16px; box-shadow: var(--shadow); background: var(--card-bg); padding: 18px; margin-bottom: 15px; border-top: 4px solid var(--primary); }
+
+.form-label { font-weight: 700; font-size: 0.95rem; margin-bottom: 5px;
+display: block; text-align: right; color: var(--text);}
+
+.form-control, .form-select { border-radius: 10px; border: 1px solid #e2e8f0; padding: 10px 14px; background-color: var(--bg); font-size: 1rem; color: var(--text);}
+
+.form-control:focus, .form-select:focus { border-color: var(--primary);
+box-shadow: 0 0 0 0.2rem rgba(15, 23, 42, 0.15); background-color: var(--card-bg);}
+
+.dynamic-box { display:none; background: rgba(16, 185, 129, 0.1);
+padding:15px; border-radius:12px; margin-bottom:15px; border: 1px solid rgba(16, 185, 129, 0.3); border-right: 4px solid var(--success);}
+
+.trade-box { display:none; background: rgba(56, 189, 248, 0.1);
+padding:15px; border-radius:12px; margin-bottom:15px; border: 1px solid rgba(56, 189, 248, 0.3); border-right: 4px solid var(--accent);}
+
+.overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+background: var(--bg); z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; visibility: hidden; opacity: 0; transition: 0.3s; }
+
+.overlay.show { visibility: visible; opacity: 1; }
+
+.btn-primary { background-color: var(--primary); color: var(--tg-theme-button-text-color, #fff); border: none; padding: 12px;
+border-radius: 10px; font-weight: bold; font-size: 1.1rem;}
+
+.select2-container { width: 100% !important; text-align: right; }
+
+.select2-container--default .select2-selection--multiple, .select2-container--default .select2-selection--single { min-height: 48px !important; border-radius: 10px !important; border: 1px solid #e2e8f0 !important; background: var(--bg) !important; display: flex;
+align-items: center; }
+
+.select2-results__option { font-size: 1rem; padding: 10px 15px !important; color: #000; }
+
+.note-item { background: var(--bg); padding: 12px; border-radius: 10px;
+margin-bottom: 10px; border-right: 4px solid var(--info); font-size: 0.95rem; border: 1px solid rgba(0,0,0,0.05); }
+
+.note-meta { font-size: 0.8rem; font-weight: bold; color: var(--hint);
+margin-bottom: 5px; border-bottom: 1px solid rgba(0,0,0,0.05);
+padding-bottom: 4px;}
+
+.empty-state { text-align: center; padding: 40px 20px; color: var(--hint); }
+
+.wizard-step { display: none; animation: fadeIn 0.4s ease; }
+
+.wizard-step.active { display: block; }
+
+.path-btn { height: 120px; border-radius: 16px; display: flex;
+flex-direction: column; align-items: center; justify-content: center;
+gap: 10px; transition: 0.3s; font-size: 1.1rem; font-weight: bold;
+background: var(--bg); border: 2px solid transparent; color: var(--text); }
+
+.path-btn i { font-size: 2.5rem; }
+
+.path-btn:active { border-color: var(--primary); background: rgba(0,0,0,0.05); }
+
+.modal-content { background-color: var(--card-bg); color: var(--text);
+border-radius: 16px; }
+
+.modal-header { border-bottom: 1px solid rgba(0,0,0,0.05); }
+
+#blockedScreen { display: none; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: var(--bg);
+text-align: center; padding: 20px; position: fixed; top: 0; left: 0;
+width: 100%; z-index: 100000; }
+
+.success-icon-container { width: 100px; height: 100px; background: rgba(16, 185, 129, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; animation: bounceIn 0.5s; }
+
+.success-icon-container i { font-size: 3.5rem; color: var(--success); }
+
+@keyframes bounceIn { 0% { transform: scale(0.3); opacity: 0; } 50% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
+
+/* Professional UI refinement layer */
+:root { --radius: 8px; --control-radius: 8px; }
+body, .form-control, .form-select, .btn, .badge, th, td, textarea {
+  font-family: "Segoe UI", Tahoma, Arial, sans-serif !important;
+  letter-spacing: 0;
+}
+.card, .card-stat, .stat-card, .premium-table, .modal-content, .login-box {
+  border-radius: var(--radius) !important;
+}
+.btn, .form-control, .form-select, .select2-selection, .status-badge {
+  border-radius: var(--control-radius) !important;
+}
+.btn { font-weight: 700; }
+.btn:focus-visible, .form-control:focus, .form-select:focus {
+  outline: 2px solid rgba(56, 189, 248, 0.35);
+  outline-offset: 1px;
+}
+.table-responsive, .premium-table { max-width: 100%; }
+.premium-table th, .premium-table td { line-height: 1.45; }
+.empty-state {
+  border: 1px dashed rgba(15, 23, 42, 0.16);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,0.55);
+}
+.note-item, .notif-row, .notif-details { border-radius: var(--radius) !important; }
+@media (max-width: 768px) {
+  .section-view { padding-left: 10px !important; padding-right: 10px !important; }
+  .btn { min-height: 42px; }
+}
+</style>
+
+</head>
+
+<body>
+
+<div id="blockedScreen">
+
+<i class="fa fa-shield-alt" style="font-size:5rem; color:#ef4444;
+margin-bottom:20px;"></i>
+
+<h2 class="fw-bold mb-2" style="color: var(--text);">وصول غير مصرح به ⛔</h2>
+
+<p style="color: var(--hint); font-size:1.1rem;
+font-weight:bold;">عذراً، لا نملك صلاحية لدخولك النظام.</p>
+
+<p style="color: var(--text); font-size:1rem; font-weight:bold;
+background: rgba(239, 68, 68, 0.1); padding: 10px; border-radius: 8px;" id="blockedDebugInfo">جارٍ التحقق...</p>
+
+<p style="color: var(--hint); font-size:0.95rem;">يرجى تزويد الإدارة بالرقم أعلاه ليتم إضافته في قاعدة الموظفين.</p>
+
+</div>
+
+<div class="overlay show" id="globalLoader">
+
+<div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
+
+<h5 class="mt-3 fw-bold" id="loaderText" style="color: var(--text);">تهيئة النظام...</h5>
+
+</div>
+
+<div class="overlay" id="successScreen">
+
+<div class="success-icon-container"><i class="fa fa-check"></i></div>
+
+<h3 class="fw-bold text-dark mb-2" id="successMsgText">تم الحفظ بنجاح!</h3>
+
+<p class="text-muted mb-4 small fw-bold">سيتم العودة للقائمة...</p>
+
+<button class="btn btn-dark btn-lg rounded-pill px-5 fw-bold shadow-sm" onclick="document.getElementById('successScreen').classList.remove('show');"><i class="fa fa-times-circle me-2"></i> إغلاق النافذة</button>
+
+</div>
+
+<div class="bottom-nav" id="bottomNav" style="display:none;">
+
+<a class="nav-item-btn active" id="nav_add_wizard" onclick="switchView('add_wizard', this)"><i class="fa fa-magic"></i>الرئيسية</a>
+
+<a class="nav-item-btn" id="nav_my_cust" onclick="switchView('my_cust', this)"><i class="fa fa-list"></i>عملائي</a>
+
+<a class="nav-item-btn" id="nav_search" onclick="switchView('search', this)"><i class="fa fa-search"></i>بحث</a>
+
+<a class="nav-item-btn" id="nav_inv" onclick="switchView('inv', this)"><i class="fa fa-warehouse"></i>المخزون</a>
+
+<a class="nav-item-btn mgr-only" id="nav_add_inv" style="display:none;" onclick="switchView('add_inv', this)"><i class="fa fa-car"></i>مخزون+</a>
+
+<a class="nav-item-btn mgr-only" id="nav_hr" style="display:none;" onclick="switchView('hr', this)"><i class="fa fa-users-cog"></i>الموظفين</a>
+
+<a class="nav-item-btn mgr-only" id="nav_mgr_report" style="display:none;" onclick="switchView('mgr_report', this)"><i class="fa fa-chart-pie"></i>الإدارة</a>
+
+</div>
+
+<div class="container-fluid p-0" id="mainAppContent" style="display: none;">
+
+<div id="view_add_wizard" class="section-view active">
+
+<div class="card-stat mx-auto">
+
+<form id="wizardAddForm" onsubmit="event.preventDefault();">
+
+<div id="wizard-step-1" class="wizard-step active">
+
+<h4 class="fw-bold mb-4 text-center border-bottom pb-3" style="color: var(--primary);"><i class="fa fa-user-plus me-2"></i> تأسيس العميل</h4>
+
+<div class="mb-3 p-3 bg-light border rounded" id="divRoomSelect" style="display:none;">
+
+<label class="form-label text-dark"><i class="fa fa-building text-warning"></i> إسناد لمعرض <span class="text-danger">*</span></label>
+
+<select id="cRoom" class="form-select border-warning"></select>
+
+</div>
+
+<div class="mb-3"><label class="form-label">الاسم الكامل <span class="text-danger">*</span></label><input type="text" id="cName" class="form-control" required placeholder="الاسم الثلاثي"></div>
+
+<div class="row g-2 mb-3">
+
+<div class="col-5"><label class="form-label">الكنية</label><input type="text" id="cNickname" class="form-control" placeholder="أبو..."></div>
+
+<div class="col-7"><label class="form-label">العنوان</label><input type="text" id="cAddress" class="form-control" placeholder="المدينة..."></div>
+
+</div>
+
+<div class="row g-2 mb-4">
+
+<div class="col-4"><label class="form-label">الرمز</label><select id="cWaPrefix" class="form-select"><option>+970</option><option>+972</option><option>+962</option></select></div>
+
+<div class="col-8"><label class="form-label">الهاتف <span class="text-danger">*</span></label><input type="text" id="cPhone" class="form-control border-warning" required maxlength="10" placeholder="10 أرقام"></div>
+
+</div>
+
+<button type="button" class="btn btn-primary w-100 shadow" onclick="goToWizardStep2()"><i class="fa fa-arrow-left me-2"></i> الخطوة التالية</button>
+
+</div>
+
+<div id="wizard-step-2" class="wizard-step">
+
+<h4 class="fw-bold mb-4 text-center border-bottom pb-3" style="color: var(--primary);">ما هو طلب العميل؟</h4>
+
+<div class="row g-3 mb-4">
+
+<div class="col-12">
+
+<button type="button" class="btn w-100 path-btn shadow-sm" onclick="chooseWizardPath('buy')">
+
+<i class="fa fa-shopping-cart text-primary"></i> <span class="text-primary">شراء أو استبدال سيارة</span>
+
+</button>
+
+</div>
+
+<div class="col-12">
+
+<button type="button" class="btn w-100 path-btn shadow-sm" onclick="chooseWizardPath('sell')">
+
+<i class="fa fa-tag text-success"></i> <span class="text-success">عرض سيارته للبيع فقط</span>
+
+</button>
+
+</div>
+
+</div>
+
+<button type="button" class="btn btn-secondary w-100 rounded-pill" onclick="openWizardStep(1)">رجوع للبيانات</button>
+
+</div>
+
+<div id="wizard-step-3-buy" class="wizard-step">
+
+<h5 class="fw-bold text-primary mb-3 border-bottom pb-2"><i class="fa fa-shopping-cart"></i> بيانات الشراء والتفاوض</h5>
+
+<div class="form-check form-switch mb-3 p-2 rounded border" style="background: var(--bg);"><input class="form-check-input ms-0 me-2" type="checkbox" id="addHasTrade" onchange="toggleBox('addTradeBox', this.checked); if(this.checked) handleTradeStatusChange(document.getElementById('addTradeStatus'), 'addStatus');"><label class="form-check-label fw-bold text-primary pt-1">سيارة العميل (برسم البيع / استبدال / شراء للمعرض)</label></div>
+
+<div id="addTradeBox" class="trade-box">
+
+<h6 class="fw-bold text-primary mb-2 small"><i class="fa fa-car-crash"></i> بيانات سيارة العميل:</h6>
+
+<input type="text" id="addTradeModel" class="form-control mb-2" placeholder="النوع والموديل">
+
+<div class="row g-2 mb-2"><div class="col-6"><input type="number" id="addTradePrice" class="form-control" placeholder="السعر ($)"></div><div class="col-6"><input type="text" id="addTradeId" class="form-control" placeholder="الشاصي"></div></div>
+
+<div class="row g-2 mb-2"><div class="col-4"><input type="text" id="addTradeColor" class="form-control" placeholder="اللون"></div><div class="col-4"><input type="number" id="addTradeYear" class="form-control" placeholder="سنة"></div><div class="col-4"><input type="text" id="addTradeMileage" class="form-control" placeholder="العداد"></div></div>
+
+<div class="row g-2 mb-2"><div class="col-6"><input type="text" id="addTradeSpecs" class="form-control" placeholder="المواصفات"></div><div class="col-6"><input type="text" id="addTradeInspection" class="form-control" placeholder="الفحص"></div></div>
+
+<div class="row g-2 mb-2"><div class="col-6"><input type="date" id="addTradeLicenseExp" class="form-control" title="تاريخ انتهاء الرخصة"></div><div class="col-6"><input type="text" id="addTradeNotes" class="form-control" placeholder="ملاحظات الرخصة/السيارة"></div></div>
+
+<label class="small text-primary fw-bold mt-1">الحالة:</label>
+
+<div class="d-flex align-items-center gap-2 mb-2">
+<select id="addTradeStatus" class="form-select border-primary" onchange="handleTradeStatusChange(this, 'addStatus'); autoSoldRule(this, 'addStatus', 'addPayBox', 'addResBox', 'addRejBox', 'addChassisBox')"><option value="عرض سيارة (برسم البيع)">عرض سيارة (برسم البيع)</option><option value="عرض سيارة (تحت رسم البيع)" style="display:none;">عرض سيارة (برسم البيع)</option><option value="استبدال (دراسة وتقييم)">استبدال (دراسة وتقييم)</option><option value="تم الاتفاق والاستبدال">تم الاتفاق والاستبدال ✅</option><option value="تم التقييم">تم التقييم</option><option value="شراء السيارة للمعرض">شراء السيارة للمعرض</option><option value="تم بيع السيارة لعميل خارجي">تم بيع السيارة لعميل خارجي</option><option value="تراجع العميل عن البيع">تراجع العميل عن البيع</option><option value="رفض من قبل المعرض">رفض من قبل المعرض</option><option value="تحت الدراسة والتقييم" style="display:none;">تحت الدراسة (قديم)</option></select>
+<button type="button" class="btn btn-sm btn-outline-primary fw-bold rounded-pill" onclick="convertToTradeIn(this)" id="btnConvertTradeAdd" style="display:none; white-space:nowrap;"><i class="fa fa-exchange-alt"></i></button>
+</div>
+
+<label class="small text-danger fw-bold"><i class="fa fa-camera"></i> صور سيارة العميل</label><input type="file" id="addTradePhotos" class="form-control mt-1" multiple accept="image/*,.pdf">
+
+</div>
+
+<div class="mb-3 p-3 border rounded" style="background: var(--bg);">
+
+<label class="form-label fw-bold text-primary mb-1"><i class="fa fa-car"></i> السيارة المطلوبة</label>
+<div class="small text-muted fw-bold mb-2">اختيارها مطلوب للشراء أو الاستبدال، واختياري عند برسم البيع فقط.</div>
+
+<div class="d-flex gap-3 mb-2 border-bottom pb-2">
+
+<div class="form-check"><input class="form-check-input" type="checkbox" id="carTypeInv" onchange="toggleCarInput()"><label class="form-check-label text-success fw-bold">من المخزون</label></div>
+
+<div class="form-check"><input class="form-check-input" type="checkbox" id="carTypeCustom" onchange="toggleCarInput()"><label class="form-check-label text-danger fw-bold">طلب خاص</label></div>
+
+</div>
+
+<div id="divCarSelect" style="display:none;"><select id="addCarSelect" class="form-select" multiple style="width:100%"></select></div>
+
+<div id="divCarCustom" style="display:none;"><div class="row g-2 mt-2"><div class="col-7"><input type="text" id="addCarCustomType" class="form-control border-danger" placeholder="النوع" onkeyup="debouncedRenderNegotiation()"></div><div class="col-5"><input type="number" id="addCarCustomYear" class="form-control border-danger" placeholder="الموديل" onkeyup="debouncedRenderNegotiation()"></div></div></div>
+
+</div>
+
+<div id="dynamicNegotiationContainer" class="mb-3"><div class="alert alert-secondary text-center small fw-bold p-2 m-0">اختيار السيارة المطلوبة اختياري عند برسم البيع فقط.</div></div>
+
+<div class="mb-4 border border-primary border-2 p-3 rounded" style="background: var(--bg);">
+
+<label class="form-label text-dark">الحالة النهائية للمشتري <span class="text-danger">*</span></label>
+
+<select id="addStatus" class="form-select border-primary fw-bold text-primary mb-3" required onchange="toggleDyn('addStatus','addPayBox','addResBox','addRejBox', 'addChassisBox')"><option value="قيد المتابعة ⏳" selected>⭐ متابعة ⏳</option><option value="تم البيع ✅">✅ تم البيع</option><option value="حجز السيارة 🕒">⏸ حجز 🕒</option><option value="الرفض من قبل العميل ❌">❌ مرفوض من العميل</option><option value="الرفض من قبل المعرض ⛔">⛔ مرفوض من المعرض</option></select>
+
+<div id="addRejBox" style="display:none;" class="mb-3"><input type="text" id="addReject" class="form-control border-danger" placeholder="سبب الرفض..."></div>
+
+<div id="addPayBox" class="dynamic-box mb-3"><select id="addPay" class="form-select mb-2"><option value="">آلية الدفع...</option><option>كاش 💵</option><option>تقسيط / بنك 🏦</option><option>تأجير تمويلي 📉</option><option>شيكات شخصية 📝</option></select></div>
+
+<div id="addChassisBox" class="mb-3 border border-info p-2 rounded" style="display:none;"><select id="addCarId" class="form-select select2-chassis border-info" style="width:100%"></select></div>
+
+<div id="addResBox" class="mt-3 p-2 border border-warning rounded"><label class="form-label text-primary small fw-bold mb-1">المراجعة / التسليم 📅 <span class="text-danger">*</span></label><input type="date" id="addResDate" class="form-control border-warning"></div>
+
+</div>
+
+<div class="d-flex gap-2">
+
+<button type="button" class="btn btn-secondary w-25 rounded-pill" onclick="openWizardStep(2)">رجوع</button>
+
+<button type="button" class="btn btn-primary w-75 shadow" onclick="submitAddCustomer()"><i class="fa fa-save me-2"></i> حفظ المشتري</button>
+
+</div>
+
+</div>
+
+<div id="wizard-step-3-sell" class="wizard-step">
+
+<h5 class="fw-bold text-success mb-3 border-bottom pb-2"><i class="fa fa-tag"></i> بيانات السيارة المعروضة</h5>
+
+<div class="alert alert-success fw-bold small p-2"><i class="fa fa-info-circle"></i> سيتم تسجيلها في المخزون (برسم البيع).</div>
+
+<div class="row g-2 mb-2"><div class="col-6"><input type="text" id="sCarModel" class="form-control border-info" placeholder="النوع والموديل *"></div><div class="col-6"><input type="text" id="sCarId" class="form-control border-info" placeholder="رقم الشاصي *"></div></div>
+
+<div class="row g-2 mb-2"><div class="col-4"><input type="number" id="sCarPrice" class="form-control" placeholder="السعر ($) *"></div><div class="col-4"><input type="text" id="sCarColor" class="form-control" placeholder="اللون"></div><div class="col-4"><input type="number" id="sCarYear" class="form-control" placeholder="سنة"></div></div>
+
+<div class="row g-2 mb-3"><div class="col-4"><input type="text" id="sCarMileage" class="form-control" placeholder="العداد"></div><div class="col-4"><input type="text" id="sCarSpecs" class="form-control" placeholder="المواصفات"></div><div class="col-4"><input type="text" id="sCarInspection" class="form-control" placeholder="الفحص"></div></div>
+
+<div class="row g-2 mb-3"><div class="col-6"><select id="sCarGear" class="form-select"><option value="اتوماتيك">اتوماتيك</option><option value="يدوي">يدوي</option></select></div><div class="col-6"><select id="sCarFuel" class="form-select"><option value="بنزين">بنزين</option><option value="سولار">سولار</option><option value="هايبرد">هايبرد</option><option value="كهربائية">كهربائية</option></select></div></div>
+
+<div class="mb-3"><input type="date" id="sCarLicenseExp" class="form-control" title="تاريخ الرخصة"></div>
+
+<div class="mb-3"><textarea id="sCarNotes" class="form-control" rows="1" placeholder="ملاحظات إضافية..."></textarea></div>
+
+<div class="mb-4"><label class="small text-danger fw-bold"><i class="fa fa-camera"></i> صور ووثائق (اختياري)</label><input type="file" id="sCarPhotos" class="form-control mt-1" multiple accept="image/*,.pdf"></div>
+
+<div class="d-flex gap-2">
+
+<button type="button" class="btn btn-secondary w-25 rounded-pill" onclick="openWizardStep(2)">رجوع</button>
+
+<button type="button" class="btn btn-success w-75 shadow" onclick="submitSellWizard()"><i class="fa fa-check-circle me-2"></i> إدخال للبيع</button>
+
+</div>
+
+</div>
+
+</form>
+
+</div>
+
+</div>
+
+<div id="view_update_cust" class="section-view">
+
+<div class="card-stat mx-auto border-warning">
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+
+<h5 class="fw-bold m-0 text-warning"><i class="fa fa-pen me-2"></i> تحديث العميل</h5>
+
+<button class="btn btn-sm btn-outline-secondary rounded-pill" onclick="switchView('my_cust')">رجوع <i class="fa fa-arrow-left"></i></button>
+
+</div>
+
+<div class="p-2 rounded border mb-3 text-center" style="background: var(--bg);"><h6 class="text-primary fw-bold m-0" id="updCustNameDisplay">جارٍ التحميل...</h6></div>
+
+<div class="mb-3">
+
+<div class="form-label text-primary fw-bold border-bottom pb-1"><i class="fa fa-history"></i> السجل والمرفقات</div>
+
+<div id="updPastNotes" class="border rounded mb-2 p-2" style="background: var(--bg); max-height: 200px; overflow-y: auto;"></div>
+
+<div id="updPastAttachments" class="p-2 rounded border" style="background: var(--bg);"></div>
+
+</div>
+
+<form id="updCustForm" onsubmit="event.preventDefault();
+submitUpdCustomer();">
+
+<input type="hidden" id="updRowId">
+
+<input type="hidden" id="updCustNameInput">
+
+<input type="hidden" id="updTradeInEditFlag" value="false">
+
+<input type="hidden" id="updOriginalTradeIn" value="{}">
+
+<div id="buyerSections">
+
+<div class="mb-3 p-3 border rounded" style="background: var(--bg);">
+
+<label class="form-label fw-bold text-primary mb-2"><i class="fa fa-car"></i> السيارات المطلوبة للعميل</label>
+
+<div id="currentCarsList" class="d-flex flex-wrap gap-2 mb-2"></div>
+
+<div class="form-check form-switch mb-2 p-2 rounded border" style="background: var(--card-bg);"><input class="form-check-input ms-0 me-2" type="checkbox" id="toggleEditCarsBtn" onchange="toggleBox('editCarSection', this.checked)"><label class="form-check-label fw-bold text-primary small pt-1">تعديل السيارات</label></div>
+
+<div id="editCarSection" style="display:none; background: var(--card-bg); padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
+
+<div class="d-flex gap-3 mb-2 border-bottom pb-2"><div class="form-check"><input class="form-check-input" type="checkbox" id="updCarTypeInv" checked onchange="toggleUpdCarInput()"><label class="form-check-label text-success fw-bold small">من المخزون</label></div><div class="form-check"><input class="form-check-input" type="checkbox" id="updCarTypeCustom" onchange="toggleUpdCarInput()"><label class="form-check-label text-danger fw-bold small">طلب خاص</label></div></div>
+
+<div id="divUpdCarSelect"><select id="updCarSelect" class="form-select" multiple style="width:100%"></select></div>
+
+<div id="divUpdCarCustom" style="display:none;"><div class="row g-2 mt-2"><div class="col-7"><input type="text" id="updCarCustomType" class="form-control border-danger" placeholder="النوع"></div><div class="col-5"><input type="number" id="updCarCustomYear" class="form-control border-danger" placeholder="الموديل"></div></div></div>
+
+<div id="updDynamicNegotiationContainer" class="mt-3"></div>
+
+</div>
+
+</div>
+
+<div class="card border-0 rounded p-3 mb-4 shadow-sm" style="background: var(--bg);">
+
+<label class="form-label fw-bold text-primary mb-2"><i class="fa fa-car-crash"></i> سيارة العميل</label>
+
+<div id="tradeInSummaryBox" class="alert alert-info mb-2 p-2" style="display:none;"></div>
+
+<div class="form-check form-switch m-0 d-flex align-items-center gap-2 mt-2"><input class="form-check-input m-0" type="checkbox" id="updHasTradeIn" onchange="toggleEditTradeIn(this.checked)"><label class="form-check-label fw-bold text-primary small pt-1" id="lblUpdTradeIn">إضافة / تعديل سيارة العميل</label></div>
+
+</div>
+
+<div id="updTradeInDiv" style="display: none;" class="trade-box border-info border-start border-4">
+
+<input type="text" id="updTradeModel" class="form-control mb-2" placeholder="النوع والموديل">
+
+<div class="row g-2 mb-2"><div class="col-6"><input type="number" id="updTradePrice" class="form-control" placeholder="السعر ($)"></div><div class="col-6"><input type="text" id="updTradeId" class="form-control" placeholder="رقم الشاصي"></div></div>
+
+<div class="row g-2 mb-2"><div class="col-4"><input type="text" id="updTradeColor" class="form-control" placeholder="اللون"></div><div class="col-4"><input type="number" id="updTradeYear" class="form-control" placeholder="سنة"></div><div class="col-4"><input type="text" id="updTradeMileage" class="form-control" placeholder="العداد"></div></div>
+
+<div class="row g-2 mb-2"><div class="col-6"><input type="text" id="updTradeSpecs" class="form-control" placeholder="المواصفات"></div><div class="col-6"><input type="text" id="updTradeInspection" class="form-control" placeholder="الفحص"></div></div>
+
+<div class="row g-2 mb-2"><div class="col-6"><input type="date" id="updTradeLicenseExp" class="form-control" title="تاريخ انتهاء الرخصة"></div><div class="col-6"><input type="text" id="updTradeNotes" class="form-control" placeholder="ملاحظات الرخصة/السيارة"></div></div>
+
+<div class="d-flex align-items-center gap-2 mb-2">
+<select id="updTradeStatus" class="form-select border-primary" onchange="handleTradeStatusChange(this, 'updStatus'); autoSoldRule(this, 'updStatus', 'updPayBox', 'updResBox', 'updRejBox', 'updChassisBox')"><option value="عرض سيارة (برسم البيع)">عرض سيارة (برسم البيع)</option><option value="عرض سيارة (تحت رسم البيع)" style="display:none;">عرض سيارة (برسم البيع)</option><option value="استبدال (دراسة وتقييم)">استبدال (دراسة وتقييم)</option><option value="تم الاتفاق والاستبدال">تم الاتفاق والاستبدال ✅</option><option value="تم التقييم">تم التقييم</option><option value="شراء السيارة للمعرض">شراء السيارة للمعرض</option><option value="تم بيع السيارة لعميل خارجي">تم بيع السيارة لعميل خارجي</option><option value="تراجع العميل عن البيع">تراجع العميل عن البيع</option><option value="رفض من قبل المعرض">رفض من قبل المعرض</option><option value="تحت الدراسة والتقييم" style="display:none;">تحت الدراسة (قديم)</option></select>
+<button type="button" class="btn btn-sm btn-outline-primary fw-bold rounded-pill" onclick="convertToTradeIn(this)" id="btnConvertTradeUpd" style="display:none; white-space:nowrap;"><i class="fa fa-exchange-alt"></i></button>
+</div>
+
+<input type="file" id="updTradePhotos" class="form-control" multiple accept="image/*,.pdf">
+
+</div>
+
+</div>
+
+<div id="sellerSections" style="display:none;" class="mb-4 border border-info border-2 p-3 rounded shadow-sm" style="background: var(--bg);">
+
+<label class="form-label fw-bold text-info"><i class="fa fa-tag"></i> حالة سيارة العرض <span class="text-danger">*</span></label>
+
+<div id="sellerStatusContainer">
+
+<select id="sellerStatus" class="form-select border-info fw-bold text-dark mb-2" onchange="toggleSellerTransfer(this.value)">
+
+<option value="السيارة معروضة 🏷️">🏷️ السيارة معروضة للبيع</option>
+
+<option value="تم بيع السيارة ✅">✅ تم بيع السيارة (خارجي)</option>
+
+<option value="تم شراء السيارة للمعرض 🏢">🏢 شراء السيارة للمعرض</option>
+
+<option value="تراجع الزبون عن البيع ❌">❌ تراجع العميل</option>
+
+</select>
+
+<div id="sellerTransferDiv" style="display:none;" class="mb-2 p-2 bg-white border border-success rounded"><label class="small text-success fw-bold">المعرض المشتري:</label><select id="sellerTransferRoom" class="form-select border-success"></select></div>
+
+</div>
+
+<div id="sellerClosedMsg" style="display:none;" class="alert alert-secondary text-center mt-2 small fw-bold"><i class="fa fa-lock mb-1"></i> السجل مغلق.</div>
+
+</div>
+
+<div class="mb-3"><label class="form-label text-primary">إضافة ملاحظة/تحديث:</label><textarea id="updAgrm" class="form-control" rows="2" placeholder="ما الجديد؟..."></textarea></div>
+
+<div class="form-check form-switch mb-3 p-2 bg-success bg-opacity-10 rounded border"><input class="form-check-input ms-0 me-2" type="checkbox" id="updAddVisitCheck" checked><label class="form-check-label fw-bold text-success small pt-1">احتساب كتواصل جديد ➕</label></div>
+
+<div id="buyerFinalStatus" class="mb-4 border border-primary border-2 p-3 rounded shadow-sm" style="background: var(--bg);">
+
+<label class="form-label text-dark fw-bold">الحالة النهائية <span class="text-danger">*</span></label>
+
+<select id="updStatus" class="form-select border-primary fw-bold text-primary mb-3" onchange="toggleDyn('updStatus','updPayBox','updResBox','updRejBox', 'updChassisBox')"><option value="قيد المتابعة ⏳">⭐ متابعة ⏳</option><option value="تم البيع ✅">✅ تم البيع</option><option value="حجز 🕒">⏸ حجز 🕒</option><option value="الرفض من قبل العميل ❌">❌ مرفوض من العميل</option><option value="الرفض من قبل المعرض ⛔">⛔ مرفوض من المعرض</option><option value="الرفض من قبل الشركة ⛔">⛔ مرفوض من الشركة</option><option value="العميل غير فعال">العميل غير فعال</option></select>
+
+<div id="updRejBox" style="display:none;" class="mb-3"><input type="text" id="updReject" class="form-control border-danger" placeholder="سبب الرفض..."></div>
+
+<div id="updPayBox" class="dynamic-box mb-3"><select id="updPay" class="form-select mb-2"><option value="">آلية الدفع...</option><option>كاش 💵</option><option>تقسيط / بنك 🏦</option><option>تأجير تمويلي 📉</option><option>شيكات شخصية 📝</option></select></div>
+
+<div id="updChassisBox" class="mb-3 border border-info p-2 rounded" style="display:none; background: var(--card-bg);"><select id="updCarId" class="form-select select2-chassis border-info" style="width:100%"></select></div>
+
+<div id="updResBox" class="mt-3 p-2 border border-warning rounded" style="display:none; background: var(--card-bg);"><input type="date" id="updResDate" class="form-control border-warning"></div>
+
+</div>
+
+<button type="submit" class="btn btn-warning w-100 shadow-sm mt-2 fw-bold text-dark" id="btnUpdateCustWeb"><i class="fa fa-save me-2"></i> اعتماد التحديثات</button>
+
+<button type="button" id="btnUpgradeSeller" class="btn btn-primary w-100 fw-bold mt-3 shadow-sm" style="display:none;" onclick="upgradeToBuyer()"><i class="fa fa-arrow-up"></i> تحويل لعميل رئيسي (مشتري)</button>
+
+</form>
+
+</div>
+
+</div>
+
+<div id="view_my_cust" class="section-view">
+
+<div class="card-stat mx-auto">
+
+<h5 class="fw-bold mb-3 text-primary"><i class="fa fa-list me-2"></i> تقرير عملائي</h5>
+
+<div class="row g-2 mb-3">
+
+<div class="col-12"><input type="text" id="searchMyCust" class="form-control" placeholder="بحث..." onkeyup="debouncedRenderMyCustomers()"></div>
+
+<div class="col-8"><select id="timeFilterMy" class="form-select" onchange="renderMyCustomers()"><option value="all">كل الأوقات</option><option value="today">اليوم</option><option value="week">آخر أسبوع</option><option value="month">آخر شهر</option></select></div>
+
+<div class="col-4"><button class="btn btn-primary w-100" onclick="loadAllCustomers('my_cust')"><i class="fa fa-sync"></i></button></div>
+
+</div>
+
+<div id="myCustomersContainer"></div>
+
+</div>
+
+</div>
+
+<div id="view_search" class="section-view">
+
+<div class="card-stat mx-auto">
+
+<h5 class="fw-bold mb-3 text-info"><i class="fa fa-search me-2"></i> البحث الشامل</h5>
+
+<input type="text" id="searchShowroomInput" class="form-control mb-3" placeholder="بحث بالاسم، الجوال، السيارة..." onkeyup="debouncedRenderSearchShowroom()">
+
+<div id="searchResultContainer"></div>
+
+</div>
+
+</div>
+
+<div id="view_inv" class="section-view">
+
+<div class="card-stat mx-auto border-success">
+
+<h5 class="fw-bold mb-3 text-success"><i class="fa fa-warehouse me-2"></i> المخزون المتوفر</h5>
+
+<div class="row g-2 mb-3">
+
+<div class="col-12"><input type="text" id="searchInvInput" class="form-control" placeholder="بحث بالموديل أو الشاصي..." onkeyup="debouncedRenderInventory()"></div>
+
+<div class="col-6"><select id="fltInvShowroom" class="form-select text-primary fw-bold" onchange="renderInventory()"><option value="">المعارض</option></select></div>
+
+<div class="col-6"><select id="fltInvOwnerName" class="form-select text-secondary fw-bold" onchange="renderInventory()"><option value="">المُلاك</option></select></div>
+
+<div class="col-10"><select id="fltInvDeal" class="form-select text-success fw-bold" onchange="renderInventory()"><option value="">الصفقات</option><option value="حيازة">حيازة</option><option value="استبدال">استبدال</option><option value="برسم البيع">برسم البيع</option></select></div>
+
+<div class="col-2"><button class="btn btn-success w-100" onclick="loadInventory()"><i class="fa fa-sync"></i></button></div>
+
+</div>
+
+<div id="invContainer"></div>
+
+</div>
+
+</div>
+
+<div id="view_add_inv" class="section-view">
+
+<div class="card-stat mx-auto border-success">
+
+<h5 class="fw-bold mb-3 text-success"><i class="fa fa-car me-2"></i> إضافة للمخزون</h5>
+
+<form id="addInvForm" onsubmit="event.preventDefault();
+submitInventory();">
+
+<div class="row g-2 mb-3"><div class="col-6"><label class="form-label">الشاصي *</label><input type="text" id="invId" class="form-control" required></div><div class="col-6"><label class="form-label">النوع *</label><input type="text" id="invModel" class="form-control" required></div></div>
+
+<div class="row g-2 mb-3"><div class="col-6"><label class="form-label">السعر ($)</label><input type="number" id="invPrice" class="form-control"></div><div class="col-6"><label class="form-label">اللون</label><input type="text" id="invColor" class="form-control"></div></div>
+
+<div class="row g-2 mb-3"><div class="col-6"><label class="form-label">السنة</label><input type="number" id="invYear" class="form-control"></div><div class="col-6"><label class="form-label">العداد</label><input type="text" id="invMileage" class="form-control"></div></div>
+
+<div class="row g-2 mb-3"><div class="col-6"><label class="form-label">المواصفات</label><input type="text" id="invSpecs" class="form-control"></div><div class="col-6"><label class="form-label">الفحص</label><input type="text" id="invInspection" class="form-control"></div></div>
+
+<div class="row g-2 mb-3">
+
+<div class="col-6"><label class="form-label">الحالة</label><select id="invCondition" class="form-select"><option value="صفر كيلو" selected>صفر كيلو</option><option value="مستعملة">مستعملة</option></select></div>
+
+<div class="col-6"><label class="form-label">الصفقة</label><select id="invDealType" class="form-select"><option value="حيازة" selected>حيازة</option><option value="برسم البيع">برسم البيع</option></select></div>
+
+</div>
+
+<div class="mb-3"><label class="form-label">المالك</label><select id="invOwner" class="form-select"></select></div>
+
+<button type="submit" class="btn btn-success w-100 shadow-sm mt-2"><i class="fa fa-save me-2"></i> إضافة للمخزون</button>
+
+</form>
+
+</div>
+
+</div>
+
+<div id="view_mgr_report" class="section-view">
+
+<div class="card-stat mx-auto border-primary">
+
+<h5 class="fw-bold mb-3 text-primary"><i class="fa fa-chart-pie me-2"></i> تقرير الإدارة</h5>
+
+<div class="row g-2 mb-3">
+
+<div class="col-12"><input type="text" id="mgrSearch" class="form-control" placeholder="بحث..." onkeyup="debouncedRenderAllCustomers()"></div>
+
+<div class="col-6"><select id="mgrFilterEmp" class="form-select" onchange="renderAllCustomers()"><option value="">كل الموظفين</option></select></div>
+
+<div class="col-6"><select id="mgrFilterStatus" class="form-select" onchange="renderAllCustomers()"><option value="">كل الحالات</option><option value="تم البيع">✅ مبيعات</option><option value="العميل غير فعال">🔒 غير فعال</option></select></div>
+
+<div class="col-12"><button class="btn btn-primary w-100" onclick="loadAllCustomers('mgr')"><i class="fa fa-sync"></i> استخراج</button></div>
+
+</div>
+
+<div id="mgrContainer"></div>
+
+</div>
+
+</div>
+
+<div id="view_hr" class="section-view">
+
+<div class="card-stat mx-auto border-danger">
+
+<h5 class="fw-bold mb-3 text-danger"><i class="fa fa-cogs me-2"></i> الإدارة والتوجيهات</h5>
+
+<div class="mb-3">
+
+<select id="hrActionType" class="form-select fw-bold mb-2" onchange="toggleHrTarget()">
+
+<option value="message">💬 إرسال رسالة تيليجرام</option>
+
+<option value="changeRole">🔑 تعديل صلاحيات</option>
+
+<option value="transfer">🏢 نقل لمعرض</option>
+
+<option value="suspend">🚫 إيقاف حساب</option>
+
+<option value="setPassword">🔑 تعيين كلمة المرور</option>
+
+<option value="approveNew" class="text-success fw-bold">✅ تفعيل موظف جديد</option>
+
+</select>
+
+<select id="hrEmp" class="form-select mb-2"><option value="الكل 👥">الكل 👥</option></select>
+
+</div>
+
+<div id="hrMsgBox" class="mb-3"><textarea id="hrMsg" class="form-control" rows="3" placeholder="نص التوجيه..."></textarea></div>
+
+<div id="hrTargetBox" class="mb-3" style="display:none;">
+
+<select id="actionTarget" class="form-select mb-2" style="display:none;"></select>
+
+<select id="actionTargetRole" class="form-select mb-2" style="display:none;"></select>
+
+<input type="text" id="actionPassword" class="form-control mb-2 border-warning" placeholder="أدخل كلمة المرور..." style="display:none;">
+
+</div>
+
+<button class="btn btn-danger w-100 shadow-sm mt-2" onclick="executeHR()"><i class="fa fa-bolt me-2"></i> تنفيذ فوراً</button>
+
+</div>
+
+<h5 class="fw-bold mb-3 text-primary text-center"><i class="fa fa-chart-bar"></i> أداء الموظفين</h5>
+
+<div class="row g-3" id="hrGrid"></div>
+
+</div>
+
+</div>
+
+<div class="modal fade" id="carInfoModal" tabindex="-1">
+
+<div class="modal-dialog modal-dialog-centered">
+
+<div class="modal-content">
+
+<div class="modal-header">
+
+<h5 class="modal-title fw-bold text-primary"><i class="fa fa-car me-2"></i> بطاقة السيارة</h5>
+
+<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+
+</div>
+
+<div class="modal-body p-4" id="carInfoModalBody" style="background: var(--bg);"></div>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="modal fade" id="notifyModal" tabindex="-1">
+
+<div class="modal-dialog modal-dialog-centered">
+
+<div class="modal-content border-top border-4 border-warning">
+
+<div class="modal-body p-4 text-center" style="background: var(--bg);">
+
+<div class="mb-3"><i class="fa fa-bell text-warning fa-3x"></i></div>
+
+<h5 class="fw-bold text-dark mb-3">توجيه ملاحظة للموظف</h5>
+
+<div class="p-3 rounded-3 mb-3 text-start border-end border-4 border-warning" style="background: var(--card-bg);">
+
+<div class="mb-1"><span class="text-muted fw-bold">الموظف: </span><strong id="notifyEmpNameTxt" class="text-primary"></strong></div>
+
+<div><span class="text-muted fw-bold">العميل: </span><strong id="notifyCustNameTxt" class="text-danger"></strong></div>
+
+</div>
+
+<input type="hidden" id="notifyEmpName">
+
+<input type="hidden" id="notifyCustName">
+
+<textarea id="notifyMsgBody" class="form-control mb-3" rows="3" placeholder="اكتب التوجيه الحازم هنا..."></textarea>
+
+<button class="btn btn-warning w-100 fw-bold rounded-pill text-dark shadow-sm" onclick="executeSendNotify()"><i class="fa fa-paper-plane"></i> إرسال التنبيه الآن</button>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<script>
+
+// --- 🌟 الوظائف الأساسية للمتغيرات 🌟 ---
+
+let tgUser = null;
+
+try { tgUser = window.Telegram.WebApp.initDataUnsafe?.user; } catch(e) {}
+
+const urlParams = new URLSearchParams(window.location.search);
+
+let serverAction = "<?= action ?>"; let serverRowId = "<?= rowId ?>";
+let serverMode = "<?= mode ?>"; let serverChatId = "<?= chatId ?>";
+
+let initialAction = (serverAction && !serverAction.includes("action")) ? serverAction : (urlParams.get('action') || "add_wizard");
+
+const rowId = (serverRowId && !serverRowId.includes("rowId")) ? serverRowId : urlParams.get('rowId');
+
+let mode = (serverMode && !serverMode.includes("mode")) ? serverMode : (urlParams.get('mode') || "full");
+
+let chatId = tgUser ? tgUser.id : ((serverChatId && !serverChatId.includes("chatId")) ? serverChatId : urlParams.get('chatId'));
+
+let sessionUser = null; let allData = []; let invData = []; let isGeneralManager = false; window.wizardPath = ''; window.tempOfferedCar = '';
+
+const dataCache = { customers: [], inventory: [], lastUpdate: null, isValid() { return this.lastUpdate && (Date.now() - this.lastUpdate) < 300000; }, update(key, data) { this[key] = data; this.lastUpdate = Date.now(); } };
+
+// --- 🌟 دوال مساعدة عامة 🌟 ---
+
+window.debounce = function(func, wait) { let timeout; return function executedFunction(...args) { const later = () => { clearTimeout(timeout);
+func(...args); }; clearTimeout(timeout); timeout = setTimeout(later, wait); }; }
+
+window.showLoader = function(show, text="جارٍ المعالجة...") { document.getElementById('loaderText').innerText = text; const el = document.getElementById('globalLoader'); if (show) el.classList.add('show'); else el.classList.remove('show'); }
+
+window.showSuccessScreen = function(msg) { showLoader(false);
+document.getElementById('successMsgText').innerText = msg || "تم الحفظ بنجاح!"; document.getElementById('successScreen').classList.add('show'); }
+
+window.toggleBox = function(boxId, show) { const box = document.getElementById(boxId); if (box) { box.style.display = show ? 'block' : 'none'; } }
+
+function normalizeChassisId(value) {
+return String(value || "").replace(/[٠-٩]/g, function(d) { return '٠١٢٣٤٥٦٧٨٩'.indexOf(d); }).trim();
+}
+
+function extractSavedCarId(value) {
+const match = String(value || "").match(/\(ID:\s*([^)]+)\)/i);
+return match ? normalizeChassisId(match[1]) : "";
+}
+
+function setSelectValuePreservingOption(selector, value, label) {
+const clean = normalizeChassisId(value);
+if (!clean || !window.jQuery) return;
+const $select = $(selector);
+let exists = false;
+$select.find('option').each(function() { if (normalizeChassisId(this.value) === clean) exists = true; });
+if (!exists) $select.append(new Option(label || ('الشاصي المحفوظ: ' + clean), clean, true, true));
+$select.val(clean).trigger('change');
+}
+
+function getWhatsappPhone(phone, prefix) {
+const clean = String(phone || "").replace(/\D/g, "");
+const cleanPrefix = String(prefix || "+970").replace(/\D/g, "") || "970";
+if (clean.indexOf(cleanPrefix) === 0 && clean.length >= cleanPrefix.length + 8) return clean;
+if (clean.length === 10 && clean[0] === "0") return cleanPrefix + clean.substring(1);
+if (clean.length === 9) return cleanPrefix + clean;
+return clean;
+}
+
+function promptWelcomeWhatsApp(data) {
+const phone = getWhatsappPhone(data.phone, data.prefix);
+if (!phone) return;
+const showroom = data.room && data.room !== "الشركة" ? data.room : "معرضنا";
+const topic = data.car ? " بخصوص " + data.car : "";
+const msg = "مرحبًا " + (data.name || "ضيفنا الكريم") + "، نشكركم على زيارة " + showroom + ". سعدنا بخدمتكم" + topic + "، وسيتابع فريقنا معكم بكل اهتمام.";
+Swal.fire({ title: 'رسالة ترحيب', text: 'هل تريد فتح واتساب لإرسال رسالة شكر للعميل؟', icon: 'success', showCancelButton: true, confirmButtonText: 'فتح واتساب', cancelButtonText: 'لاحقاً' }).then(function(result) {
+if (result.isConfirmed) window.open("https://wa.me/" + phone + "?text=" + encodeURIComponent(msg), "_blank");
+});
+}
+
+// --- 🌟 الدالة المحورية للتنقل 🌟 ---
+
+window.switchView = function(viewName, el) {
+
+if (viewName === 'add_cust' || viewName === 'sell_car') { viewName = 'add_wizard'; }
+
+document.querySelectorAll('.section-view').forEach(e => e.classList.remove('active'));
+
+document.querySelectorAll('.nav-item-btn').forEach(e => e.classList.remove('active'));
+
+const target = document.getElementById('view_' + viewName); if (target) target.classList.add('active');
+
+if (el) el.classList.add('active'); else { const btn = document.getElementById('nav_' + viewName); if (btn) btn.classList.add('active'); }
+
+if (viewName === 'add_wizard') resetWizard();
+
+if (viewName === 'my_cust' || viewName === 'mgr_report') loadAllCustomers(viewName);
+
+if (viewName === 'inv') loadInventory();
+
+if (viewName === 'hr' && sessionUser && sessionUser.role.includes("مدير")) loadHRData();
+
+window.scrollTo(0,0);
+
+}
+
+window.onload = function() {
+
+if(!chatId) {
+
+document.getElementById('globalLoader').classList.remove('show');
+
+document.getElementById('blockedDebugInfo').innerText = "السبب: تعذر قراءة Chat ID";
+
+document.getElementById('blockedScreen').style.display = 'flex';
+
+return;
+
+}
+
+showLoader(true, "التحقق من الصلاحيات...");
+
+try {
+
+$('#addCarSelect').select2({ placeholder: "ابحث...", dir: "rtl", tags: true }).on('change', renderNegotiationFields);
+
+$('#updCarSelect').select2({ placeholder: "ابحث...", dir: "rtl", tags: true }).on('change', renderUpdNegotiationFields);
+
+$('#addCarId').select2({ dir: "rtl", placeholder: "رقم الشاصي...", width:'100%' });
+
+$('#updCarId').select2({ dir: "rtl", placeholder: "رقم الشاصي...", width:'100%' });
+
+} catch(e) {}
+
+google.script.run.withSuccessHandler(function(res) {
+
+try {
+
+if (!res.user) {
+
+document.getElementById('globalLoader').classList.remove('show');
+
+document.getElementById('blockedDebugInfo').innerText = "Chat ID: " + chatId;
+
+document.getElementById('blockedScreen').style.display = 'flex';
+
+return;
+
+}
+
+document.getElementById('mainAppContent').style.display = 'block';
+
+sessionUser = res.user; isGeneralManager = res.isGen; window.systemRooms = res.rooms;
+
+if (mode === "full") { document.getElementById('bottomNav').style.display = 'flex';
+document.body.style.paddingBottom = "90px"; }
+
+else { document.getElementById('bottomNav').style.display = 'none';
+document.body.style.paddingBottom = "15px"; }
+
+if (sessionUser.role.includes("مدير")) { document.querySelectorAll('.nav-item-btn.mgr-only').forEach(e => e.style.display = 'flex'); }
+
+let models = [...new Set(res.cars.map(c => c.model).filter(Boolean))];
+
+let optCars = ''; models.forEach(m => optCars += `<option value="${m}">${m}</option>`);
+
+$('#addCarSelect').empty().append(optCars).trigger('change');
+$('#updCarSelect').empty().append(optCars).trigger('change');
+
+let empSel = document.getElementById('mgrFilterEmp');
+
+if (empSel) { empSel.innerHTML = '<option value="">كل الموظفين</option>'; res.staff.forEach(s => empSel.innerHTML += `<option value="${s}">${s}</option>`); }
+
+let optStaff = '<option value="الكل 👥">الكل 👥</option>';
+res.staff.forEach(s => optStaff += `<option value="${s}">${s}</option>`);
+
+document.getElementById('hrEmp').innerHTML = optStaff;
+
+if (isGeneralManager) {
+
+let cRoomSel = document.getElementById('cRoom');
+
+if (cRoomSel) {
+
+cRoomSel.innerHTML = '<option value="الشركة">الشركة</option>';
+
+res.rooms.forEach(r => cRoomSel.innerHTML += `<option value="${r}">${r}</option>`);
+
+document.getElementById('divRoomSelect').style.display = 'block';
+
+}
+
+}
+
+let optRooms = '<option value="الشركة">الشركة</option>';
+res.rooms.forEach(r => optRooms += `<option value="${r}">${r}</option>`);
+
+document.getElementById('invOwner').innerHTML = optRooms;
+
+let chassisOpts = '<option value=""></option>';
+
+res.cars.forEach(c => { chassisOpts += `<option value="${c.id}">🚘 ${c.model} | 🔢 ${c.id}</option>`; });
+
+$('#addCarId').html(chassisOpts); $('#updCarId').html(chassisOpts);
+
+if (initialAction === "update_cust") {
+
+document.getElementById('updRowId').value = rowId;
+
+google.script.run.withSuccessHandler(function(custRes) {
+
+showLoader(false);
+
+if(custRes.success) { renderUpdForm(custRes.data); } else { Swal.fire('خطأ', 'تعذر جلب البيانات', 'error');
+switchView('add_wizard'); }
+
+}).webGetCustomerDetailsForApp(rowId);
+
+} else {
+
+switchView(initialAction); showLoader(false);
+
+}
+
+} catch(err) { showLoader(false); Swal.fire('خطأ واجهة', err.message, 'error'); }
+
+}).withFailureHandler(function(err){ showLoader(false); Swal.fire('خطأ خادم', 'فشل الاتصال بجوجل سكريبت', 'error'); }).webStandaloneInitInit(chatId);
+
+};
+
+window.openWizardStep = function(stepNum) {
+
+document.querySelectorAll('.wizard-step').forEach(function(el) { el.classList.remove('active'); });
+
+var stepId = typeof stepNum === 'string' ? 'wizard-step-' + stepNum : 'wizard-step-' + stepNum;
+
+document.getElementById(stepId).classList.add('active');
+
+}
+
+window.goToWizardStep2 = function() {
+
+var name = document.getElementById('cName').value.trim();
+
+var phone = document.getElementById('cPhone').value.trim();
+
+if (name.length < 3) return Swal.fire('تنبيه', 'أدخل اسم العميل (3 أحرف على الأقل)', 'warning');
+
+if (!/^\d{10}$/.test(phone)) return Swal.fire('تنبيه', 'رقم الهاتف يجب أن يكون 10 أرقام', 'warning');
+
+showLoader(true, "فحص الرقم...");
+
+google.script.run.withSuccessHandler(function(res) {
+
+showLoader(false);
+
+if (res && res.exists) {
+
+Swal.fire({
+
+title: 'العميل مسجل مسبقاً!', html: `هذا الرقم مسجل باسم: <b>${res.item.custName}</b><br>يرجى فتح ملفه لإكمال العملية.`, icon: 'warning', showCancelButton: true, confirmButtonText: 'فتح الملف 📂', cancelButtonText: 'إلغاء ❌'
+
+}).then(function(result) { if (result.isConfirmed) { renderUpdForm(res.item); } });
+
+} else { openWizardStep(2); }
+
+}).withFailureHandler(function() { showLoader(false); Swal.fire('خطأ', 'تعذر الاتصال بالخادم', 'error'); }).webCheckPhoneExists(phone);
+
+}
+
+window.chooseWizardPath = function(type) { window.wizardPath = type;
+openWizardStep(type === 'buy' ? '3-buy' : '3-sell'); }
+
+window.resetWizard = function() {
+
+var f = document.getElementById('wizardAddForm'); if(f) f.reset();
+
+$('#addCarSelect').val([]).trigger('change');
+
+document.getElementById('dynamicNegotiationContainer').innerHTML = '<div class="alert alert-secondary text-center small fw-bold p-2 m-0">السيارة المطلوبة اختيارية عند إدخال سيارة برسم البيع فقط.</div>';
+
+toggleCarInput(); toggleBox('addTradeBox', false);
+toggleDyn('addStatus','addPayBox','addResBox','addRejBox', 'addChassisBox');
+
+openWizardStep(1);
+
+}
+
+window.getSmartColorBadge = function(colorName) {
+
+if(!colorName || colorName === '-' || colorName.trim() === '') return '<span class="badge bg-secondary px-2">غير محدد</span>';
+
+let hex = "#e2e8f0"; let textCol = "#000"; let border = "border"; let c = colorName.toLowerCase();
+
+if(c.includes("أبيض") || c.includes("ابيض")) { hex = "#ffffff"; }
+
+else if(c.includes("أسود") || c.includes("اسود")) { hex = "#1e293b";
+textCol = "#fff"; border = "border-0"; }
+
+else if(c.includes("أحمر") || c.includes("احمر")) { hex = "#ef4444";
+textCol = "#fff"; border = "border-0"; }
+
+else if(c.includes("أزرق") || c.includes("ازرق") || c.includes("كحلي")) { hex = "#3b82f6"; textCol = "#fff"; border = "border-0"; }
+
+else if(c.includes("فضي") || c.includes("سلفر")) { hex = "#cbd5e1"; }
+
+else if(c.includes("رمادي") || c.includes("سكني") || c.includes("فئراني")) { hex = "#64748b"; textCol = "#fff"; border = "border-0"; }
+
+else if(c.includes("ذهبي") || c.includes("شامبين")) { hex = "#fbbf24";
+border = "border-0"; }
+
+else if(c.includes("أخضر") || c.includes("زيتي")) { hex = "#10b981";
+textCol = "#fff"; border = "border-0"; }
+
+else if(c.includes("أصفر") || c.includes("اصفر")) { hex = "#facc15";
+border = "border-0"; }
+
+return `<span class="badge ${border} px-2 py-1 shadow-sm" style="background-color:${hex}; color:${textCol};
+font-size:11px;">${colorName}</span>`;
+
+}
+
+window.generatePhotosHtml = function(photosStr) {
+
+if (!photosStr || photosStr === "-" || photosStr.trim() === "") return "<div class='text-muted small fw-bold'><i class='fa fa-ban'></i> لا توجد مرفقات</div>";
+
+const urls = photosStr.split('\n'); let html = `<div class="d-flex flex-wrap gap-2 mt-2">`;
+
+urls.forEach(function(u, idx) { const cleanUrl = u.trim(); if (cleanUrl) { html += `<a href="${cleanUrl}" target="_blank" class="btn btn-sm btn-outline-info rounded-pill fw-bold"><i class="fa fa-image"></i> صورة ${idx + 1}</a>`; } });
+
+html += '</div>'; return html;
+
+}
+
+window.formatPastNotesHtml = function(notesStr) {
+
+if (!notesStr || notesStr === "-" || notesStr.trim() === "") return "<div class='text-muted small'>لا يوجد سجل.</div>";
+
+function cleanNoteBody(text) {
+let cleaned = String(text || "").replace(/https?:\/\/drive\.google\.com\/[^\s<]+/g, "");
+cleaned = cleaned.replace(/(?:🔹\s*)?(صور السيارة|صور|شهادة الفحص|فحص|رخصة|تأمين)\s*:\s*(?:\n|\r|\s|<br>)*تعذر الرفع?/g, "$1: يوجد مرفقات محفوظة");
+cleaned = cleaned.replace(/(?:🔹\s*)?(صور السيارة|صور|شهادة الفحص|فحص|رخصة|تأمين)\s*:\s*/g, "$1: يوجد مرفقات محفوظة");
+cleaned = cleaned.replace(/(?:<br>\s*){2,}/g, "<br>").replace(/\n{2,}/g, "\n");
+return cleaned.trim();
+}
+
+let arr = notesStr.split(/(?=\[(?:إدخال|تحديث|رفض|تعديل تقييم|تقييم استبدال|تم نقل|إكمال النواقص).*?\]:)/g).filter(n => n.trim() !== "");
+
+arr.reverse(); let finalHtml = "";
+
+arr.forEach(note => {
+
+let parts = note.split(']:');
+
+if (parts.length > 1) { finalHtml += `<div class="note-item"><div class="note-meta"><i class="fa fa-clock me-1"></i> ${parts[0].replace('[', '').trim()}</div><div class="note-body">${cleanNoteBody(parts.slice(1).join(']:')).replace(/\n/g, '<br>').trim()}</div></div>`; }
+
+else { finalHtml += `<div class="note-item"><div class="note-body">${cleanNoteBody(note).replace(/\n/g, '<br>').trim()}</div></div>`; }
+
+});
+
+return finalHtml;
+
+}
+
+window.getBadgeClass = function(statusStr) {
+
+let s = String(statusStr);
+
+if (s.includes("السيارة معروضة")) return "bg-info text-dark";
+
+if (s.includes("تراجع الزبون")) return "bg-secondary";
+
+if (s.includes("بيع") || s.includes("شراء")) return "bg-success text-white";
+
+if (s.includes("حجز")) return "bg-primary text-white";
+
+if (s.includes("متابعة")) return "bg-warning text-dark";
+
+return "bg-danger text-white";
+
+}
+
+window.getFilesBase64 = function(files, callback) {
+
+if (!files || files.length === 0) return callback([]);
+
+let totalSize = 0; for(let i=0; i<files.length; i++) totalSize += files[i].size;
+
+if(totalSize > 20 * 1024 * 1024) { Swal.fire('تنبيه', 'حجم الصور كبير جداً', 'warning'); return callback(null); }
+
+let result = []; let loaded = 0;
+
+for (let i = 0; i < files.length; i++) {
+
+let reader = new FileReader();
+
+reader.onload = function(e) { result.push({ name: files[i].name, mimeType: files[i].type || 'application/octet-stream', data: e.target.result.split(',')[1] }); loaded++; if (loaded === files.length) callback(result); };
+
+reader.readAsDataURL(files[i]);
+
+}
+
+}
+
+window.toggleCarInput = function() {
+
+toggleBox('divCarSelect', document.getElementById('carTypeInv').checked);
+
+toggleBox('divCarCustom', document.getElementById('carTypeCustom').checked);
+
+renderNegotiationFields();
+
+}
+
+window.toggleUpdCarInput = function() {
+
+toggleBox('divUpdCarSelect', document.getElementById('updCarTypeInv').checked);
+
+toggleBox('divUpdCarCustom', document.getElementById('updCarTypeCustom').checked);
+
+renderUpdNegotiationFields();
+
+}
+
+window.renderNegotiationFields = function() {
+
+let cars = [];
+
+if (document.getElementById('carTypeInv').checked) { cars = cars.concat($('#addCarSelect').val() || []); }
+
+if (document.getElementById('carTypeCustom').checked) {
+
+const type = document.getElementById('addCarCustomType').value.trim();
+const year = document.getElementById('addCarCustomYear').value.trim();
+
+if (type) cars.push(`(طلب خاص) ${type}${year ? " - " + year : ""}`);
+
+}
+
+const container = document.getElementById('dynamicNegotiationContainer'); cars = [...new Set(cars)];
+
+if (cars.length === 0) { container.innerHTML = '<div class="alert alert-secondary text-center small fw-bold p-2 m-0">السيارة المطلوبة اختيارية عند إدخال سيارة برسم البيع فقط.</div>'; return; }
+
+let html = '<h6 class="fw-bold text-primary mb-2 small"><i class="fa fa-comments"></i> التفاوض:</h6>';
+
+cars.forEach((car, index) => {
+
+const existingVal = document.getElementById(`nego_${index}`) ? document.getElementById(`nego_${index}`).value : '';
+
+html += `<div class="mb-2 p-2 bg-white rounded border"><label class="form-label fw-bold text-dark small mb-1">🚗 ${car}</label><textarea id="nego_${index}" data-car="${car}" class="form-control cNegotiationItem" rows="2" required placeholder="ما دار مع العميل...">${existingVal}</textarea></div>`;
+
+});
+
+container.innerHTML = html;
+
+}
+
+window.renderUpdNegotiationFields = function() {
+
+let cars = [];
+
+if (document.getElementById('updCarTypeInv').checked) { cars = cars.concat($('#updCarSelect').val() || []); }
+
+if (document.getElementById('updCarTypeCustom').checked) {
+
+const type = document.getElementById('updCarCustomType').value.trim();
+const year = document.getElementById('updCarCustomYear').value.trim();
+
+if (type) cars.push(`(طلب خاص) ${type}${year ? " - " + year : ""}`);
+
+}
+
+const container = document.getElementById('updDynamicNegotiationContainer'); cars = [...new Set(cars)];
+
+if (cars.length === 0) { container.innerHTML = ''; return; }
+
+let html = '<h6 class="fw-bold text-primary mb-2 small mt-2"><i class="fa fa-comments"></i> التفاوض الجديد:</h6>';
+
+cars.forEach((car, index) => {
+
+const existingVal = document.getElementById(`updNego_${index}`) ? document.getElementById(`updNego_${index}`).value : '';
+
+html += `<div class="mb-2 p-2 bg-white rounded border"><label class="form-label fw-bold text-dark small mb-1">🚗 ${car}</label><textarea id="updNego_${index}" data-car="${car}" class="form-control cUpdNegotiationItem" rows="2" placeholder="ما دار مع العميل...">${existingVal}</textarea></div>`;
+
+});
+
+container.innerHTML = html;
+
+}
+
+window.toggleDyn = function(statId, payId, resId, rejId, chassisId) {
+
+let st = document.getElementById(statId).value;
+
+toggleBox(payId, st.includes('تم البيع')); toggleBox(rejId, st.includes('الرفض')); toggleBox(chassisId, st.includes('تم البيع') || st.includes('حجز'));
+
+let resBox = document.getElementById(resId);
+
+if(resBox) { resBox.style.display = (st.includes('حجز') || st.includes('متابعة') || st.includes('تم البيع')) ? 'block' : 'none'; }
+
+}
+
+window.toggleEditTradeIn = function(isEditing) {
+
+document.getElementById('updTradeInEditFlag').value = isEditing ? 'true' : 'false';
+
+toggleBox('tradeInSummaryBox', !isEditing); toggleBox('updTradeInDiv', isEditing);
+
+document.getElementById('lblUpdTradeIn').innerText = isEditing ? "تعديل بيانات سيارة العميل" : "إضافة / تعديل سيارة العميل";
+
+}
+
+window.handleTradeStatusChange = function(selectEl, mainStatusId) {
+
+const val = selectEl.value;
+const mainStatusSelect = document.getElementById(mainStatusId);
+const container = selectEl.parentNode;
+const convertBtn = container ? container.querySelector('button[id^="btnConvertTrade"]') : null;
+
+if (convertBtn) convertBtn.style.display = (val === "عرض سيارة (برسم البيع)" || val === "عرض سيارة (تحت رسم البيع)") ? "inline-block" : "none";
+if (!mainStatusSelect) return;
+
+if (val === "عرض سيارة (برسم البيع)" || val === "عرض سيارة (تحت رسم البيع)") {
+let exists = false;
+for (let i = 0; i < mainStatusSelect.options.length; i++) {
+if (mainStatusSelect.options[i].value === "قيد المتابعة السيارة معروضة للبيع من قبل العميل") { exists = true; break; }
+}
+if (!exists) mainStatusSelect.add(new Option("⭐ قيد المتابعة السيارة معروضة للبيع من قبل العميل", "قيد المتابعة السيارة معروضة للبيع من قبل العميل"));
+mainStatusSelect.value = "قيد المتابعة السيارة معروضة للبيع من قبل العميل";
+toggleDyn(mainStatusId, mainStatusId === 'addStatus' ? 'addPayBox' : 'updPayBox', mainStatusId === 'addStatus' ? 'addResBox' : 'updResBox', mainStatusId === 'addStatus' ? 'addRejBox' : 'updRejBox', mainStatusId === 'addStatus' ? 'addChassisBox' : 'updChassisBox');
+} else if (val === "رفض من قبل المعرض") {
+mainStatusSelect.value = "الرفض من قبل المعرض ⛔";
+toggleDyn(mainStatusId, mainStatusId === 'addStatus' ? 'addPayBox' : 'updPayBox', mainStatusId === 'addStatus' ? 'addResBox' : 'updResBox', mainStatusId === 'addStatus' ? 'addRejBox' : 'updRejBox', mainStatusId === 'addStatus' ? 'addChassisBox' : 'updChassisBox');
+} else if (val === "استبدال (دراسة وتقييم)" || val === "تم الاتفاق والاستبدال" || val === "شراء السيارة للمعرض" || val === "تم بيع السيارة لعميل خارجي" || val === "تراجع العميل عن البيع" || val === "تحت الدراسة والتقييم" || val === "تم التقييم") {
+if (mainStatusSelect.value === "قيد المتابعة السيارة معروضة للبيع من قبل العميل") mainStatusSelect.value = "قيد المتابعة ⏳";
+}
+
+}
+
+window.convertToTradeIn = function(btnEl) {
+
+const container = btnEl.parentNode;
+const select = container ? container.querySelector('select') : null;
+if (!select) return;
+select.value = "استبدال (دراسة وتقييم)";
+select.dispatchEvent(new Event('change', { bubbles: true }));
+
+}
+
+window.autoSoldRule = function(selectElem, statusElemId, payId, resId, rejId, chassisId) {
+
+if (selectElem.value === "تم الاتفاق والاستبدال") {
+
+document.getElementById(statusElemId).value = "تم البيع ✅";
+toggleDyn(statusElemId, payId, resId, rejId, chassisId);
+
+Swal.fire('تم الاتفاق!', 'تم تحويل الحالة لـ (تم البيع) آلياً.', 'info');
+
+}
+
+}
+
+window.toggleSellerTransfer = function(val) {
+
+var div = document.getElementById('sellerTransferDiv');
+
+if (val.indexOf('تم شراء السيارة للمعرض') !== -1) {
+
+div.style.display = 'block';
+
+var sel = document.getElementById('sellerTransferRoom');
+
+if (sel.options.length === 0 && window.systemRooms) { window.systemRooms.forEach(r => sel.innerHTML += `<option value="${r}">${r}</option>`); }
+
+} else { div.style.display = 'none'; }
+
+}
+
+window.upgradeToBuyer = function() {
+
+Swal.fire({ title: 'ترقية العميل', text: 'سيتم تحويله لعميل رئيسي وسحب سيارته لقسم الاستبدال.', icon: 'question', showCancelButton: true, confirmButtonText: 'تحويل', cancelButtonText: 'إلغاء'
+
+}).then((result) => {
+
+if (result.isConfirmed) {
+
+var currentSellerStat = document.getElementById('sellerStatus').value;
+
+document.getElementById('sellerSections').style.display = 'none';
+document.getElementById('buyerSections').style.display = 'block';
+document.getElementById('buyerFinalStatus').style.display = 'block';
+
+document.getElementById('btnUpdateCustWeb').style.display = 'block';
+document.getElementById('btnUpgradeSeller').style.display = 'none';
+
+document.getElementById('updStatus').value = 'قيد المتابعة ⏳';
+
+document.getElementById('updAgrm').value = "[تم الترقية لعميل رئيسي]: العميل يرغب بالشراء/الاستبدال.\n" + document.getElementById('updAgrm').value;
+
+document.getElementById('currentCarsList').innerHTML = '<div class="alert alert-danger small fw-bold mb-2">يرجى تحديد السيارة للشراء:</div>';
+
+document.getElementById('toggleEditCarsBtn').checked = true;
+toggleBox('editCarSection', true);
+
+if (currentSellerStat.indexOf('معروضة') !== -1 && window.tempOfferedCar) {
+
+document.getElementById('updHasTradeIn').checked = true;
+toggleEditTradeIn(true);
+
+document.getElementById('updTradeModel').value = window.tempOfferedCar;
+document.getElementById('updTradeStatus').value = "استبدال (دراسة وتقييم)";
+handleTradeStatusChange(document.getElementById('updTradeStatus'), 'updStatus');
+
+Swal.fire('تم النقل', 'تم نقل سيارة العرض لقسم الاستبدال.', 'success');
+
+} else { Swal.fire('نجاح', 'تم فتح خيارات المشتري.', 'success'); }
+
+}
+
+});
+
+}
+
+window.submitAddCustomer = function() {
+
+let finalCarArr = [];
+
+if (document.getElementById('carTypeInv').checked) { finalCarArr = finalCarArr.concat($('#addCarSelect').val() || []); }
+
+if (document.getElementById('carTypeCustom').checked) {
+
+const type = document.getElementById('addCarCustomType').value.trim();
+const year = document.getElementById('addCarCustomYear').value.trim();
+
+if (type) finalCarArr.push(`(طلب خاص) ${type}${year ? " - " + year : ""}`);
+
+}
+
+finalCarArr = [...new Set(finalCarArr)];
+
+const hasTradeIn = document.getElementById('addHasTrade').checked;
+const tradeStatus = document.getElementById('addTradeStatus').value;
+const isCarOfferOnly = hasTradeIn && (tradeStatus === "عرض سيارة (برسم البيع)" || tradeStatus === "عرض سيارة (تحت رسم البيع)");
+const isCustomerCarOnly = hasTradeIn && (isCarOfferOnly || tradeStatus === "شراء السيارة للمعرض" || tradeStatus === "تم بيع السيارة لعميل خارجي" || tradeStatus === "تراجع العميل عن البيع" || tradeStatus === "رفض من قبل المعرض");
+
+if (hasTradeIn && !document.getElementById('addTradeModel').value.trim()) return Swal.fire('تنبيه', 'يرجى إدخال نوع وموديل سيارة العميل', 'warning');
+
+if (finalCarArr.length === 0 && !isCustomerCarOnly) return Swal.fire('تنبيه', 'يرجى إدخال السيارة المطلوبة', 'warning');
+
+let finalCarStr = finalCarArr.join(' + ');
+if (!finalCarStr && isCustomerCarOnly) finalCarStr = document.getElementById('addTradeModel').value.trim() || "سيارة برسم البيع";
+
+let negotiationText = ""; let allFilled = true;
+
+document.querySelectorAll('.cNegotiationItem').forEach(item => { const val = item.value.trim(); if (!val) allFilled = false; negotiationText += `🚗 بخصوص [${item.getAttribute('data-car')}]:\n${val}\n\n`; });
+
+if (!allFilled) return Swal.fire('تنبيه', 'يرجى تعبئة حقل التفاوض لكل سيارة', 'warning');
+
+let st = document.getElementById('addStatus').value; if (isCarOfferOnly) st = "قيد المتابعة السيارة معروضة للبيع من قبل العميل"; let p = document.getElementById('addPay').value; let id = document.getElementById('addCarId').value;
+
+if(st.includes('تم البيع') && (!p || !id)) return Swal.fire('تنبيه', 'أدخل الدفع والشاصي لإتمام الصفقة', 'warning');
+
+if(st.includes('حجز') && !id) return Swal.fire('تنبيه', 'حدد الشاصي للسيارة المحجوزة', 'warning');
+
+let targetRoom = (isGeneralManager && document.getElementById('cRoom')) ? document.getElementById('cRoom').value : "";
+
+showLoader(true, "جارٍ الإرسال...");
+
+getFilesBase64(document.getElementById('addTradePhotos') ? document.getElementById('addTradePhotos').files : [], function(b64) {
+
+if(b64 === null) { showLoader(false); return; }
+
+let data = {
+
+name: document.getElementById('cName').value, nickname: document.getElementById('cNickname').value, waPrefix: document.getElementById('cWaPrefix').value, phone: document.getElementById('cPhone').value, address: document.getElementById('cAddress').value,
+
+car: finalCarStr, agreement: negotiationText.trim(), status: st, payment: p, carId: id, resDate: document.getElementById('addResDate').value, rejectReason: document.getElementById('addReject').value, room: targetRoom,
+
+tradeIn: { active: hasTradeIn, model: document.getElementById('addTradeModel').value, price: document.getElementById('addTradePrice').value, id: document.getElementById('addTradeId').value, color: document.getElementById('addTradeColor').value, year: document.getElementById('addTradeYear').value, mileage: document.getElementById('addTradeMileage').value, specs: document.getElementById('addTradeSpecs').value, inspection: document.getElementById('addTradeInspection').value, status: document.getElementById('addTradeStatus').value, condition: "مستعملة", dealType: "استبدال", owner: targetRoom, licenseExp: document.getElementById('addTradeLicenseExp').value, notes: document.getElementById('addTradeNotes').value }, files: b64
+
+};
+
+google.script.run.withSuccessHandler(res => {
+
+if(res.success) { showSuccessScreen('تم حفظ المشتري بنجاح!');
+promptWelcomeWhatsApp({ name: data.name, phone: data.phone, prefix: data.waPrefix, room: targetRoom || (sessionUser ? sessionUser.room : ""), car: data.car });
+resetWizard(); dataCache.customers=[]; } else { showLoader(false);
+Swal.fire('خطأ', res.msg, 'error'); }
+
+}).webAddCustomer(chatId, data);
+
+});
+
+}
+
+window.submitSellWizard = function() {
+
+const phoneStr = document.getElementById('cPhone').value;
+
+showLoader(true, "جارٍ الإرسال...");
+
+getFilesBase64(document.getElementById('sCarPhotos').files, function(base64) {
+
+if (base64 === null) { showLoader(false); return; }
+
+const payload = {
+
+custName: document.getElementById('cName').value.trim(), phone: phoneStr, waPrefix: document.getElementById('cWaPrefix').value, nickname: document.getElementById('cNickname').value.trim(), address: document.getElementById('cAddress').value.trim(),
+
+carModel: document.getElementById('sCarModel').value, carId: document.getElementById('sCarId').value, price: document.getElementById('sCarPrice').value, color: document.getElementById('sCarColor').value, year: document.getElementById('sCarYear').value, mileage: document.getElementById('sCarMileage').value, specs: document.getElementById('sCarSpecs').value, inspection: document.getElementById('sCarInspection').value,
+
+gear: document.getElementById('sCarGear').value, fuel: document.getElementById('sCarFuel').value, licenseExp: document.getElementById('sCarLicenseExp').value, notes: document.getElementById('sCarNotes').value, filesCar: base64
+
+};
+
+google.script.run.withSuccessHandler(res => {
+
+if (res.success) { showSuccessScreen('تم إضافة سيارة العرض بنجاح');
+promptWelcomeWhatsApp({ name: payload.custName, phone: phoneStr, prefix: payload.waPrefix, room: sessionUser ? sessionUser.room : "", car: payload.carModel });
+resetWizard(); dataCache.customers=[]; dataCache.inventory=[]; }
+
+else { showLoader(false); Swal.fire('خطأ', res.msg, 'error'); }
+
+}).webAddCarForSale(chatId, payload);
+
+});
+
+}
+
+function isLegacyCustomerCarStatusClient(status) {
+const s = String(status || "");
+return s.includes("السيارة معروضة") || s.includes("معروضة للبيع من قبل العميل") || s.includes("تم بيع السيارة") || s.includes("تراجع الزبون") || s.includes("تراجع العميل عن البيع") || s.includes("شراء السيارة للمعرض");
+}
+
+function mapLegacyCustomerCarStatusClient(status) {
+const s = String(status || "");
+if (s.includes("تم بيع السيارة")) return "تم بيع السيارة لعميل خارجي";
+if (s.includes("تراجع الزبون") || s.includes("تراجع العميل عن البيع")) return "تراجع العميل عن البيع";
+if (s.includes("شراء السيارة للمعرض")) return "شراء السيارة للمعرض";
+return "عرض سيارة (برسم البيع)";
+}
+
+function buildLegacyCustomerCarTradeClient(item, model) {
+return { active: true, model: model || "", price: "", id: extractSavedCarId(item.car), color: "", year: "", mileage: "", specs: "", inspection: "", status: mapLegacyCustomerCarStatusClient(item.status), condition: "مستعملة", dealType: "برسم البيع", owner: item.custName || item.name || "", licenseExp: "", notes: "تم تحويل هذا السجل من آلية البائع القديمة إلى بند سيارة العميل.", __legacyConverted: true };
+}
+
+const INACTIVE_CUSTOMER_STATUS = "العميل غير فعال";
+
+function isInactiveCustomer(item) {
+return String((item && item.status) || "").includes(INACTIVE_CUSTOMER_STATUS);
+}
+
+function clearUpdateTradeFields() {
+['updTradeModel','updTradePrice','updTradeId','updTradeColor','updTradeYear','updTradeMileage','updTradeSpecs','updTradeInspection','updTradeLicenseExp','updTradeNotes'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+const status = document.getElementById('updTradeStatus'); if (status) status.value = "عرض سيارة (برسم البيع)";
+}
+
+function buildInactiveCustomerNotice(item, archivedTrade) {
+const reason = archivedTrade && archivedTrade.closureReason ? archivedTrade.closureReason : "عملية سابقة مغلقة";
+const closedAt = archivedTrade && archivedTrade.closedAt ? archivedTrade.closedAt : "-";
+const carText = archivedTrade && archivedTrade.model ? `<div class="small text-muted fw-bold mt-1"><i class="fa fa-car-side"></i> سيارة العملية السابقة: ${archivedTrade.model}</div>` : "";
+return `<div class="fw-bold text-dark"><i class="fa fa-lock me-1"></i> العميل غير فعال</div><div class="small text-muted fw-bold mt-1">آخر إجراء: ${reason} | التاريخ: ${closedAt}</div>${carText}<button type="button" class="btn btn-sm btn-primary rounded-pill fw-bold mt-2" onclick="reactivateCustomerFile()"><i class="fa fa-rotate-left"></i> تفعيل عملية جديدة</button>`;
+}
+
+window.reactivateCustomerFile = function() {
+document.getElementById('updStatus').value = "قيد المتابعة ⏳";
+toggleDyn('updStatus','updPayBox','updResBox','updRejBox', 'updChassisBox');
+document.getElementById('updOriginalTradeIn').value = JSON.stringify({active:false});
+document.getElementById('updTradeInEditFlag').value = "false";
+document.getElementById('updHasTradeIn').checked = false;
+clearUpdateTradeFields();
+toggleEditTradeIn(false);
+document.getElementById('tradeInSummaryBox').style.display = 'block';
+document.getElementById('tradeInSummaryBox').innerHTML = '<div class="fw-bold text-success"><i class="fa fa-check-circle"></i> تم تفعيل عملية جديدة. اختر سيارة مطلوبة أو أضف سيارة عميل جديدة ثم احفظ.</div>';
+document.getElementById('toggleEditCarsBtn').checked = true;
+toggleBox('editCarSection', true);
+document.getElementById('currentCarsList').innerHTML = '<div class="alert alert-info small fw-bold mb-2">السجل السابق محفوظ. ابدأ العملية الجديدة من هنا.</div>';
+}
+
+function daysUntilLicenseExpiry(licenseExp) {
+if (!licenseExp) return null;
+const parts = String(licenseExp).substring(0, 10).split('-');
+if (parts.length !== 3) return null;
+const target = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+if (isNaN(target.getTime())) return null;
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+target.setHours(0, 0, 0, 0);
+return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function getLicenseAlertText(tradeInObj) {
+if (!tradeInObj || !tradeInObj.active || !tradeInObj.licenseExp) return "";
+const days = daysUntilLicenseExpiry(tradeInObj.licenseExp);
+if (days === null || days < 0 || days > 7) return "";
+if (days === 0) return "رخصة سيارة العميل تنتهي اليوم";
+return "رخصة سيارة العميل تنتهي خلال " + days + " يوم";
+}
+
+window.renderUpdForm = function(item) {
+
+switchView('update_cust');
+
+document.getElementById('updCustNameDisplay').innerText = (item.custName || item.name) + ' - ' + item.phone;
+
+document.getElementById('updCustNameInput').value = item.custName || item.name || '';
+
+document.getElementById('updRowId').value = item.id || item.rowId;
+
+document.getElementById('updPastNotes').innerHTML = formatPastNotesHtml(item.agreement);
+
+document.getElementById('updPastAttachments').innerHTML = generatePhotosHtml(item.photos);
+
+let s = item.status || ""; window.tempOfferedCar = "";
+
+let isLegacyCustomerCar = isLegacyCustomerCarStatusClient(s);
+
+let cleanCars = item.car && item.car !== "-" ? [...new Set(item.car.split(' + '))].map(c => c.replace(/\(ID:.*?\)/g, '').trim()) : [];
+
+let cList = document.getElementById('currentCarsList');
+
+document.getElementById('buyerSections').style.display = 'block';
+document.getElementById('buyerFinalStatus').style.display = 'block';
+document.getElementById('sellerSections').style.display = 'none';
+
+document.getElementById('btnUpgradeSeller').style.display = 'none';
+document.getElementById('btnUpdateCustWeb').style.display = 'block';
+
+if (isInactiveCustomer(item)) s = INACTIVE_CUSTOMER_STATUS;
+else if (isLegacyCustomerCar) { window.tempOfferedCar = cleanCars.join(', '); s = 'قيد المتابعة ⏳'; }
+else if(s.includes('متابعة')) s = 'قيد المتابعة ⏳'; else if(s.includes('تم البيع')) s = 'تم البيع ✅'; else if(s.includes('حجز')) s = 'حجز 🕒'; else
+if(s.includes('العميل')) s = 'الرفض من قبل العميل ❌'; else
+if(s.includes('الشركة')) s = 'الرفض من قبل الشركة ⛔';
+
+document.getElementById('updStatus').value = s;
+
+if (isLegacyCustomerCar && window.tempOfferedCar) cList.innerHTML = '<div class="alert alert-info small fw-bold mb-2">هذا الملف يحتوي سيارة عميل معروضة/مستبدلة. يمكن إضافة سيارة مطلوبة عند الحاجة.</div>';
+else cList.innerHTML = cleanCars.map(c => `<span class="badge bg-primary shadow-sm fs-6 me-1 mb-1">${c}</span>`).join('');
+
+document.getElementById('updResDate').value = (item.resDate && item.resDate !== "-") ? item.resDate : "";
+document.getElementById('updPay').value = (item.payment && item.payment !== "-") ? item.payment : "";
+document.getElementById('updCarId').value = "";
+
+$('#updCarSelect').val([]).trigger('change');
+document.getElementById('updDynamicNegotiationContainer').innerHTML = '';
+
+document.getElementById('toggleEditCarsBtn').checked = false;
+toggleBox('editCarSection', false);
+
+let tradeObj = item.tradeIn || item.tradeInObj || {active:false};
+
+if ((!tradeObj || !tradeObj.active) && isLegacyCustomerCar && window.tempOfferedCar) {
+tradeObj = buildLegacyCustomerCarTradeClient(item, window.tempOfferedCar);
+}
+
+if (isInactiveCustomer(item) && tradeObj && tradeObj.active) {
+tradeObj = Object.assign({}, tradeObj, { active: false, archived: true, closed: true, closureReason: "عملية سابقة مغلقة" });
+}
+
+document.getElementById('updOriginalTradeIn').value = JSON.stringify(tradeObj);
+document.getElementById('updTradeInEditFlag').value = "false";
+
+if (isInactiveCustomer(item)) {
+
+document.getElementById('updHasTradeIn').checked = false;
+document.getElementById('tradeInSummaryBox').style.display = 'block';
+document.getElementById('tradeInSummaryBox').innerHTML = buildInactiveCustomerNotice(item, tradeObj);
+toggleEditTradeIn(false);
+clearUpdateTradeFields();
+
+} else if (tradeObj && tradeObj.active) {
+
+document.getElementById('updHasTradeIn').checked = false;
+document.getElementById('tradeInSummaryBox').style.display = 'block';
+
+document.getElementById('tradeInSummaryBox').innerHTML = `<div class="fw-bold text-dark small"><i class="fa fa-car-side text-primary me-2"></i> ${tradeObj.model} | <span class="text-success">${tradeObj.price}$</span> | <span class="text-danger">${tradeObj.inspection}</span></div>`;
+
+toggleEditTradeIn(false);
+
+document.getElementById('updTradeModel').value = tradeObj.model || "";
+document.getElementById('updTradePrice').value = tradeObj.price || "";
+document.getElementById('updTradeId').value = tradeObj.id || "";
+document.getElementById('updTradeColor').value = tradeObj.color || "";
+document.getElementById('updTradeYear').value = tradeObj.year || "";
+document.getElementById('updTradeMileage').value = tradeObj.mileage || ""; document.getElementById('updTradeSpecs').value = tradeObj.specs || ""; document.getElementById('updTradeInspection').value = tradeObj.inspection || "";
+document.getElementById('updTradeLicenseExp').value = tradeObj.licenseExp || "";
+document.getElementById('updTradeNotes').value = tradeObj.notes || "";
+document.getElementById('updTradeStatus').value = tradeObj.status || "تحت الدراسة والتقييم";
+handleTradeStatusChange(document.getElementById('updTradeStatus'), 'updStatus');
+
+} else {
+
+document.getElementById('tradeInSummaryBox').style.display = 'none';
+document.getElementById('updHasTradeIn').checked = false;
+toggleEditTradeIn(false);
+document.getElementById('updTradeModel').value = "";
+document.getElementById('updTradePrice').value = "";
+document.getElementById('updTradeId').value = "";
+document.getElementById('updTradeColor').value = "";
+document.getElementById('updTradeYear').value = "";
+document.getElementById('updTradeMileage').value = "";
+document.getElementById('updTradeSpecs').value = "";
+document.getElementById('updTradeInspection').value = "";
+document.getElementById('updTradeLicenseExp').value = "";
+document.getElementById('updTradeNotes').value = "";
+
+}
+
+toggleDyn('updStatus','updPayBox','updResBox','updRejBox', 'updChassisBox');
+const savedCarId = item.selectedCarId || extractSavedCarId(item.status) || extractSavedCarId(item.car);
+if (savedCarId) setSelectValuePreservingOption('#updCarId', savedCarId, item.selectedCarLabel || ('الشاصي المحفوظ: ' + savedCarId));
+
+}
+
+window.submitUpdCustomer = function() {
+
+let isSellerMode = false;
+
+let st = document.getElementById('updStatus').value;
+
+let transferRoom = "";
+
+let p = document.getElementById('updPay').value; let id = document.getElementById('updCarId').value;
+
+if(!isSellerMode && st.includes('تم البيع') && (!p || !id)) return Swal.fire('تنبيه', 'أدخل الدفع والشاصي لإتمام الصفقة!', 'warning');
+
+if(!isSellerMode && st.includes('حجز') && !id) return Swal.fire('تنبيه', 'حدد الشاصي للسيارة المحجوزة', 'warning');
+
+const isTradeEdited = document.getElementById('updTradeInEditFlag').value === 'true';
+
+const tradeModel = document.getElementById('updTradeModel').value;
+
+if (!isSellerMode && isTradeEdited && !tradeModel) return Swal.fire('تنبيه', 'اكتب نوع سيارة العميل', 'warning');
+
+let oldTradeIn = {active: false}; try { oldTradeIn = JSON.parse(document.getElementById('updOriginalTradeIn').value); }
+catch(e){}
+
+const hasCustomerCarUpdate = !isSellerMode && (isTradeEdited || oldTradeIn.active || document.getElementById('updHasTradeIn').checked);
+
+let updCarsArr = []; let finalCarStr = "";
+
+if (isSellerMode) { finalCarStr = window.tempOfferedCar || document.getElementById('updCustNameInput').value; }
+
+else {
+
+if (document.getElementById('toggleEditCarsBtn').checked) {
+
+if (document.getElementById('updCarTypeInv').checked) { updCarsArr = updCarsArr.concat($('#updCarSelect').val() || []); }
+
+if (document.getElementById('updCarTypeCustom').checked) {
+
+const type = document.getElementById('updCarCustomType').value.trim();
+const year = document.getElementById('updCarCustomYear').value.trim();
+
+if (type) updCarsArr.push(`(طلب خاص) ${type}${year ? " - " + year : ""}`);
+
+}
+
+} else { document.querySelectorAll('#currentCarsList span').forEach(s => updCarsArr.push(s.innerText.trim())); }
+
+updCarsArr = [...new Set(updCarsArr)];
+
+const updTradeStatusForSale = document.getElementById('updTradeStatus').value;
+const isForSaleOnlyUpdate = hasCustomerCarUpdate && (updTradeStatusForSale === "عرض سيارة (برسم البيع)" || updTradeStatusForSale === "عرض سيارة (تحت رسم البيع)" || updTradeStatusForSale === "شراء السيارة للمعرض" || updTradeStatusForSale === "تم بيع السيارة لعميل خارجي" || updTradeStatusForSale === "تراجع العميل عن البيع" || updTradeStatusForSale === "رفض من قبل المعرض");
+const isInactiveUpdate = st.includes(INACTIVE_CUSTOMER_STATUS);
+
+if (updCarsArr.length === 0 && !isForSaleOnlyUpdate && !isInactiveUpdate) return Swal.fire('تنبيه', 'حدد سيارة واحدة على الأقل', 'warning');
+
+finalCarStr = updCarsArr.length > 0 ? updCarsArr.join(' + ') : (isInactiveUpdate ? "" : (tradeModel || "سيارة برسم البيع"));
+
+}
+
+let newNegoText = "";
+document.querySelectorAll('.cUpdNegotiationItem').forEach(item => { const val = item.value.trim(); if (val) newNegoText += `🚗 بخصوص [${item.getAttribute('data-car')}]:\n${val}\n\n`; });
+
+let finalAgreement = (newNegoText + document.getElementById('updAgrm').value.trim()).trim();
+
+const newTradeIn = { active: hasCustomerCarUpdate, model: tradeModel, price: document.getElementById('updTradePrice').value, id: document.getElementById('updTradeId').value, color: document.getElementById('updTradeColor').value, year: document.getElementById('updTradeYear').value, mileage: document.getElementById('updTradeMileage').value, specs: document.getElementById('updTradeSpecs').value, inspection: document.getElementById('updTradeInspection').value, status: document.getElementById('updTradeStatus').value, condition: "مستعملة", dealType: "استبدال", owner: "", licenseExp: document.getElementById('updTradeLicenseExp').value, notes: document.getElementById('updTradeNotes').value };
+
+if (!isSellerMode && (isTradeEdited || oldTradeIn.__legacyConverted) && (!oldTradeIn.active || oldTradeIn.__legacyConverted || oldTradeIn.model != newTradeIn.model || oldTradeIn.price != newTradeIn.price || oldTradeIn.id != newTradeIn.id || oldTradeIn.status != newTradeIn.status || oldTradeIn.licenseExp != newTradeIn.licenseExp)) { newTradeIn.edited = true; }
+
+showLoader(true, "جارٍ التحديث...");
+
+getFilesBase64(document.getElementById('updTradePhotos') ? document.getElementById('updTradePhotos').files : [], function(b64) {
+
+if(b64 === null) { showLoader(false); return; }
+
+let data = {
+
+rowId: document.getElementById('updRowId').value, custName: document.getElementById('updCustNameInput').value, status: st, payment: (!isSellerMode && st.includes('تم البيع')) ? p : null, carId: (!isSellerMode && (st.includes('تم البيع') || st.includes('حجز'))) ? id : null, resDate: (!isSellerMode && (st.includes('حجز')||st.includes('متابعة')||st.includes('تم البيع'))) ? document.getElementById('updResDate').value : "", rejectReason: document.getElementById('updReject').value, agreement: finalAgreement, incrementVisit: document.getElementById('updAddVisitCheck').checked, car: finalCarStr, tradeIn: newTradeIn, files: b64, isSellerMode: isSellerMode, transferRoom: transferRoom
+
+};
+
+google.script.run.withSuccessHandler(res => {
+
+if(res.success) { showSuccessScreen('تم التحديث بنجاح!');
+dataCache.customers=[]; dataCache.inventory=[]; switchView('my_cust'); }
+else { showLoader(false); Swal.fire('خطأ', res.msg, 'error'); }
+
+}).webUpdateCustomer(chatId, data);
+
+});
+
+}
+
+// --- دوال القوائم والمخزون والإدارة ---
+
+window.loadAllCustomers = function(viewContext) {
+
+showLoader(true, "جلب البيانات...");
+
+google.script.run.withSuccessHandler(res => { allData = res;
+dataCache.update('customers', res); if(viewContext === 'my_cust') renderMyCustomers(); else renderAllCustomers(); showLoader(false); }).webGetReports(chatId);
+
+}
+
+window.renderMyCustomers = function() {
+
+const search = document.getElementById('searchMyCust').value.toLowerCase().trim();
+const timeFilt = document.getElementById('timeFilterMy').value;
+
+const container = document.getElementById('myCustomersContainer');
+container.innerHTML = '';
+
+let filtered = allData.filter(c => {
+
+const matchEmp = String(c.empName).trim() === String(sessionUser.name).trim();
+
+const matchSearch = (search === "" || (String(c.custName) + String(c.phone) + String(c.car)).toLowerCase().includes(search));
+
+let matchTime = true;
+
+if (timeFilt === "agenda") { const t = new Date().toISOString().split('T')[0]; matchTime = (c.resDate === t && (c.status.includes("متابعة") || c.status.includes("حجز"))); }
+
+else if (timeFilt !== "all") { const d = Math.ceil(Math.abs(Date.now() - c.lastContactTs) / 86400000); matchTime = (timeFilt === "today" ? d<=1 : timeFilt==="week" ? d<=7 : d<=30); }
+
+return matchEmp && matchSearch && matchTime;
+
+});
+
+if (filtered.length === 0) { container.innerHTML = '<div class="empty-state"><i class="fa fa-folder-open fa-3x"></i><p>لا نتائج</p></div>'; return; }
+
+filtered.slice(0, 50).forEach(c => container.innerHTML += buildCard(c));
+
+}
+
+window.renderAllCustomers = function() {
+
+const search = document.getElementById('mgrSearch').value.toLowerCase().trim(); const stFilt = document.getElementById('mgrFilterStatus').value; const empFilt = document.getElementById('mgrFilterEmp').value;
+
+const container = document.getElementById('mgrContainer');
+container.innerHTML = '';
+
+let filtered = allData.filter(c => (search === "" || (String(c.custName) + String(c.phone) + String(c.car)).toLowerCase().includes(search)) && (stFilt === "" || String(c.status).includes(stFilt)) && (empFilt === "" || String(c.empName).trim() === empFilt.trim()));
+
+if (filtered.length === 0) { container.innerHTML = '<div class="empty-state"><i class="fa fa-inbox fa-3x"></i><p>لا بيانات</p></div>'; return; }
+
+filtered.slice(0, 50).forEach(c => container.innerHTML += buildCard(c));
+
+}
+
+window.renderSearchShowroom = function() {
+
+const search = document.getElementById('searchShowroomInput').value.toLowerCase().trim();
+const container = document.getElementById('searchResultContainer');
+
+if (search === "") { container.innerHTML = ''; return; }
+
+if (allData.length === 0) { loadAllCustomers(); return; }
+
+container.innerHTML = '';
+
+let filtered = allData.filter(c => (String(c.custName) + String(c.phone) + String(c.car) + String(c.empName)).toLowerCase().includes(search));
+
+if (filtered.length === 0) { container.innerHTML = '<div class="empty-state"><i class="fa fa-search-minus fa-3x"></i><p>لا نتائج</p></div>'; return; }
+
+filtered.slice(0, 20).forEach(c => container.innerHTML += buildCard(c));
+
+}
+
+window.buildCard = function(c) {
+
+const b = getBadgeClass(c.status);
+
+const isSellerStatus = isLegacyCustomerCarStatusClient(c.status);
+const licenseAlert = getLicenseAlertText(c.tradeInObj || c.tradeIn);
+
+let displayCars = '';
+
+if (c.car && c.car !== "-") {
+
+let carArr = [...new Set(c.car.split(' + '))];
+
+carArr.forEach(car => {
+
+let carLabel = car.replace(/\(ID:.*?\)/g, '').trim();
+
+if (isSellerStatus) { displayCars += `<div class="badge bg-warning text-dark border px-2 py-1 mb-1 d-inline-block text-wrap" style="font-size:0.85rem;"><i class="fa fa-tag"></i> معروضة: ${carLabel}</div>`; }
+
+else { displayCars += `<div class="badge bg-secondary px-2 py-1 mb-1 d-inline-block text-wrap" style="font-size:0.85rem;
+color:#fff;">${carLabel}</div>`; }
+
+});
+
+} else { displayCars = `<span class="badge bg-secondary border">-</span>`; }
+
+return `<div class="card-stat mb-3 border-0 shadow-sm border-end border-4 border-info">
+
+<div class="d-flex justify-content-between mb-2 align-items-center">
+
+<strong class="text-primary fs-6"><i class="fa fa-user me-1"></i> ${c.custName}</strong>
+
+<span class="badge ${b}">${c.status}</span>
+
+</div>
+
+<div class="small text-muted mb-2"><i class="fa fa-phone me-1"></i> <span dir="ltr">${c.phone}</span></div>
+
+<div>${displayCars}</div>
+
+${licenseAlert ? `<div class="alert alert-danger py-2 px-3 mt-2 mb-0 small fw-bold"><i class="fa fa-id-card"></i> ${licenseAlert}</div>` : ''}
+
+<div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
+
+<div class="small text-muted"><i class="fa fa-user-tie"></i> ${c.empName}</div>
+
+<button class="btn btn-sm btn-info text-white rounded-pill px-3" onclick="openCustomerDetailsWeb('${c.id}')"><i class="fa fa-pen"></i> التفاصيل</button>
+
+</div>
+
+</div>`;
+
+}
+
+window.openCustomerDetailsWeb = function(id) {
+
+const item = allData.find(x => String(x.id) === String(id));
+
+if (item) renderUpdForm(item); else Swal.fire('خطأ', "تعذر العثور على العميل", 'error');
+
+};
+
+window.loadInventory = function() {
+
+showLoader(true, "جلب المخزون...");
+
+google.script.run.withSuccessHandler(res => {
+
+invData = res; dataCache.update('inventory', res);
+
+var showrooms = []; var owners = [];
+
+res.forEach(c => {
+
+if(c.owner) { let o = String(c.owner).trim(); if (o.includes("معرض") || o.includes("شركة")) showrooms.push(o); else owners.push(o); }
+
+});
+
+let optShowrooms = '<option value="">المعارض</option>'; [...new Set(showrooms)].forEach(s => optShowrooms += `<option value="${s}">${s}</option>`);
+
+document.getElementById('fltInvShowroom').innerHTML = optShowrooms;
+
+let optOwners = '<option value="">المُلاك (خارجي)</option>'; [...new Set(owners)].forEach(o => optOwners += `<option value="${o}">${o}</option>`);
+
+document.getElementById('fltInvOwnerName').innerHTML = optOwners;
+
+renderInventory(); showLoader(false);
+
+}).webGetInventory(chatId);
+
+}
+
+window.renderInventory = function() {
+
+const search = document.getElementById('searchInvInput').value.toLowerCase().trim();
+
+const fltShowroom = document.getElementById('fltInvShowroom').value;
+
+const fltOwnerName = document.getElementById('fltInvOwnerName').value;
+
+const fltDeal = document.getElementById('fltInvDeal').value;
+
+const container = document.getElementById('invContainer');
+container.innerHTML = '';
+
+let filtered = invData.filter(c => {
+
+let matchSearch = (String(c.model) + String(c.id) + String(c.owner) + String(c.room)).toLowerCase().includes(search);
+
+let matchShowroom = fltShowroom === "" || String(c.owner) === fltShowroom;
+
+let matchOwnerName = fltOwnerName === "" || String(c.owner) === fltOwnerName;
+
+let matchDeal = fltDeal === "" || (c.dealType || "غير محدد") === fltDeal;
+
+return matchSearch && matchShowroom && matchOwnerName && matchDeal;
+
+});
+
+if (filtered.length === 0) { container.innerHTML = '<div class="empty-state"><i class="fa fa-car fa-3x"></i><p>المخزون فارغ</p></div>'; return; }
+
+filtered.forEach(c => {
+
+const color = c.fullRowData[11] || '-'; const year = c.fullRowData[12] || '-';
+
+const ownerIcon = ((c.dealType || "") === "برسم البيع" && String(c.owner).indexOf("معرض") === -1) ? "fa-user" : "fa-building";
+
+let actionBtn = "";
+
+if(isGeneralManager || sessionUser.role.includes("مدير معرض")) {
+
+actionBtn = `<button class="btn btn-sm btn-outline-danger rounded-circle" onclick="openNotifyModal('${c.owner}', 'السيارة: ${c.model}')"><i class="fa fa-bell"></i></button>`;
+
+}
+
+container.innerHTML += `<div class="card-stat mb-3 border-0 shadow-sm border-start border-4 border-success">
+
+<div class="d-flex justify-content-between mb-2">
+
+<strong class="text-success fs-6"><i class="fa fa-car me-1"></i> ${c.model}</strong>
+
+<strong class="text-dark fs-6">${c.price ? c.price + '$' : '-'}</strong>
+
+</div>
+
+<div class="small text-muted mb-2"><i class="fa ${ownerIcon} me-1"></i> ${c.owner}</div>
+
+<div class="d-flex flex-wrap gap-2 mb-2">
+
+<span class="badge bg-secondary"><i class="fa fa-barcode"></i> ${c.id}</span>
+
+<span class="badge bg-info text-dark"><i class="fa fa-calendar-alt"></i> ${year}</span>
+
+${getSmartColorBadge(color)}
+
+</div>
+
+<div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
+
+<span class="badge bg-light text-dark border">${c.condition} | ${c.dealType}</span>
+
+<div>
+
+<button class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="openCarDetailsModal('${c.id}')"><i class="fa fa-eye"></i> التفاصيل</button>
+
+${actionBtn}
+
+</div>
+
+</div>
+
+</div>`;
+
+});
+
+}
+
+window.openCarDetailsModal = function(carId) {
+
+let car = invData.find(c => String(c.id) === String(carId));
+
+if(!car) return;
+
+let html = `
+
+<div class="text-center border-bottom pb-3 mb-3">
+
+<h4 class="fw-bold text-primary mb-1">${car.model}</h4>
+
+<div class="badge bg-secondary fs-6"><i class="fa fa-barcode"></i> شاصي: ${car.id}</div>
+
+</div>
+
+<div class="row g-3">
+
+<div class="col-6"><div class="p-2 border rounded" style="background:var(--card-bg);"><span class="small text-muted d-block fw-bold">المالك</span><strong class="text-dark">${car.owner}</strong></div></div>
+
+<div class="col-6"><div class="p-2 border rounded" style="background:var(--card-bg);"><span class="small text-muted d-block fw-bold">السعر</span><strong class="text-success fs-6">${car.price ? car.price + '$' : '-'}</strong></div></div>
+
+<div class="col-6"><div class="p-2 border rounded" style="background:var(--card-bg);"><span class="small text-muted d-block fw-bold">الصفقة</span><strong class="text-dark">${car.condition} | ${car.dealType}</strong></div></div>
+
+<div class="col-6"><div class="p-2 border rounded" style="background:var(--card-bg);"><span class="small text-muted d-block fw-bold">الموديل</span><strong class="text-dark">${car.fullRowData[12] || '-'}</strong></div></div>
+
+<div class="col-6"><div class="p-2 border rounded" style="background:var(--card-bg);"><span class="small text-muted d-block fw-bold">المواصفات</span><strong class="text-primary">${car.fullRowData[14] || 'لا يوجد'}</strong></div></div>
+
+<div class="col-6"><div class="p-2 border rounded" style="background:var(--card-bg);"><span class="small text-muted d-block fw-bold">الفحص</span><strong class="text-danger">${car.fullRowData[15] || 'لا يوجد'}</strong></div></div>
+
+<div class="col-12"><div class="p-3 border rounded border-warning border-start border-4" style="background:var(--bg);"><span class="small text-warning d-block fw-bold"><i class="fa fa-comment-dots"></i> ملاحظات:</span><strong class="text-dark">${car.fullRowData[10] || 'لا توجد ملاحظات.'}</strong></div></div>
+
+</div>`;
+
+document.getElementById('carInfoModalBody').innerHTML = html;
+
+new bootstrap.Modal(document.getElementById('carInfoModal')).show();
+
+}
+
+window.submitInventory = function() {
+
+showLoader(true, "إضافة للمخزون...");
+
+const data = { id: document.getElementById('invId').value, model: document.getElementById('invModel').value, price: document.getElementById('invPrice').value, year: document.getElementById('invYear').value, color: document.getElementById('invColor').value, mileage: document.getElementById('invMileage').value, specs: document.getElementById('invSpecs').value, inspection: document.getElementById('invInspection').value, condition: document.getElementById('invCondition').value, dealType: document.getElementById('invDealType').value, owner: document.getElementById('invOwner').value };
+
+google.script.run.withSuccessHandler(res => {
+
+if(res.success) { showSuccessScreen('تمت الإضافة للمخزون!');
+document.getElementById('addInvForm').reset(); } else { showLoader(false); Swal.fire('خطأ', res.msg, 'error'); }
+
+}).webAddInventory(chatId, data);
+
+}
+
+window.loadHRData = function() {
+
+showLoader(true, "جلب الموظفين...");
+
+google.script.run.withSuccessHandler(res => {
+
+showLoader(false);
+
+let grid = document.getElementById('hrGrid'); grid.innerHTML = '';
+
+if(!res.staff || res.staff.length===0) { grid.innerHTML = '<div class="empty-state">لا يوجد بيانات</div>'; return; }
+
+res.staff.forEach(emp => {
+
+let convRate = emp.totalCustomers > 0 ? Math.round((emp.totalSales / emp.totalCustomers) * 100) : 0;
+
+grid.innerHTML += `<div class="card-stat border-0 shadow-sm border-start border-4 border-primary">
+
+<div class="d-flex justify-content-between mb-2">
+
+<strong class="text-primary fs-6"><i class="fa fa-user-tie me-1"></i> ${emp.name}</strong>
+
+<span class="badge bg-secondary border">${emp.role}</span>
+
+</div>
+
+<div class="small text-muted mb-3"><i class="fa fa-building text-danger me-1"></i> ${emp.room}</div>
+
+<div class="row text-center g-2">
+
+<div class="col-4"><div class="p-2 border rounded" style="background:var(--bg);"><div class="fw-bold text-primary fs-5">${emp.totalCustomers}</div><div class="small text-muted">عميل</div></div></div>
+
+<div class="col-4"><div class="p-2 border rounded" style="background:var(--bg);"><div class="fw-bold text-success fs-5">${emp.totalSales}</div><div class="small text-muted">مبيع</div></div></div>
+
+<div class="col-4"><div class="p-2 border rounded" style="background:var(--bg);"><div class="fw-bold text-info fs-5">${convRate}%</div><div class="small text-muted">تحويل</div></div></div>
+
+</div>
+
+</div>`;
+
+});
+
+}).webGetHRData(chatId);
+
+}
+
+window.toggleHrTarget = function() {
+
+const type = document.getElementById('hrActionType').value;
+
+const targetBox = document.getElementById('hrTargetBox'); const msgBox = document.getElementById('hrMsgBox');
+
+const selTarget = document.getElementById('actionTarget'); const selRole = document.getElementById('actionTargetRole'); const passInput = document.getElementById('actionPassword');
+
+targetBox.style.display = 'block'; msgBox.style.display = 'none';
+selTarget.style.display = 'none'; selRole.style.display = 'none';
+passInput.style.display = 'none';
+
+if (type === 'message') { targetBox.style.display = 'none';
+msgBox.style.display = 'block'; }
+
+else if (type === 'changeRole') { selTarget.style.display = 'block';
+selTarget.innerHTML = `<option value="موظف عادي">موظف عادي</option><option value="مدير معرض">مدير معرض</option>`;
+if(isGeneralManager) selTarget.innerHTML += '<option value="مدير عام">مدير عام</option>'; }
+
+else if (type === 'transfer') { selTarget.style.display = 'block';
+selTarget.innerHTML = document.getElementById('cRoom') ? document.getElementById('cRoom').innerHTML : '<option value="الشركة">الشركة</option>'; }
+
+else if (type === 'suspend') { targetBox.style.display = 'none'; }
+
+else if (type === 'setPassword') { passInput.style.display = 'block'; }
+
+else if (type === 'approveNew') { selTarget.style.display = 'block';
+selRole.style.display = 'block'; passInput.style.display = 'block';
+selTarget.innerHTML = document.getElementById('cRoom') ? document.getElementById('cRoom').innerHTML : '<option value="الشركة">الشركة</option>'; selRole.innerHTML = `<option value="موظف عادي">موظف عادي</option><option value="مدير معرض">مدير معرض</option>`; if(isGeneralManager) selRole.innerHTML += '<option value="مدير عام">مدير عام</option>'; }
+
+}
+
+window.executeHR = function() {
+
+const type = document.getElementById('hrActionType').value; const emp = document.getElementById('hrEmp').value;
+
+if (type === 'message') {
+
+const msg = document.getElementById('hrMsg').value; if (!msg) return Swal.fire('تنبيه', 'اكتب الرسالة', 'warning');
+
+showLoader(true);
+
+google.script.run.withSuccessHandler(res => { showLoader(false);
+Swal.fire('تم', res.msg, 'success');
+document.getElementById('hrMsg').value=""; }).webExecuteHRAction(chatId, "message", {empName: emp, message: msg});
+
+} else {
+
+if (emp === "الكل 👥") return Swal.fire('تنبيه', 'اختر موظف محدد للإجراء الإداري', 'warning');
+
+const tgt = document.getElementById('actionTarget').value; const tgtRole = document.getElementById('actionTargetRole').value; const pass = document.getElementById('actionPassword').value;
+
+if ((type === 'setPassword' || type === 'approveNew') && !pass) return Swal.fire('تنبيه', 'الرجاء إدخال كلمة المرور المطلوبة', 'warning');
+
+const payload = { empName: emp, newRole: (type === 'approveNew') ? tgtRole : tgt, newRoom: tgt, newPass: pass };
+
+showLoader(true);
+
+google.script.run.withSuccessHandler(res => { showLoader(false);
+Swal.fire('تم', res.msg, 'success');
+document.getElementById('actionPassword').value = ''; loadHRData(); }).webExecuteHRAction(chatId, type, payload);
+
+}
+
+}
+
+window.openNotifyModal = function(empName, custName) {
+
+document.getElementById('notifyEmpName').value = empName;
+document.getElementById('notifyEmpNameTxt').innerText = empName;
+
+document.getElementById('notifyCustName').value = custName;
+document.getElementById('notifyCustNameTxt').innerText = custName;
+
+document.getElementById('notifyMsgBody').value = ""; new bootstrap.Modal(document.getElementById('notifyModal')).show();
+
+}
+
+window.executeSendNotify = function() {
+
+var empName = document.getElementById('notifyEmpName').value; var custName = document.getElementById('notifyCustName').value; var msg = document.getElementById('notifyMsgBody').value;
+
+if (!msg) return Swal.fire('تنبيه', 'اكتب نص التوجيه', 'warning');
+
+showLoader(true);
+
+google.script.run.withSuccessHandler(function(res) {
+
+showLoader(false);
+
+if (res.success) { bootstrap.Modal.getInstance(document.getElementById('notifyModal')).hide();
+Swal.fire('نجاح', res.msg, 'success'); } else { Swal.fire('خطأ', res.msg, 'error'); }
+
+}).webSendCustomerAlert(chatId, { empName: empName, custName: custName, message: msg });
+
+}
+
+</script>
+
+</body>
+
+</html>
