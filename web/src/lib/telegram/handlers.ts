@@ -3,10 +3,12 @@ import {
   cancelKeyboard,
   escapeHtml,
   forceReplySearch,
+  getAppUrl,
   mainMenuKeyboard,
   selectionKeyboard,
   sendChatAction,
   sendMessage,
+  sendMessageWithWebApp,
 } from "./api";
 import {
   createCustomer,
@@ -356,6 +358,22 @@ async function handleStaff(chatId: number, user: BotUser) {
 // ─── Add Customer Wizard ─────────────────────────────────────────────────────
 
 async function handleAddCustomerStart(chatId: number, user: BotUser) {
+  const appUrl = getAppUrl();
+
+  // If app URL is configured, offer Mini App + wizard choice
+  if (appUrl) {
+    const miniAppUrl = `${appUrl}/bot-app/add-customer`;
+    await sendMessageWithWebApp(
+      chatId,
+      "➕ <b>إضافة عميل جديد</b>\n\nاضغط الزر أدناه لفتح الفورم الكامل، أو اكتب <b>ويزارد</b> للإدخال خطوة خطوة:",
+      [{ text: "📋 فتح الفورم الكامل", url: miniAppUrl }],
+    );
+    // Still start the wizard so the user can type "ويزارد" or just proceed
+    await setSession(String(chatId), "add_cust_name", {});
+    return;
+  }
+
+  // Fallback: wizard only
   await setSession(String(chatId), "add_cust_name", {});
   return sendMessage(
     chatId,

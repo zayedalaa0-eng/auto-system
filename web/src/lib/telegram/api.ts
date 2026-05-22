@@ -105,3 +105,35 @@ export function forceReplySearch(): ForceReply {
 export function forceReplyPrompt(placeholder: string): ForceReply {
   return { force_reply: true, input_field_placeholder: placeholder };
 }
+
+// ─── Inline keyboard with Web App button ────────────────────────────────────
+
+type InlineKeyboardMarkup = {
+  inline_keyboard: Array<Array<{ text: string; web_app?: { url: string }; callback_data?: string }>>;
+};
+
+export async function sendMessageWithWebApp(
+  chatId: number | string,
+  text: string,
+  buttons: Array<{ text: string; url: string }>,
+) {
+  const res = await fetch(`${getBaseUrl()}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          buttons.map((btn) => ({ text: btn.text, web_app: { url: btn.url } })),
+        ],
+      } satisfies InlineKeyboardMarkup,
+    }),
+  });
+  return res.json();
+}
+
+export function getAppUrl() {
+  return (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
+}
