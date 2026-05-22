@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Noto_Naskh_Arabic } from "next/font/google";
+
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+const notoNaskhArabic = Noto_Naskh_Arabic({
+  variable: "--font-noto-naskh-arabic",
+  subsets: ["arabic"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const geistMono = Geist_Mono({
@@ -13,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Auto System Web",
-  description: "Modern web workspace for the new Auto System platform",
+  title: "أوتو سيستم",
+  description: "منصة تشغيل وإدارة متكاملة للعملاء والمخزون والمتابعات اليومية",
 };
 
 export default function RootLayout({
@@ -26,9 +28,9 @@ export default function RootLayout({
     <html
       lang="ar"
       dir="rtl"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${notoNaskhArabic.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full">{children}</body>
     </html>
   );
 }

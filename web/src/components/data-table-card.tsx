@@ -18,17 +18,17 @@ export function DataTableCard({
   hasRows,
 }: DataTableCardProps) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 px-6 py-5">
+    <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+      <div className="border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-6 py-5">
         <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
-        <p className="mt-1 text-sm text-slate-600">{description}</p>
+        <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full text-right">
-          <thead className="bg-slate-50 text-sm text-slate-500">
+          <thead className="bg-slate-950 text-sm text-slate-200">
             <tr>
               {columns.map((column) => (
-                <th key={column} className="px-6 py-4 font-medium">
+                <th key={column} className="px-6 py-4 font-medium whitespace-nowrap">
                   {column}
                 </th>
               ))}

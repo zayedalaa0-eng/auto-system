@@ -1,40 +1,101 @@
-import { DataTableCard } from "@/components/data-table-card";
-import { getRecentCustomers } from "@/lib/data";
-import { formatDate } from "@/lib/format";
+import Link from "next/link";
+import { List, RefreshCcw } from "lucide-react";
 
-export default async function CustomersPage() {
-  const customers = await getRecentCustomers();
+import { CustomerForm } from "@/components/customer-form";
+import { CustomerModalShell } from "@/components/customer-modal-shell";
+import { CustomerProfileContent } from "@/components/customer-profile-content";
+import { CustomersReportTable } from "@/components/customers-report-table";
+import { filterCustomersForReport } from "@/lib/customer-report";
+import { getCustomerById, getCustomerFormOptions, getCustomersDirectory } from "@/lib/data";
+
+export default async function CustomersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ customer?: string; mode?: string; scope?: string; q?: string; focus?: string }>;
+}) {
+  const { customer: customerId, mode, scope, q, focus } = await searchParams;
+  const [customers, selectedCustomer, options] = await Promise.all([
+    getCustomersDirectory(),
+    customerId ? getCustomerById(customerId) : Promise.resolve(null),
+    customerId ? getCustomerFormOptions() : Promise.resolve(null),
+  ]);
+
+  const isFollowupScope = scope === "followups";
+  const query = (q ?? "").trim();
+  const filteredCustomers = isFollowupScope
+    ? filterCustomersForReport(
+        customers.filter((customer) => Boolean(customer.next_follow_up_at)),
+        query,
+      )
+    : filterCustomersForReport(customers, query);
+
+  const scopedQuery = isFollowupScope ? "&scope=followups" : "";
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-3xl bg-white p-6 shadow-sm">
-        <p className="text-sm font-medium text-slate-500">العملاء</p>
-        <h2 className="mt-3 text-2xl font-semibold text-slate-950">بداية صفحة العملاء</h2>
-        <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-          هذه النسخة الأولى من صفحة العملاء. الفكرة هنا أن نبني القراءة والفلترة والتفاصيل
-          الجديدة فوق قاعدة PostgreSQL، ثم ندخل الترحيل النهائي عندما نكون مرتاحين للشكل
-          والمسارات.
-        </p>
-      </section>
+    <div className="legacy-grid gap-6">
+      <div className="legacy-card">
+        <div className="grid gap-3 md:grid-cols-[1fr_1.1fr_0.8fr_0.5fr] md:items-center">
+          <div className="flex items-center justify-end gap-2 text-2xl font-bold text-sky-700">
+            <List className="h-5 w-5" />
+            {isFollowupScope ? `عملاء بحاجة لتواصل (${filteredCustomers.length})` : "تقرير عملائي"}
+          </div>
+          <form method="get">
+            {isFollowupScope ? <input type="hidden" name="scope" value="followups" /> : null}
+            <input
+              name="q"
+              defaultValue={q ?? ""}
+              className="legacy-input"
+              placeholder={isFollowupScope ? "بحث في العملاء بانتظار التواصل..." : "بحث في عملائي..."}
+            />
+          </form>
+          <select className="legacy-select" defaultValue={isFollowupScope ? "followups" : "all"}>
+            <option value="all">{isFollowupScope ? "بانتظار التواصل" : "كل الأوقات"}</option>
+            <option value="today">تواصل اليوم</option>
+            <option value="2days">آخر يومين</option>
+            <option value="week">آخر أسبوع</option>
+            <option value="month">آخر شهر</option>
+            <option value="agenda">مهام اليوم (الأجندة)</option>
+          </select>
+          {isFollowupScope ? (
+            <Link href="/dashboard/customers" className="legacy-btn legacy-btn-dark">
+              <RefreshCcw className="h-4 w-4" />
+              التقرير الكامل
+            </Link>
+          ) : (
+            <button className="legacy-btn legacy-btn-dark">
+              <RefreshCcw className="h-4 w-4" />
+              تحديث
+            </button>
+          )}
+        </div>
+      </div>
 
-      <DataTableCard
-        title="سجل العملاء"
-        description="عرض أولي للبيانات الحديثة. سنضيف لاحقًا البحث، التصفية، والنماذج."
-        columns={["العميل", "الهاتف", "المركبة المطلوبة", "الحالة", "المتابعة القادمة", "الفرع"]}
-        hasRows={customers.length > 0}
-        emptyMessage="لا توجد سجلات بعد. يمكننا متابعة بناء النماذج أولًا ثم نرجع للترحيل."
-      >
-        {customers.map((customer) => (
-          <tr key={customer.id}>
-            <td className="px-6 py-4 font-medium text-slate-950">{customer.full_name}</td>
-            <td className="px-6 py-4">{customer.phone}</td>
-            <td className="px-6 py-4">{customer.requested_car ?? "—"}</td>
-            <td className="px-6 py-4">{customer.status}</td>
-            <td className="px-6 py-4">{formatDate(customer.next_follow_up_at)}</td>
-            <td className="px-6 py-4">{customer.branch_name ?? "—"}</td>
-          </tr>
-        ))}
-      </DataTableCard>
+      <CustomersReportTable
+        customers={filteredCustomers}
+        basePath="/dashboard/customers"
+        query={q ?? ""}
+        emptyMessage={isFollowupScope ? "لا يوجد عملاء بانتظار التواصل ضمن هذا التقرير." : "لا توجد بيانات عملاء بعد."}
+      />
+
+      {selectedCustomer && options ? (
+        <CustomerModalShell closeHref={isFollowupScope ? "/dashboard/customers?scope=followups" : "/dashboard/customers"} title="">
+          {mode === "edit" ? (
+            <CustomerForm
+              customer={selectedCustomer}
+              options={options}
+              returnPath={`/dashboard/customers?customer=${selectedCustomer.id}&mode=view${scopedQuery}`}
+            />
+          ) : (
+            <CustomerProfileContent
+              customer={selectedCustomer}
+              options={options}
+              initialOpenTradeEditor={focus === "trade"}
+              compactTradeOnly={focus === "trade"}
+              returnPath={`/dashboard/customers?customer=${selectedCustomer.id}&mode=view${scopedQuery}`}
+            />
+          )}
+        </CustomerModalShell>
+      ) : null}
     </div>
   );
 }

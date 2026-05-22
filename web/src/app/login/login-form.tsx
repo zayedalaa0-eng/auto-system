@@ -13,6 +13,7 @@ export function LoginForm() {
   const [isPending, startTransition] = useTransition();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [resetSent, setResetSent] = useState(false);
   const canUseSupabase = useMemo(() => hasSupabaseEnv(), []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -40,6 +41,31 @@ export function LoginForm() {
       router.replace("/dashboard");
       router.refresh();
     });
+  }
+
+  async function handleForgotPassword() {
+    if (!canUseSupabase) {
+      setError("أضف مفاتيح Supabase في .env.local أولًا.");
+      return;
+    }
+    if (!email.trim()) {
+      setError("أدخل البريد الإلكتروني أولًا لإرسال رابط تغيير كلمة المرور.");
+      return;
+    }
+
+    setError(null);
+    setResetSent(false);
+    const supabase = createClient();
+    const redirectTo = `${window.location.origin}/reset-password`;
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo,
+    });
+
+    if (resetError) {
+      setError(resetError.message);
+      return;
+    }
+    setResetSent(true);
   }
 
   return (
@@ -79,6 +105,18 @@ export function LoginForm() {
           {error}
         </div>
       ) : null}
+      {resetSent ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          تم إرسال رابط تغيير كلمة المرور إلى البريد الإلكتروني.
+        </div>
+      ) : null}
+      <button
+        type="button"
+        onClick={handleForgotPassword}
+        className="text-sm font-medium text-sky-700 underline underline-offset-4"
+      >
+        نسيت كلمة المرور؟
+      </button>
       <button
         type="submit"
         disabled={isPending}

@@ -1,64 +1,65 @@
 # Legacy Import Steps
 
-## 1) إنشاء جداول staging
+## 1) Generate import CSV files from `cars.xlsx`
 
-شغّل:
+Run:
+
+- `python scripts/export_supabase_imports.py`
+
+Generated files will be written to:
+
+- `supabase/imports/legacy_customers_import.csv`
+- `supabase/imports/legacy_inventory_import.csv`
+- `supabase/imports/legacy_staff_import.csv`
+- `supabase/imports/legacy_showrooms_import.csv`
+- `supabase/imports/legacy_notifications_import.csv`
+- `supabase/imports/legacy_customer_logs_import.csv`
+- `supabase/imports/legacy_audit_logs_import.csv`
+
+## 2) Create staging tables in Supabase
+
+Run in SQL Editor:
 
 - `006_legacy_staging.sql`
+- `009_legacy_support_staging.sql`
 
-## 2) تصدير Google Sheets إلى CSV
+## 3) Import CSV files into staging tables
 
-من ملف Google Sheets الحالي:
+From Supabase Table Editor, use `Import data from CSV` for:
 
-- ورقة `customers` -> CSV
-- ورقة `inventory` -> CSV
+- `legacy_customers_import` <- `legacy_customers_import.csv`
+- `legacy_inventory_import` <- `legacy_inventory_import.csv`
+- `legacy_staff_import` <- `legacy_staff_import.csv`
+- `legacy_showrooms_import` <- `legacy_showrooms_import.csv`
+- `legacy_notifications_import` <- `legacy_notifications_import.csv`
+- `legacy_customer_logs_import` <- `legacy_customer_logs_import.csv`
+- `legacy_audit_logs_import` <- `legacy_audit_logs_import.csv`
 
-## 3) استيراد CSV إلى Supabase
+Important:
 
-من داخل Supabase:
+- `legacy_row_id` must remain exactly as generated. It is the join key used to reconnect customers, inventory, and activity logs.
 
-1. افتح جدول `legacy_customers_import`
-2. استخدم `Import data from CSV`
-3. اجعل الأعمدة بالترتيب التالي:
+## 4) Run migrations into final tables
 
-```text
-legacy_row_id
-created_at_raw
-branch_name
-employee_name
-customer_name
-phone
-requested_car
-payment_plan
-attachments_raw
-notes_raw
-status
-nickname
-address
-whatsapp_prefix
-next_follow_up_raw
-visit_count_raw
-last_contact_raw
-trade_in_raw
-```
+Run in this order:
 
-مهم:
-- `legacy_row_id` يجب أن يكون رقم الصف القديم أو معرفًا ثابتًا فريدًا
-- إذا كان CSV لا يحتوي `legacy_row_id` أضفه يدويًا قبل الاستيراد
-
-## 4) تشغيل الترحيل
-
-شغّل:
-
+- `003_seed_initial_data.sql`
 - `007_migrate_legacy_customers.sql`
+- `010_migrate_legacy_inventory.sql`
+- `011_migrate_legacy_support_data.sql`
 
-## 5) المراجعة
+## 5) Verify counts
 
-نفّذ:
+Run:
 
 ```sql
 select count(*) from public.legacy_customers_import;
+select count(*) from public.legacy_inventory_import;
+select count(*) from public.legacy_staff_import;
 select count(*) from public.customers;
-select count(*) from public.customer_attachments;
+select count(*) from public.inventory;
+select count(*) from public.app_users;
+select count(*) from public.notifications;
 select count(*) from public.customer_logs;
+select count(*) from public.audit_logs;
 ```
