@@ -7,6 +7,7 @@ import { hasSupabaseEnv } from "@/lib/env";
 import { getRoleCapabilities } from "@/lib/roles";
 import { createAdminClient, hasSupabaseServiceRoleEnv } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { pushTelegramToManagers } from "@/lib/telegram/push";
 
 async function getCurrentProfile() {
   if (!hasSupabaseEnv()) return null;
@@ -183,6 +184,9 @@ async function sendManagementActivityNotification({
   }));
 
   await writer.from("notifications").insert(rows);
+
+  // Fire-and-forget Telegram push to managers with linked accounts
+  void pushTelegramToManagers({ branchId, title, message });
 }
 
 async function notifyOpportunityForModelAvailability({
@@ -1005,6 +1009,7 @@ export async function upsertCustomerAction(formData: FormData) {
   const requestedActive = getBoolean(formData, "is_active");
   const workflowType = getNullableText(formData, "workflow_type");
   const operationType = getNullableText(formData, "operation_type");
+  const hasOperationTypeInput = formData.has("operation_type");
   const hasTradeIn = getBoolean(formData, "has_trade_in");
   const tradeInId = getNullableText(formData, "trade_in_id");
 
@@ -1060,8 +1065,8 @@ export async function upsertCustomerAction(formData: FormData) {
     is_active: isActive,
     metadata: {
       ...existingMetadata,
-      operation_type: operationTypeLabel,
-      operation_type_code: operationType,
+      operation_type: hasOperationTypeInput ? operationTypeLabel : ((existingMetadata.operation_type as string | null | undefined) ?? null),
+      operation_type_code: hasOperationTypeInput ? operationType : ((existingMetadata.operation_type_code as string | null | undefined) ?? null),
     },
   };
 

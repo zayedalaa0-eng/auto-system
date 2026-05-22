@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRoleCapabilities, type RoleCapabilities } from "@/lib/roles";
+import { pushTelegramToManagers } from "./push";
 
 export type BotUser = {
   id: string;
@@ -198,6 +199,15 @@ export async function createCustomer(
     assigned_user_id: user.id,
     is_active: true,
   });
+
+  if (!error) {
+    void pushTelegramToManagers({
+      branchId: user.branch_id,
+      title: "إضافة عميل جديد (بوت)",
+      message: `أضاف <b>${user.full_name}</b> عميلاً جديداً:\n👤 ${data.full_name}\n📱 ${data.phone}\n📌 ${data.status}${data.requested_car ? `\n🚗 ${data.requested_car}` : ""}`,
+    });
+  }
+
   return { error };
 }
 
