@@ -36,6 +36,8 @@ export async function getBotUser(chatId: string): Promise<BotUser | null> {
   };
 }
 
+// ─── Scope helpers ──────────────────────────────────────────────────────────
+
 function applyScope<Q extends { eq: (col: string, val: string) => Q }>(
   query: Q,
   user: BotUser,
@@ -48,6 +50,19 @@ function applyScope<Q extends { eq: (col: string, val: string) => Q }>(
   }
   return query;
 }
+
+async function countQuery(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  base: any,
+  branchId: string | null,
+  isGeneralManager: boolean,
+): Promise<number> {
+  const q = !isGeneralManager && branchId ? base.eq("branch_id", branchId) : base;
+  const result = await q;
+  return (result as { count: number | null }).count ?? 0;
+}
+
+// ─── Today ──────────────────────────────────────────────────────────────────
 
 export async function getTodayTasks(user: BotUser) {
   const admin = createAdminClient();
@@ -109,6 +124,8 @@ export async function getTodayTasks(user: BotUser) {
   };
 }
 
+// ─── Customers ──────────────────────────────────────────────────────────────
+
 export async function getMyCustomers(user: BotUser) {
   const admin = createAdminClient();
 
@@ -167,16 +184,144 @@ export async function searchCustomers(user: BotUser, searchQuery: string) {
   }));
 }
 
-async function countQuery(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  base: any,
-  branchId: string | null,
-  isGeneralManager: boolean,
-): Promise<number> {
-  const q = !isGeneralManager && branchId ? base.eq("branch_id", branchId) : base;
-  const result = await q;
-  return (result as { count: number | null }).count ?? 0;
+export async function createCustomer(
+  user: BotUser,
+  data: { full_name: string; phone: string; status: string; requested_car: string | null },
+) {
+  const admin = createAdminClient();
+  const { error } = await admin.from("customers").insert({
+    full_name: data.full_name,
+    phone: data.phone,
+    status: data.status,
+    requested_car: data.requested_car ?? null,
+    branch_id: user.branch_id ?? null,
+    assigned_user_id: user.id,
+    is_active: true,
+  });
+  return { error };
 }
+
+// ─── Inventory ──────────────────────────────────────────────────────────────
+
+export async function getInventory(user: BotUser) {
+  const admin = createAdminClient();
+
+  let query = admin
+    .from("inventory")
+    .select("id, model, production_year, color, price, availability_status, branches(name)")
+    .eq("is_active", true)
+    .order("availability_status", { ascending: true })
+    .order("model", { ascending: true })
+    .limit(25);
+
+  if (!user.capabilities.isGeneralManager && user.branch_id) {
+    query = query.eq("branch_id", user.branch_id) as typeof query;
+  }
+
+  const { data } = await query;
+  return (data ?? []).map((c) => ({
+    id: c.id,
+    model: c.model,
+    production_year: c.production_year,
+    color: c.color,
+    price: c.price,
+    availability_status: c.availability_status,
+    branch_name: unwrap(c.branches as RelationOrArray<{ name: string }>)?.name ?? null,
+  }));
+}
+
+// ─── Notifications ──────────────────────────────────────────────────────────
+
+export async function getNotifications(user: BotUser) {
+  const admin = createAdminClient();
+
+  let query = admin
+    .from("notifications")
+    .select("id, title, message, status, notification_type, created_at")
+    .order("created_at", { ascending: false })
+    .limit(15);
+
+  if (!user.capabilities.isGeneralManager) {
+    query = query.eq("recipient_user_id", user.id) as typeof query;
+  }
+
+  const { data } = await query;
+  return (data ?? []).map((n) => ({
+    id: n.id,
+    title: n.title,
+    message: n.message,
+    status: n.status,
+    notification_type: n.notification_type,
+    created_at: n.created_at,
+  }));
+}
+
+export async function markNotificationsRead(user: BotUser) {
+  const admin = createAdminClient();
+
+  let query = admin
+    .from("notifications")
+    .update({ status: "read" })
+    .eq("status", "unread");
+
+  if (!user.capabilities.isGeneralManager) {
+    query = query.eq("recipient_user_id", user.id) as typeof query;
+  }
+
+  await query;
+}
+
+// ─── Staff ──────────────────────────────────────────────────────────────────
+
+export async function getStaffList(user: BotUser) {
+  const admin = createAdminClient();
+
+  let query = admin
+    .from("app_users")
+    .select("id, full_name, role, branch_id, is_active, branches(name)")
+    .eq("is_active", true)
+    .order("full_name", { ascending: true });
+
+  if (!user.capabilities.isGeneralManager && user.branch_id) {
+    query = query.eq("branch_id", user.branch_id) as typeof query;
+  }
+
+  const { data } = await query;
+  return (data ?? []).map((u) => ({
+    id: u.id,
+    full_name: u.full_name,
+    role: u.role,
+    branch_name: unwrap(u.branches as RelationOrArray<{ name: string }>)?.name ?? null,
+  }));
+}
+
+export async function sendMessageToStaff(
+  fromUser: BotUser,
+  recipientId: string,
+  message: string,
+) {
+  const admin = createAdminClient();
+
+  // Get recipient telegram_chat_id
+  const { data: recipient } = await admin
+    .from("app_users")
+    .select("telegram_chat_id, full_name")
+    .eq("id", recipientId)
+    .maybeSingle();
+
+  // Insert notification in DB
+  await admin.from("notifications").insert({
+    recipient_user_id: recipientId,
+    title: `رسالة من ${fromUser.full_name}`,
+    message,
+    notification_type: "message",
+    status: "unread",
+  });
+
+  return { telegram_chat_id: recipient?.telegram_chat_id ?? null };
+}
+
+// ─── Reports ────────────────────────────────────────────────────────────────
 
 export async function getBranchReport(user: BotUser) {
   const admin = createAdminClient();
@@ -264,7 +409,6 @@ export async function getGeneralManagerReport() {
     admin.from("notifications").select("*", { count: "exact", head: true }).eq("status", "unread"),
   ]);
 
-  // Per-branch counts
   const branchIds = (branches ?? []).map((b) => b.id);
   const branchStats: Array<{ name: string; customers: number; inventory: number }> = [];
 

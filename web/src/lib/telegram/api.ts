@@ -4,7 +4,12 @@ const getBaseUrl = () =>
 type ReplyKeyboardMarkup = {
   keyboard: string[][];
   resize_keyboard: boolean;
-  persistent: boolean;
+  persistent?: boolean;
+  one_time_keyboard?: boolean;
+};
+
+type ReplyKeyboardRemove = {
+  remove_keyboard: true;
 };
 
 type ForceReply = {
@@ -17,7 +22,7 @@ export async function sendMessage(
   text: string,
   options?: {
     parseMode?: "HTML" | "Markdown";
-    replyMarkup?: ReplyKeyboardMarkup | ForceReply;
+    replyMarkup?: ReplyKeyboardMarkup | ReplyKeyboardRemove | ForceReply;
   },
 ) {
   const res = await fetch(`${getBaseUrl()}/sendMessage`, {
@@ -48,20 +53,55 @@ export function escapeHtml(text: string) {
 // ─── Keyboards ──────────────────────────────────────────────────────────────
 
 export const BTN = {
-  TODAY:  "📋 مهام اليوم",
-  MY:     "👥 عملائي",
-  SEARCH: "🔍 بحث",
-  REPORT: "📊 التقرير",
+  TODAY:     "📋 مهام اليوم",
+  MY:        "👥 عملائي",
+  SEARCH:    "🔍 بحث",
+  REPORT:    "📊 التقرير",
+  ADD_CUST:  "➕ عميل جديد",
+  INVENTORY: "📦 المخزون",
+  NOTIFS:    "🔔 تنبيهاتي",
+  MSG_STAFF: "📢 رسالة للموظفين",
+  STAFF:     "👨‍💼 الموظفون",
+  CANCEL:    "❌ إلغاء",
 } as const;
 
-export function mainMenuKeyboard(isManager: boolean): ReplyKeyboardMarkup {
-  const rows: string[][] = [
-    [BTN.TODAY, BTN.MY],
-    isManager ? [BTN.REPORT, BTN.SEARCH] : [BTN.SEARCH],
-  ];
+export function mainMenuKeyboard(isManager: boolean, isGeneralManager: boolean): ReplyKeyboardMarkup {
+  const row1 = [BTN.TODAY, BTN.MY];
+  const row2 = [BTN.ADD_CUST, BTN.SEARCH];
+  const row3: string[] = [BTN.INVENTORY, BTN.NOTIFS];
+  const row4: string[] = [];
+
+  if (isManager) {
+    row4.push(BTN.REPORT, BTN.MSG_STAFF);
+  }
+  if (isGeneralManager) {
+    row4.push(BTN.STAFF);
+  }
+
+  const rows = [row1, row2, row3];
+  if (row4.length > 0) rows.push(row4);
+
   return { keyboard: rows, resize_keyboard: true, persistent: true };
+}
+
+export function selectionKeyboard(options: string[], includeCancel = true): ReplyKeyboardMarkup {
+  const rows: string[][] = options.map((opt) => [opt]);
+  if (includeCancel) rows.push([BTN.CANCEL]);
+  return { keyboard: rows, resize_keyboard: true, one_time_keyboard: true };
+}
+
+export function cancelKeyboard(): ReplyKeyboardMarkup {
+  return { keyboard: [[BTN.CANCEL]], resize_keyboard: true, one_time_keyboard: true };
+}
+
+export function removeKeyboard(): ReplyKeyboardRemove {
+  return { remove_keyboard: true };
 }
 
 export function forceReplySearch(): ForceReply {
   return { force_reply: true, input_field_placeholder: "اكتب اسم العميل أو رقم هاتفه..." };
+}
+
+export function forceReplyPrompt(placeholder: string): ForceReply {
+  return { force_reply: true, input_field_placeholder: placeholder };
 }
