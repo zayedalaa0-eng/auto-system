@@ -40,14 +40,21 @@ export default function AddCustomerMiniApp() {
   const twa = useRef<TelegramWebApp | null>(null);
 
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    twa.current = ((window as any).Telegram?.WebApp as TelegramWebApp | undefined) ?? null;
-    if (twa.current) {
-      twa.current.ready();
-      twa.current.expand();
-      const uid = twa.current.initDataUnsafe?.user?.id;
-      if (uid) setChatId(String(uid));
-    }
+    // Load Telegram SDK dynamically
+    const script = document.createElement("script");
+    script.src = "https://telegram.org/js/telegram-web-app.js";
+    script.async = true;
+    script.onload = () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      twa.current = ((window as any).Telegram?.WebApp as TelegramWebApp | undefined) ?? null;
+      if (twa.current) {
+        twa.current.ready();
+        twa.current.expand();
+        const uid = twa.current.initDataUnsafe?.user?.id;
+        if (uid) setChatId(String(uid));
+      }
+    };
+    document.head.appendChild(script);
 
     // Fallback: read chat_id from URL query param (for testing)
     const params = new URLSearchParams(window.location.search);

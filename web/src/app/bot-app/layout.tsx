@@ -1,10 +1,3 @@
-import Script from "next/script";
-
 export default function BotAppLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      <Script src="https://telegram.org/js/telegram-web-app.js" strategy="afterInteractive" />
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }
