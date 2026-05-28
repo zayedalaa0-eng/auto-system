@@ -344,13 +344,25 @@ export function CustomerWizard({ options, errorMessage, initialParentId, initial
 
     // التحقق: يجب وجود سيارة أو ملاحظات إذا تم اختيار نوع العملية
     if (operationType) {
-      const hasCar = selectedCars.length > 0 || (useCustomRequest && customType.trim().length > 0);
       const hasNotes = generalNotes.trim().length > 0;
-      if (!hasCar && !hasNotes) {
-        event.preventDefault();
-        setNegotiationError("يرجى إضافة السيارة المطلوبة أو كتابة ملاحظات قبل الحفظ.");
-        document.getElementById("negotiation-section")?.scrollIntoView({ behavior: "smooth", block: "center" });
-        return;
+      if (operationType === "sell_on_behalf") {
+        // بيع بالوكالة: الشرط هو سيارة العميل (tradeModel) أو ملاحظات
+        const hasCustomerCar = tradeModel.trim().length > 0;
+        if (!hasCustomerCar && !hasNotes) {
+          event.preventDefault();
+          setNegotiationError("يرجى إدخال نوع سيارة العميل أو كتابة ملاحظات قبل الحفظ.");
+          document.getElementById("negotiation-section")?.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+      } else {
+        // مشتري / مشتري + استبدال: الشرط هو السيارة المطلوبة أو ملاحظات
+        const hasCar = selectedCars.length > 0 || (useCustomRequest && customType.trim().length > 0);
+        if (!hasCar && !hasNotes) {
+          event.preventDefault();
+          setNegotiationError("يرجى إضافة السيارة المطلوبة أو كتابة ملاحظات قبل الحفظ.");
+          document.getElementById("negotiation-section")?.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
       }
     }
   }
