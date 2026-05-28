@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { Fuel, GaugeCircle, MessageCircle, Settings2 } from "lucide-react";
+import { Car, Fuel, GaugeCircle, Send, Settings2 } from "lucide-react";
 
 import { CarGalleryViewer } from "@/components/car-gallery-viewer";
 import { CustomerModalShell } from "@/components/customer-modal-shell";
 import { InventoryFilterBar } from "@/components/inventory-filter-bar";
 import { InventoryImportBtn } from "@/components/inventory-import-btn";
+import { InventorySaveViewBtn } from "@/components/inventory-save-view-btn";
 import { sendQuickReminderAction } from "@/app/dashboard/actions";
 import { getInventoryCarAttachments, getInventoryDirectory, getInventoryFilterContext } from "@/lib/data";
 import { formatCurrency } from "@/lib/format";
@@ -25,7 +26,6 @@ function normalize(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase();
 }
 
-
 function parseBranchFilter(value: string | undefined) {
   const raw = (value ?? "").trim();
   if (!raw) return { mode: "default" as const, branchName: null as string | null };
@@ -38,21 +38,19 @@ function parseBranchFilter(value: string | undefined) {
 
 /**
  * تطبيع النص العربي — يُزيل التشكيل وينوّع الهمزات والحروف
- * حتى تعمل مطابقة "احمر" مع "أحمر"، و"اسود" مع "أسود" ... إلخ
  */
 function normalizeArabic(text: string): string {
   return text
-    .replace(/[ً-ٟؐ-ؚۖ-ۭ]/g, "") // إزالة التشكيل
-    .replace(/[أإآٱ]/g, "ا")   // توحيد الألف بكل أشكالها
-    .replace(/ة/g, "ه")         // تاء مربوطة → هاء
-    .replace(/ى/g, "ي")         // ألف مقصورة → ياء
+    .replace(/[ً-ٟؐ-ؚۖ-ۭ]/g, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
     .toLowerCase()
     .trim();
 }
 
-/** خريطة الألوان — المفاتيح بعد تطبيع النص العربي */
+/** خريطة الألوان */
 const COLOR_MAP: Array<[string[], string, string]> = [
-  // [keywords_normalized, background, border]
   [["ابيض", "بيضاء", "white"],              "#ffffff", "#d1d5db"],
   [["اسود", "سوداء", "black"],              "#1c1917", "#1c1917"],
   [["رمادي", "رصاصي", "grey", "gray"],      "#9ca3af", "#9ca3af"],
@@ -90,6 +88,29 @@ function getDealBadgeClass(value: string | null | undefined) {
   if (label.includes("شراء")) return "inv-deal-badge inv-deal-badge--purchase";
   if (label.includes("حيازة")) return "inv-deal-badge inv-deal-badge--owned";
   return "inv-deal-badge inv-deal-badge--default";
+}
+
+// ── مساعدات الأفاتار ──────────────────────────────────────────────────────────
+const AVATAR_COLORS = ["#ef4444","#f97316","#eab308","#22c55e","#3b82f6","#8b5cf6","#ec4899","#14b8a6"];
+
+function getAvatarColor(name: string | null): string {
+  if (!name) return "#94a3b8";
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) & 0x7fffffff;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+
+function getInitials(name: string | null): string {
+  if (!name) return "—";
+  const p = name.trim().split(/\s+/);
+  return p.length >= 2 ? (p[0][0] + p[1][0]).toUpperCase() : (p[0][0] ?? "—").toUpperCase();
+}
+
+// ── كشف البيانات الناقصة ──────────────────────────────────────────────────────
+type InventoryItem = Awaited<ReturnType<typeof getInventoryDirectory>>[number];
+
+function isIncomplete(item: InventoryItem): boolean {
+  return !item.price || !item.chassis_no || !item.color || !item.gearbox || !item.fuel_type;
 }
 
 export default async function InventoryPage({
@@ -131,7 +152,6 @@ export default async function InventoryPage({
   const deals = [...new Set(inventory.map((i) => normalize(i.deal_type)).filter(Boolean))];
   const statuses = [...new Set(inventory.map((i) => normalize(i.availability_status)).filter(Boolean))];
 
-  // خيارات القير والوقود من البيانات الحية
   const gearboxOptions = [...new Set(inventory.map((i) => normalize(i.gearbox)).filter(Boolean))].sort(
     (a, b) => a.localeCompare(b, "ar"),
   );
@@ -142,15 +162,15 @@ export default async function InventoryPage({
   const query = normalize(q);
   const selectedCarId = normalize(car);
 
-  const filteredInventory = inventory.filter((item) => {
+  // ── الفلترة الأساسية (بدون status/incomplete) ────────────────────────────────
+  const baseFiltered = inventory.filter((item) => {
     const itemBranch = normalize(item.branch_name);
     const itemOwner = normalize(item.owner_name);
     const itemDeal = normalize(item.deal_type);
-    const itemStatus = normalize(item.availability_status);
     const itemGearbox = normalize(item.gearbox);
     const itemFuel = normalize(item.fuel_type);
 
-    // ── فلتر المعرض ──────────────────────────────────────────────────────────
+    // فلتر المعرض
     if (ctx.isGeneralManager) {
       if (branchFilter.mode === "branch" && branchFilter.branchName && itemBranch !== branchFilter.branchName)
         return false;
@@ -171,16 +191,11 @@ export default async function InventoryPage({
       if (itemBranch !== normalize(ctx.branchName)) return false;
     }
 
-    // ── الفلاتر المنسدلة ──────────────────────────────────────────────────────
     if (owner && owner !== "all" && itemOwner !== owner) return false;
     if (deal && deal !== "all" && itemDeal !== deal) return false;
     if (gearbox && gearbox !== "all" && itemGearbox !== gearbox) return false;
     if (fuel && fuel !== "all" && itemFuel !== fuel) return false;
-    if (status && status !== "all") {
-      if (itemStatus !== status) return false;
-    }
 
-    // ── البحث النصي ──────────────────────────────────────────────────────────
     if (!query) return true;
     return [
       item.model,
@@ -196,11 +211,24 @@ export default async function InventoryPage({
       .includes(query);
   });
 
+  // ── إحصاءات الحبوب ───────────────────────────────────────────────────────────
+  const statsAll = baseFiltered.length;
+  const statsAvailable = baseFiltered.filter((i) => normalize(i.availability_status) === "متوفرة").length;
+  const statsReserved  = baseFiltered.filter((i) => normalize(i.availability_status) === "محجوزة").length;
+  const statsSold      = baseFiltered.filter((i) => normalize(i.availability_status) === "مباعة").length;
+  const statsIncomplete = baseFiltered.filter(isIncomplete).length;
+
+  // ── الفلترة النهائية (مع status/incomplete) ──────────────────────────────────
+  const filteredInventory = baseFiltered.filter((item) => {
+    if (!status || status === "all") return true;
+    if (status === "incomplete") return isIncomplete(item);
+    return normalize(item.availability_status) === status;
+  });
+
   const selectedCar = selectedCarId
     ? (filteredInventory.find((item) => item.id === selectedCarId) ?? null)
     : null;
 
-  // جلب صور السيارة المختارة (من inventory.photo_urls + customer_attachments)
   const selectedCarAttachments = selectedCar
     ? await getInventoryCarAttachments(
         selectedCar.id,
@@ -210,6 +238,7 @@ export default async function InventoryPage({
     : [];
   const selectedCarPhotos = selectedCarAttachments.filter((item) => item.isImage).map((item) => item.url);
 
+  // ── بناء روابط الـ URL ────────────────────────────────────────────────────────
   const currentParams = new URLSearchParams();
   if (q) currentParams.set("q", q);
   if (branch) currentParams.set("branch", branch);
@@ -222,6 +251,17 @@ export default async function InventoryPage({
     currentParams.set("cross", "1");
   const baseQuery = currentParams.toString();
   const closeHref = baseQuery ? `/dashboard/inventory?${baseQuery}` : "/dashboard/inventory";
+
+  // مساعد لبناء رابط حبة الإحصاء
+  function statsHref(s: string | null) {
+    const p = new URLSearchParams(currentParams);
+    p.delete("status");
+    if (s) p.set("status", s);
+    const qs = p.toString();
+    return qs ? `/dashboard/inventory?${qs}` : "/dashboard/inventory";
+  }
+
+  const activeStatus = status ?? "";
 
   return (
     <div className="legacy-grid gap-6">
@@ -245,8 +285,81 @@ export default async function InventoryPage({
           isMuallimBranch={ctx.isMuallimBranch}
           isGeneralManager={ctx.isGeneralManager}
           branchName={ctx.branchName}
-          totalCount={filteredInventory.length}
+          totalCount={baseFiltered.length}
         />
+      </div>
+
+      {/* ── شريط الإحصاءات ── */}
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        {/* حبوب الحالة */}
+        <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
+          {/* الكل */}
+          <Link
+            href={statsHref(null)}
+            className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+              !activeStatus || activeStatus === "all"
+                ? "bg-slate-800 text-white shadow"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            الكل <span className="opacity-70">{statsAll}</span>
+          </Link>
+
+          {/* متوفرة */}
+          <Link
+            href={statsHref("متوفرة")}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+              activeStatus === "متوفرة"
+                ? "bg-emerald-700 text-white shadow"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <span className="h-2 w-2 rounded-full bg-emerald-500 flex-shrink-0" />
+            متوفرة <span className="opacity-70">{statsAvailable}</span>
+          </Link>
+
+          {/* محجوزة */}
+          <Link
+            href={statsHref("محجوزة")}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+              activeStatus === "محجوزة"
+                ? "bg-amber-600 text-white shadow"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <span className="h-2 w-2 rounded-full bg-amber-400 flex-shrink-0" />
+            محجوزة <span className="opacity-70">{statsReserved}</span>
+          </Link>
+
+          {/* مباعة */}
+          <Link
+            href={statsHref("مباعة")}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+              activeStatus === "مباعة"
+                ? "bg-slate-700 text-white shadow"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <span className="h-2 w-2 rounded-full bg-slate-400 flex-shrink-0" />
+            مباعة <span className="opacity-70">{statsSold}</span>
+          </Link>
+
+          {/* بيانات ناقصة */}
+          <Link
+            href={statsHref("incomplete")}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+              activeStatus === "incomplete"
+                ? "bg-orange-600 text-white shadow"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <span className="h-2 w-2 rounded-full bg-orange-400 flex-shrink-0" />
+            بيانات ناقصة <span className="opacity-70">{statsIncomplete}</span>
+          </Link>
+        </div>
+
+        {/* زر حفظ كعرض */}
+        <InventorySaveViewBtn />
       </div>
 
       {/* ── جدول المخزون ── */}
@@ -254,151 +367,200 @@ export default async function InventoryPage({
         <table className="premium-table">
           <thead className="legacy-standard-head">
             <tr>
-              <th style={{ width: "175px" }}>المالك / المعرض</th>
-              <th style={{ width: "165px" }}>نوع السيارة</th>
-              <th style={{ width: "115px" }}>سعر البيع</th>
+              <th style={{ width: "185px" }}>المالك / الشاصي</th>
+              <th style={{ width: "165px" }}>السيارة</th>
+              <th style={{ width: "115px" }}>السعر</th>
               <th style={{ width: "145px" }}>الصفقة والحالة</th>
-              <th style={{ width: "105px" }}>اللون والعداد</th>
-              <th style={{ width: "120px" }}>القير والوقود</th>
-              <th style={{ width: "85px" }}>إجراءات</th>
+              <th style={{ width: "115px" }}>اللون والعداد</th>
+              <th style={{ width: "120px" }}>القير / الوقود</th>
+              <th style={{ width: "100px" }}>الإجراءات</th>
             </tr>
           </thead>
           <tbody>
             {filteredInventory.length > 0 ? (
-              filteredInventory.map((item) => (
-                <tr key={item.id}>
-                  {/* المالك / المعرض */}
-                  <td>
-                    <div className="font-bold text-slate-900 leading-tight">
-                      {item.owner_name ?? "—"}
-                    </div>
-                    {item.chassis_no ? (
-                      <div className="mt-1.5 font-mono text-xs text-slate-400 tracking-wide">
-                        {item.chassis_no}
-                      </div>
-                    ) : (
-                      <div className="mt-1.5 text-xs text-slate-300">بدون شاصي</div>
-                    )}
-                  </td>
+              filteredInventory.map((item) => {
+                const avatarColor = getAvatarColor(item.owner_name);
+                const initials = getInitials(item.owner_name);
+                const isUsed = normalize(item.condition_label).includes("مستعمل");
+                const missingColorMileage = isUsed && !item.color && typeof item.mileage !== "number";
+                const missingGearFuel = !item.gearbox && !item.fuel_type;
 
-                  {/* نوع السيارة */}
-                  <td>
-                    <div className="font-bold text-blue-700 leading-tight">
-                      {item.model || "—"}
-                    </div>
-                    {item.production_year ? (
-                      <div className="mt-1 text-xs text-slate-500">{item.production_year}</div>
-                    ) : null}
-                    {item.condition_label ? (
-                      <div className="mt-1.5 inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
-                        {item.condition_label}
-                      </div>
-                    ) : null}
-                  </td>
-
-                  {/* سعر البيع */}
-                  <td>
-                    <span className="font-extrabold text-emerald-700">
-                      {formatCurrency(item.price)}
-                    </span>
-                  </td>
-
-                  {/* الصفقة والحالة */}
-                  <td>
-                    {item.deal_type ? (
-                      <div className={getDealBadgeClass(item.deal_type)}>{item.deal_type}</div>
-                    ) : (
-                      <span className="text-xs text-slate-400">—</span>
-                    )}
-                    {item.availability_status ? (
-                      <div className="mt-1.5 text-xs text-slate-500">{item.availability_status}</div>
-                    ) : null}
-                  </td>
-
-                  {/* اللون والعداد */}
-                  <td>
-                    {item.color ? (() => {
-                      const swatch = getColorSwatch(item.color);
-                      return (
-                        <div className="flex items-center gap-1.5">
-                          {swatch ? (
-                            <span
-                              className="inv-color-dot"
-                              style={{ background: swatch.bg, borderColor: swatch.border }}
-                              title={item.color}
-                            />
-                          ) : null}
-                          <span className="text-sm font-semibold text-slate-700">{item.color}</span>
-                        </div>
-                      );
-                    })() : (
-                      <div className="text-xs text-slate-400">—</div>
-                    )}
-                    {typeof item.mileage === "number" ? (
-                      <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
-                        <GaugeCircle className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
-                        {item.mileage.toLocaleString("en-US")} كم
-                      </div>
-                    ) : null}
-                  </td>
-
-                  {/* القير والوقود */}
-                  <td>
-                    {item.gearbox ? (
-                      <div className="flex items-center gap-1 text-sm font-semibold text-slate-700">
-                        <Settings2 className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
-                        {item.gearbox}
-                      </div>
-                    ) : (
-                      <div className="text-xs text-slate-400">—</div>
-                    )}
-                    {item.fuel_type ? (
-                      <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
-                        <Fuel className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
-                        {item.fuel_type}
-                      </div>
-                    ) : null}
-                  </td>
-
-                  {/* الإجراءات */}
-                  <td>
-                    <div className="flex flex-col gap-1.5 items-stretch">
-                      {/* زر بطاقة السيارة */}
-                      <Link
-                        href={
-                          baseQuery
-                            ? `/dashboard/inventory?${baseQuery}&car=${item.id}`
-                            : `/dashboard/inventory?car=${item.id}`
-                        }
-                        className="legacy-table-btn legacy-table-btn--view text-center"
-                        title="عرض بطاقة السيارة"
-                      >
-                        بطاقة
-                      </Link>
-                      {/* زر تذكير تيليجرام */}
-                      <form action={sendQuickReminderAction}>
-                        <input type="hidden" name="recipient_branch_id" value={item.branch_id ?? ""} />
-                        <input type="hidden" name="recipient_label" value={item.branch_name ?? ""} />
-                        <input type="hidden" name="title" value={`تذكير — سيارة ${item.model ?? ""}`} />
-                        <input
-                          type="hidden"
-                          name="message"
-                          value={`يرجى متابعة ملف سيارة ${item.model ?? ""}${item.owner_name ? ` — المالك: ${item.owner_name}` : ""}${item.chassis_no ? ` — شاصي: ${item.chassis_no}` : ""}. الحالة: ${item.availability_status ?? "غير محددة"}`}
-                        />
-                        <input type="hidden" name="redirect_to" value="/dashboard/inventory" />
-                        <button
-                          type="submit"
-                          className="legacy-table-btn legacy-table-btn--edit w-full justify-center gap-1"
-                          title="إرسال تذكير عبر تيليجرام"
+                return (
+                  <tr key={item.id}>
+                    {/* المالك / الشاصي */}
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="flex-shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white select-none"
+                          style={{ backgroundColor: avatarColor }}
+                          title={item.owner_name ?? undefined}
                         >
-                          <MessageCircle className="h-3.5 w-3.5" />
-                          تذكير
+                          {initials}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-900 leading-tight truncate">
+                            {item.owner_name ?? "—"}
+                          </div>
+                          {item.chassis_no ? (
+                            <div className="mt-0.5 font-mono text-xs text-slate-400 tracking-wide truncate">
+                              {item.chassis_no}
+                            </div>
+                          ) : (
+                            <div className="mt-0.5 text-xs text-orange-500 font-medium">⚠️ أضف رقم الشاصي</div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* السيارة */}
+                    <td>
+                      <div className="flex items-start gap-1.5">
+                        <Car className="h-4 w-4 flex-shrink-0 text-slate-300 mt-0.5" />
+                        <div className="min-w-0">
+                          <div className="font-bold text-blue-700 leading-tight truncate">
+                            {item.model || "—"}
+                          </div>
+                          {item.production_year ? (
+                            <div className="mt-0.5 text-xs text-slate-400">{item.production_year}</div>
+                          ) : null}
+                          {item.condition_label ? (
+                            <div className="mt-1 inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                              {item.condition_label}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* السعر */}
+                    <td>
+                      {item.price ? (
+                        <span className="font-extrabold text-emerald-700">
+                          {formatCurrency(item.price)}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-amber-600 font-semibold">+ أضف السعر</span>
+                      )}
+                    </td>
+
+                    {/* الصفقة والحالة */}
+                    <td>
+                      {item.deal_type ? (
+                        <div className={getDealBadgeClass(item.deal_type)}>{item.deal_type}</div>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                      {item.availability_status ? (
+                        <div className="mt-1.5 text-xs text-slate-500">{item.availability_status}</div>
+                      ) : null}
+                    </td>
+
+                    {/* اللون والعداد */}
+                    <td>
+                      {missingColorMileage ? (
+                        <div className="text-xs text-orange-500 font-medium">⚠️ أكمل اللون والعداد</div>
+                      ) : (
+                        <>
+                          {item.color ? (() => {
+                            const swatch = getColorSwatch(item.color);
+                            return (
+                              <div className="flex items-center gap-1.5">
+                                {swatch ? (
+                                  <span
+                                    className="inv-color-dot"
+                                    style={{ background: swatch.bg, borderColor: swatch.border }}
+                                    title={item.color}
+                                  />
+                                ) : null}
+                                <span className="text-sm font-semibold text-slate-700">{item.color}</span>
+                              </div>
+                            );
+                          })() : (
+                            <div className="text-xs text-slate-400">—</div>
+                          )}
+                          {typeof item.mileage === "number" ? (
+                            <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                              <GaugeCircle className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+                              {item.mileage.toLocaleString("en-US")} كم
+                            </div>
+                          ) : null}
+                        </>
+                      )}
+                    </td>
+
+                    {/* القير والوقود */}
+                    <td>
+                      {missingGearFuel ? (
+                        <div className="text-xs text-orange-500 font-medium">⚠️ أكمل القير والوقود</div>
+                      ) : (
+                        <>
+                          {item.gearbox ? (
+                            <div className="flex items-center gap-1 text-sm font-semibold text-slate-700">
+                              <Settings2 className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+                              {item.gearbox}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-slate-400">—</div>
+                          )}
+                          {item.fuel_type ? (
+                            <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                              <Fuel className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+                              {item.fuel_type}
+                            </div>
+                          ) : null}
+                        </>
+                      )}
+                    </td>
+
+                    {/* الإجراءات */}
+                    <td>
+                      <div className="flex flex-col gap-1.5 items-stretch">
+                        {/* زر بطاقة السيارة */}
+                        <Link
+                          href={
+                            baseQuery
+                              ? `/dashboard/inventory?${baseQuery}&car=${item.id}`
+                              : `/dashboard/inventory?car=${item.id}`
+                          }
+                          className="legacy-table-btn legacy-table-btn--view text-center"
+                          title="عرض بطاقة السيارة"
+                        >
+                          بطاقة
+                        </Link>
+
+                        {/* زر تذكير تيليجرام */}
+                        <form action={sendQuickReminderAction}>
+                          <input type="hidden" name="recipient_branch_id" value={item.branch_id ?? ""} />
+                          <input type="hidden" name="recipient_label" value={item.branch_name ?? ""} />
+                          <input type="hidden" name="title" value={`تذكير — سيارة ${item.model ?? ""}`} />
+                          <input
+                            type="hidden"
+                            name="message"
+                            value={`يرجى متابعة ملف سيارة ${item.model ?? ""}${item.owner_name ? ` — المالك: ${item.owner_name}` : ""}${item.chassis_no ? ` — شاصي: ${item.chassis_no}` : ""}. الحالة: ${item.availability_status ?? "غير محددة"}`}
+                          />
+                          <input type="hidden" name="redirect_to" value="/dashboard/inventory" />
+                          <button
+                            type="submit"
+                            className="legacy-table-btn legacy-table-btn--edit w-full justify-center gap-1"
+                            title="إرسال تذكير عبر تيليجرام"
+                          >
+                            <Send className="h-3.5 w-3.5" />
+                          </button>
+                        </form>
+
+                        {/* زر المزيد */}
+                        <button
+                          type="button"
+                          className="legacy-table-btn w-full justify-center border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                          title="المزيد"
+                        >
+                          •••
                         </button>
-                      </form>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             ) : (
               <tr>
                 <td colSpan={7}>
