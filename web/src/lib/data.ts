@@ -77,6 +77,7 @@ export type InventoryItem = {
   photo_urls?: string[];
   source_customer_id?: string | null;
   branch_name: string | null;
+  branch_id?: string | null;
 };
 
 export type InventoryCarAttachment = {
@@ -1023,7 +1024,7 @@ export async function getInventoryDirectory(
   const { profile, capabilities } = await getScopedProfile();
   const inventoryDirectoryQuery = supabase
     .from("inventory")
-    .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, gearbox, fuel_type, mileage, specs, inspection, photo_urls, source_customer_id, branches(name)");
+    .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, gearbox, fuel_type, mileage, specs, inspection, photo_urls, source_customer_id, branch_id, branches(name)");
   const { data } = await (applyBranchScope(
     inventoryDirectoryQuery,
     profile?.branch_id,
@@ -1050,6 +1051,7 @@ export async function getInventoryDirectory(
     inspection: item.inspection ?? null,
     photo_urls: Array.isArray(item.photo_urls) ? (item.photo_urls as string[]) : [],
     source_customer_id: (item as { source_customer_id?: string | null }).source_customer_id ?? null,
+    branch_id: (item as { branch_id?: string | null }).branch_id ?? null,
     branch_name: getRelationshipName(item.branches),
   }));
 

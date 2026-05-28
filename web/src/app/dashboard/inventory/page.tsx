@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { Bell, Eye, Fuel, GaugeCircle, Settings2 } from "lucide-react";
+import { Fuel, GaugeCircle, MessageCircle, Settings2 } from "lucide-react";
 
 import { CarGalleryViewer } from "@/components/car-gallery-viewer";
 import { CustomerModalShell } from "@/components/customer-modal-shell";
 import { InventoryFilterBar } from "@/components/inventory-filter-bar";
 import { InventoryImportBtn } from "@/components/inventory-import-btn";
+import { sendQuickReminderAction } from "@/app/dashboard/actions";
 import { getInventoryCarAttachments, getInventoryDirectory, getInventoryFilterContext } from "@/lib/data";
 import { formatCurrency } from "@/lib/format";
 
@@ -361,27 +362,39 @@ export default async function InventoryPage({
 
                   {/* الإجراءات */}
                   <td>
-                    <div className="flex items-center gap-1.5">
-                      {item.source_customer_id ? (
-                        <Link
-                          href={`/dashboard/customers?customer=${item.source_customer_id}&mode=view`}
-                          className="inv-action-btn inv-action-btn--bell"
-                          title="فتح ملف العميل المرتبط"
-                        >
-                          <Bell className="h-4 w-4" />
-                        </Link>
-                      ) : null}
+                    <div className="flex flex-col gap-1.5 items-stretch">
+                      {/* زر بطاقة السيارة */}
                       <Link
                         href={
                           baseQuery
                             ? `/dashboard/inventory?${baseQuery}&car=${item.id}`
                             : `/dashboard/inventory?car=${item.id}`
                         }
-                        className="inv-action-btn inv-action-btn--eye"
+                        className="legacy-table-btn legacy-table-btn--view text-center"
                         title="عرض بطاقة السيارة"
                       >
-                        <Eye className="h-4 w-4" />
+                        بطاقة
                       </Link>
+                      {/* زر تذكير تيليجرام */}
+                      <form action={sendQuickReminderAction}>
+                        <input type="hidden" name="recipient_branch_id" value={item.branch_id ?? ""} />
+                        <input type="hidden" name="recipient_label" value={item.branch_name ?? ""} />
+                        <input type="hidden" name="title" value={`تذكير — سيارة ${item.model ?? ""}`} />
+                        <input
+                          type="hidden"
+                          name="message"
+                          value={`يرجى متابعة ملف سيارة ${item.model ?? ""}${item.owner_name ? ` — المالك: ${item.owner_name}` : ""}${item.chassis_no ? ` — شاصي: ${item.chassis_no}` : ""}. الحالة: ${item.availability_status ?? "غير محددة"}`}
+                        />
+                        <input type="hidden" name="redirect_to" value="/dashboard/inventory" />
+                        <button
+                          type="submit"
+                          className="legacy-table-btn legacy-table-btn--edit w-full justify-center gap-1"
+                          title="إرسال تذكير عبر تيليجرام"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5" />
+                          تذكير
+                        </button>
+                      </form>
                     </div>
                   </td>
                 </tr>

@@ -129,11 +129,11 @@ export function InventoryFilterBar({
         </div>
       </div>
 
-      {/* ── شبكة الفلاتر المنسدلة (3 × 2) ── */}
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+      {/* ── شريط الفلاتر — صف واحد ── */}
+      <div className="flex flex-wrap gap-2 lg:flex-nowrap">
         {/* المعرض */}
         <select
-          className="legacy-select text-blue-700"
+          className="legacy-select text-blue-700 flex-1 min-w-[130px]"
           value={currentBranch}
           onChange={(e) => navigate("branch", e.target.value)}
         >
@@ -165,7 +165,7 @@ export function InventoryFilterBar({
 
         {/* أصحاب السيارات برسم البيع — عملاء فقط */}
         <select
-          className="legacy-select text-violet-700"
+          className="legacy-select text-violet-700 flex-1 min-w-[130px]"
           value={currentOwner}
           onChange={(e) => navigate("owner", e.target.value)}
         >
@@ -183,7 +183,7 @@ export function InventoryFilterBar({
 
         {/* نوع الصفقة */}
         <select
-          className="legacy-select text-emerald-700"
+          className="legacy-select text-emerald-700 flex-1 min-w-[130px]"
           value={currentDeal}
           onChange={(e) => navigate("deal", e.target.value)}
         >
@@ -197,7 +197,7 @@ export function InventoryFilterBar({
 
         {/* حالة السيارة */}
         <select
-          className="legacy-select text-sky-700"
+          className="legacy-select text-sky-700 flex-1 min-w-[130px]"
           value={currentStatus}
           onChange={(e) => navigate("status", e.target.value)}
         >
@@ -211,7 +211,7 @@ export function InventoryFilterBar({
 
         {/* ناقل الحركة (القير) */}
         <select
-          className="legacy-select text-slate-700"
+          className="legacy-select text-slate-700 flex-1 min-w-[130px]"
           value={currentGearbox}
           onChange={(e) => navigate("gearbox", e.target.value)}
           disabled={gearboxOptions.length === 0}
@@ -226,7 +226,7 @@ export function InventoryFilterBar({
 
         {/* نوع الوقود */}
         <select
-          className="legacy-select text-slate-700"
+          className="legacy-select text-slate-700 flex-1 min-w-[130px]"
           value={currentFuel}
           onChange={(e) => navigate("fuel", e.target.value)}
           disabled={fuelTypes.length === 0}
