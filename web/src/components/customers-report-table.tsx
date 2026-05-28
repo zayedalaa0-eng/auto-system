@@ -120,9 +120,12 @@ export function CustomersReportTable({
                     {hasSpecialRequest ? (
                       <div className="mt-1 text-xs font-semibold text-rose-600">غير متوفرة بالمعرض</div>
                     ) : null}
-                    {customer.sale_offer_car ? (
-                      <div className="mt-1 text-xs font-semibold text-amber-600">عرض سيارة للبيع</div>
-                    ) : null}
+                    {(() => {
+                      const badge = tradeInStatusBadge(customer.trade_in_status, customer.operation_type);
+                      return badge ? (
+                        <div className={`mt-1 text-xs font-semibold ${badge.cls}`}>{badge.label}</div>
+                      ) : null;
+                    })()}
                   </td>
 
                   {/* الحالة وموعد المتابعة */}
@@ -130,12 +133,6 @@ export function CustomersReportTable({
                     <StatusPill value={customer.status} />
                     {(() => {
                       const badge = inventoryAvailabilityBadge(customer.inventory_availability);
-                      return badge ? (
-                        <div className={`mt-1 text-xs font-semibold ${badge.cls}`}>{badge.label}</div>
-                      ) : null;
-                    })()}
-                    {(() => {
-                      const badge = tradeInStatusBadge(customer.trade_in_status, customer.operation_type);
                       return badge ? (
                         <div className={`mt-1 text-xs font-semibold ${badge.cls}`}>{badge.label}</div>
                       ) : null;
