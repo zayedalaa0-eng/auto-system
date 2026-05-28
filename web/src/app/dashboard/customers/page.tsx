@@ -1,80 +1,103 @@
-import Link from "next/link";
-import { List, RefreshCcw } from "lucide-react";
+import { List } from "lucide-react";
 
+import { getRoleCapabilities } from "@/lib/roles";
+import { createClient } from "@/lib/supabase/server";
 import { CustomerForm } from "@/components/customer-form";
 import { CustomerModalShell } from "@/components/customer-modal-shell";
 import { CustomerProfileContent } from "@/components/customer-profile-content";
+import { ReportSmartFilters } from "@/components/report-smart-filters";
 import { CustomersReportTable } from "@/components/customers-report-table";
-import { filterCustomersForReport } from "@/lib/customer-report";
+import {
+  buildCustomerNameOptions,
+  buildStatusOptions,
+  buildUserOptions,
+  filterCustomersForReport,
+} from "@/lib/customer-report";
 import { getCustomerById, getCustomerFormOptions, getCustomersDirectory } from "@/lib/data";
 
 export default async function CustomersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ customer?: string; mode?: string; scope?: string; q?: string; focus?: string }>;
+  searchParams: Promise<{
+    customer?: string;
+    mode?: string;
+    scope?: string;
+    q?: string;
+    customer_name?: string;
+    focus?: string;
+    lifecycle?: string;
+    status?: string;
+    period?: string;
+    overdue?: string;
+  }>;
 }) {
-  const { customer: customerId, mode, scope, q, focus } = await searchParams;
+  const { customer: customerId, mode, scope, q, customer_name, focus, lifecycle, status, period, overdue } = await searchParams;
+
+  const supabase = await createClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  const { data: roleRow } = session
+    ? await supabase.from("app_users").select("role").eq("auth_user_id", session.user.id).maybeSingle()
+    : { data: null };
+  const capabilities = getRoleCapabilities(roleRow?.role);
+  const isManager = capabilities.isManager;
+
   const [customers, selectedCustomer, options] = await Promise.all([
-    getCustomersDirectory(),
+    getCustomersDirectory(120, { onlyAssignedToCurrentUser: true }),
     customerId ? getCustomerById(customerId) : Promise.resolve(null),
     customerId ? getCustomerFormOptions() : Promise.resolve(null),
   ]);
 
   const isFollowupScope = scope === "followups";
   const query = (q ?? "").trim();
-  const filteredCustomers = isFollowupScope
-    ? filterCustomersForReport(
-        customers.filter((customer) => Boolean(customer.next_follow_up_at)),
-        query,
-      )
-    : filterCustomersForReport(customers, query);
+  const isOverdue = overdue === "1";
+
+  const baseList = filterCustomersForReport(customers, {
+    q: query,
+    customer_name,
+    lifecycle: (lifecycle as "all" | "active" | "closed" | undefined),
+    period,
+    overdue: isOverdue,
+    scope: isFollowupScope ? "followups" : undefined,
+  });
+  const statusOptions = buildStatusOptions(baseList);
+  const userOptions = buildUserOptions(customers);
+  const customerNameOptions = buildCustomerNameOptions(customers);
+
+  const filteredCustomers = filterCustomersForReport(customers, {
+    q: query,
+    customer_name,
+    lifecycle: (lifecycle as "all" | "active" | "closed" | undefined),
+    status,
+    period,
+    overdue: isOverdue,
+    scope: isFollowupScope ? "followups" : undefined,
+  });
 
   const scopedQuery = isFollowupScope ? "&scope=followups" : "";
 
   return (
     <div className="legacy-grid gap-6">
-      <div className="legacy-card">
-        <div className="grid gap-3 md:grid-cols-[1fr_1.1fr_0.8fr_0.5fr] md:items-center">
-          <div className="flex items-center justify-end gap-2 text-2xl font-bold text-sky-700">
-            <List className="h-5 w-5" />
-            {isFollowupScope ? `عملاء بحاجة لتواصل (${filteredCustomers.length})` : "تقرير عملائي"}
-          </div>
-          <form method="get">
-            {isFollowupScope ? <input type="hidden" name="scope" value="followups" /> : null}
-            <input
-              name="q"
-              defaultValue={q ?? ""}
-              className="legacy-input"
-              placeholder={isFollowupScope ? "بحث في العملاء بانتظار التواصل..." : "بحث في عملائي..."}
-            />
-          </form>
-          <select className="legacy-select" defaultValue={isFollowupScope ? "followups" : "all"}>
-            <option value="all">{isFollowupScope ? "بانتظار التواصل" : "كل الأوقات"}</option>
-            <option value="today">تواصل اليوم</option>
-            <option value="2days">آخر يومين</option>
-            <option value="week">آخر أسبوع</option>
-            <option value="month">آخر شهر</option>
-            <option value="agenda">مهام اليوم (الأجندة)</option>
-          </select>
-          {isFollowupScope ? (
-            <Link href="/dashboard/customers" className="legacy-btn legacy-btn-dark">
-              <RefreshCcw className="h-4 w-4" />
-              التقرير الكامل
-            </Link>
-          ) : (
-            <button className="legacy-btn legacy-btn-dark">
-              <RefreshCcw className="h-4 w-4" />
-              تحديث
-            </button>
-          )}
+      <div className="legacy-card space-y-3">
+        <div className="flex items-center gap-2 text-xl font-bold text-sky-700 whitespace-nowrap">
+          <List className="h-5 w-5 flex-shrink-0" />
+          {isFollowupScope
+            ? `عملاء بحاجة لتواصل (${filteredCustomers.length})`
+            : `تقرير عملائي (${filteredCustomers.length})`}
         </div>
+
+        <ReportSmartFilters
+          statuses={statusOptions}
+          users={userOptions}
+          customerNames={customerNameOptions}
+          queryPlaceholder={isFollowupScope ? "ابحث في العملاء بحاجة لتواصل..." : "ابحث في تقرير عملائي..."}
+        />
       </div>
 
       <CustomersReportTable
         customers={filteredCustomers}
         basePath="/dashboard/customers"
         query={q ?? ""}
-        emptyMessage={isFollowupScope ? "لا يوجد عملاء بانتظار التواصل ضمن هذا التقرير." : "لا توجد بيانات عملاء بعد."}
+        emptyMessage={isFollowupScope ? "لا يوجد عملاء بحاجة لتواصل ضمن هذا التقرير." : "لا توجد نتائج مطابقة للفلاتر الحالية."}
       />
 
       {selectedCustomer && options ? (
@@ -89,6 +112,7 @@ export default async function CustomersPage({
             <CustomerProfileContent
               customer={selectedCustomer}
               options={options}
+              isManager={isManager}
               initialOpenTradeEditor={focus === "trade"}
               compactTradeOnly={focus === "trade"}
               returnPath={`/dashboard/customers?customer=${selectedCustomer.id}&mode=view${scopedQuery}`}

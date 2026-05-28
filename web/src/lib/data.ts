@@ -1,7 +1,18 @@
 ﻿import { hasSupabaseEnv } from "@/lib/env";
 import { getRoleCapabilities, type RoleCapabilities } from "@/lib/roles";
+import {
+  ALL_CUSTOMER_STATUSES,
+  isClosedStatus,
+  STATUSES_BUYER,
+  STATUSES_BUYER_TRADEIN,
+  STATUSES_SELL_ON_BEHALF,
+  STATUS_BY_TYPE,
+} from "@/lib/statuses";
 import { createAdminClient, hasSupabaseServiceRoleEnv } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+
+// إعادة تصدير لـ backward compatibility
+export { isClosedStatus, STATUSES_BUYER, STATUSES_BUYER_TRADEIN, STATUSES_SELL_ON_BEHALF };
 
 export type DashboardProfile = {
   id: string;
@@ -39,6 +50,12 @@ export type CustomerItem = {
   created_at?: string | null;
   updated_at?: string | null;
   visit_count?: number;
+  /** معرّف سيارة المخزون المرتبطة (للمشترين عند حجز/بيع) */
+  selected_inventory_id?: string | null;
+  /** حالة سيارة العميل في المخزون (محجوزة / مباعة / متوفرة / مسحوبة) */
+  inventory_availability?: string | null;
+  /** حالة سيارة العميل (trade_in) — للعرض في عمود الحالة */
+  trade_in_status?: string | null;
 };
 
 export type InventoryItem = {
@@ -52,10 +69,22 @@ export type InventoryItem = {
   price: number | null;
   production_year: number | null;
   color: string | null;
+  gearbox?: string | null;
+  fuel_type?: string | null;
   mileage?: number | null;
   specs?: string | null;
   inspection?: string | null;
+  photo_urls?: string[];
+  source_customer_id?: string | null;
   branch_name: string | null;
+};
+
+export type InventoryCarAttachment = {
+  url: string;
+  fileName: string | null;
+  mimeType: string | null;
+  category: string | null;
+  isImage: boolean;
 };
 
 export type StatusBreakdownItem = {
@@ -108,6 +137,7 @@ export type NotificationsCenterItem = {
   message: string;
   status: string;
   notification_type: string | null;
+  payload?: Record<string, unknown> | null;
   recipient_label: string | null;
   created_at: string;
 };
@@ -142,18 +172,30 @@ export type AgendaTaskItem = {
   recipient_label: string | null;
 };
 
+export type IncompleteCustomerItem = {
+  id: string;
+  full_name: string;
+  phone: string;
+  branch_name: string | null;
+  staff_name: string | null;
+  created_at: string;
+};
+
 export type AgendaOverview = {
   dueToday: number;
   overdue: number;
   reminders: AgendaTaskItem[];
   followUps: AgendaTaskItem[];
   notifications: AgendaTaskItem[];
+  incompleteCustomers: IncompleteCustomerItem[];
 };
 
 export type OperationalAlertItem = {
   customer_id: string;
   customer_name: string;
+  branch_id: string | null;
   branch_name: string | null;
+  staff_id: string | null;
   staff_name: string | null;
   customer_status: string;
   requested_car: string | null;
@@ -167,6 +209,8 @@ export type OperationalAlertItem = {
 export type BranchOption = {
   id: string;
   name: string;
+  whatsapp_number?: string | null;
+  whatsapp_prefix?: string | null;
 };
 
 export type StaffOption = {
@@ -191,6 +235,7 @@ export type CustomerAttachmentItem = {
   file_category: string | null;
   public_url: string | null;
   storage_path?: string | null;
+  mime_type?: string | null;
   created_at: string;
 };
 
@@ -220,6 +265,11 @@ export type CustomerDetail = CustomerItem & {
   whatsapp_prefix: string | null;
   attachment_notes: string | null;
   metadata: Record<string, unknown>;
+  cycle_number: number;
+  parent_customer_id: string | null;
+  parent_cycle: { id: string; status: string; cycle_number: number } | null;
+  ancestor_cycles: Array<{ id: string; status: string; cycle_number: number; logs: CustomerLogItem[] }>;
+  child_cycles: Array<{ id: string; status: string; cycle_number: number; created_at: string }>;
   logs: CustomerLogItem[];
   reminders: ReminderItem[];
   attachments: CustomerAttachmentItem[];
@@ -234,38 +284,32 @@ export type CustomerFormOptions = {
     label: string;
   }>;
   statuses: string[];
+  statusesByType: {
+    buyer: string[];
+    buyer_tradein_pending: string[];
+    sell_on_behalf: string[];
+  };
   sources: string[];
   profile: DashboardProfile | null;
   capabilities: RoleCapabilities;
 };
 
-const CUSTOMER_STATUSES = [
-  "\u062c\u062f\u064a\u062f",
-  "\u0642\u064a\u062f \u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0629",
-  "\u0627\u0633\u062a\u0628\u062f\u0627\u0644 (\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u062a\u0642\u064a\u064a\u0645)",
-  "\u0627\u0633\u062a\u0628\u062f\u0627\u0644 (\u062a\u0645\u062a \u0639\u0645\u0644\u064a\u0629 \u0627\u0644\u062a\u0642\u064a\u064a\u0645)",
-  "\u062d\u062c\u0632",
-  "\u0634\u0631\u0627\u0621 \u0645\u0646 \u0642\u0628\u0644 \u0627\u0644\u0645\u0639\u0631\u0636",
-  "\u062a\u0645 \u0627\u0644\u0628\u064a\u0639",
-  "\u062a\u0645\u062a \u0635\u0641\u0642\u0629 \u0627\u0633\u062a\u0628\u062f\u0627\u0644",
-  "\u0631\u0641\u0636 \u0645\u0646 \u0642\u0628\u0644 \u0627\u0644\u0639\u0645\u064a\u0644",
-  "\u0631\u0641\u0636 \u0645\u0646 \u0642\u0628\u0644 \u0627\u0644\u0645\u0639\u0631\u0636",
-  "\u0627\u0644\u0639\u0645\u064a\u0644 \u063a\u064a\u0631 \u0641\u0639\u0627\u0644",
-];
+// قوائم الحالات مستوردة من statuses.ts
+const CUSTOMER_STATUSES = ALL_CUSTOMER_STATUSES;
 
 const CUSTOMER_SOURCES = [
-  "\u0627\u0644\u0645\u0639\u0631\u0636",
-  "\u0648\u0627\u062a\u0633\u0627\u0628",
-  "\u062a\u064a\u0644\u064a\u062c\u0631\u0627\u0645",
-  "\u0625\u0639\u0644\u0627\u0646",
-  "\u062a\u0648\u0635\u064a\u0629",
-  "\u0641\u064a\u0633\u0628\u0648\u0643",
+  "المعرض",
+  "واتساب",
+  "تيليغرام",
+  "إعلان",
+  "توصية",
+  "فيسبوك",
 ];
 
 function isVirtualBranch(name: string | null | undefined) {
   const value = (name ?? "").trim();
   if (!value) return false;
-  return value === "\u0627\u0644\u0634\u0631\u0643\u0629" || value === "\u0627\u0644\u0645\u062f\u064a\u0631";
+  return value === "الشركة" || value === "المدير";
 }
 
 function getRelationshipValue<T extends Record<string, unknown>>(
@@ -291,7 +335,7 @@ function getRelationshipFullName(
 }
 
 function incrementCount(map: Map<string, number>, key: string | null | undefined) {
-  const normalized = (key ?? "").trim() || "\u063a\u064a\u0631 \u0645\u0635\u0646\u0641";
+  const normalized = (key ?? "").trim() || "غير مصنف";
   map.set(normalized, (map.get(normalized) ?? 0) + 1);
 }
 
@@ -304,10 +348,10 @@ function toSortedBreakdown(map: Map<string, number>) {
 
 function buildFallbackMetrics(): DashboardMetric[] {
   return [
-    { label: "\u0627\u0644\u0639\u0645\u0644\u0627\u0621", value: 0, hint: "\u0633\u062a\u0638\u0647\u0631 \u0628\u0639\u062f \u0627\u0643\u062a\u0645\u0627\u0644 \u0627\u0644\u0631\u0628\u0637 \u0645\u0639 Supabase", tone: "sky" },
-    { label: "\u0627\u0644\u0645\u062e\u0632\u0648\u0646", value: 0, hint: "\u0627\u0644\u0647\u064a\u0643\u0644 \u062c\u0627\u0647\u0632 \u0648\u064a\u062d\u062a\u0627\u062c \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u062a\u0634\u063a\u064a\u0644", tone: "emerald" },
-    { label: "\u0627\u0644\u0645\u0647\u0627\u0645", value: 0, hint: "\u0633\u062a\u0623\u062a\u064a \u0645\u0646 reminders \u0648\u0645\u0631\u0643\u0632 \u0627\u0644\u064a\u0648\u0645", tone: "amber" },
-    { label: "\u063a\u064a\u0631 \u0627\u0644\u0645\u0642\u0631\u0648\u0621", value: 0, hint: "\u0645\u0631\u062a\u0628\u0637\u0629 \u0645\u0628\u0627\u0634\u0631\u0629 \u0628\u062c\u062f\u0648\u0644 notifications", tone: "rose" },
+    { label: "العملاء", value: 0, hint: "ستظهر بعد اكتمال الربط مع Supabase", tone: "sky" },
+    { label: "المخزون", value: 0, hint: "الهيكل جاهز ويحتاج بيانات التشغيل", tone: "emerald" },
+    { label: "المهام", value: 0, hint: "ستأتي من reminders ومركز اليوم", tone: "amber" },
+    { label: "غير المقروءة", value: 0, hint: "مرتبطة مباشرة بجدول notifications", tone: "rose" },
   ];
 }
 
@@ -327,10 +371,18 @@ function mapCustomerRow(item: Record<string, unknown>): CustomerItem {
     id: String(item.id),
     full_name: String(item.full_name ?? ""),
     phone: String(item.phone ?? ""),
-    operation_type: typeof metadata.operation_type === "string" ? metadata.operation_type : null,
+    operation_type: typeof item.operation_type === "string"
+      ? item.operation_type
+      : typeof metadata.operation_type_code === "string"
+        ? metadata.operation_type_code
+        : typeof metadata.operation_type === "string"
+          ? metadata.operation_type
+          : null,
     requested_car: (item.requested_car as string | null) ?? null,
     requested_car_report: (item.requested_car as string | null) ?? null,
     sale_offer_car: null,
+    selected_inventory_id: typeof metadata.selected_inventory_id === "string" ? metadata.selected_inventory_id : null,
+    inventory_availability: null,
     payment_plan: (item.payment_plan as string | null) ?? null,
     status: String(item.status ?? ""),
     next_follow_up_at: (item.next_follow_up_at as string | null) ?? null,
@@ -361,36 +413,188 @@ async function enrichCustomersWithSaleOfferInReport(
 ) {
   if (!baseCustomers.length) return baseCustomers;
   const ids = baseCustomers.map((c) => c.id);
+
+  // خريطة نوع العملية لكل عميل (للتمييز بين sell_on_behalf والمشترين)
+  const opTypeMap = new Map<string, string | null>();
+  for (const c of baseCustomers) opTypeMap.set(c.id, c.operation_type ?? null);
+
+  // ── جلب آخر trade_in لكل عميل (بدون فلتر is_active لمنع اختفاء السيارة) ──
   const { data: tradeRows } = await supabase
     .from("trade_ins")
     .select("customer_id, model, status, is_active, updated_at")
     .in("customer_id", ids)
-    .eq("is_active", true)
     .order("updated_at", { ascending: false });
 
-  const latestOfferByCustomer = new Map<string, string>();
+  // build map: customerId → { model, isOffer, status }
+  const latestTradeByCustomer = new Map<string, { model: string; isOffer: boolean; status: string | null }>();
   for (const row of tradeRows ?? []) {
-    const customerId = String(row.customer_id ?? "");
-    if (!customerId || latestOfferByCustomer.has(customerId)) continue;
-    if (!isTradeOfferForReport(row.status)) continue;
+    const cid = String(row.customer_id ?? "");
+    const opType = opTypeMap.get(cid);
     const model = String(row.model ?? "").trim();
-    if (!model) continue;
-    latestOfferByCustomer.set(customerId, model);
+    if (!model || latestTradeByCustomer.has(cid)) continue;
+
+    if (opType === "sell_on_behalf") {
+      // بيع بالوكالة: نُظهر اسم السيارة دائماً — والشارة فقط عند العرض النشط
+      latestTradeByCustomer.set(cid, {
+        model,
+        isOffer: Boolean(row.is_active) && isTradeOfferForReport(row.status),
+        status: row.status ?? null,
+      });
+    } else {
+      // مشتري / استبدال: نُظهر فقط إذا كانت سيارة نشطة ومعروضة
+      if (Boolean(row.is_active) && isTradeOfferForReport(row.status)) {
+        latestTradeByCustomer.set(cid, { model, isOffer: true, status: row.status ?? null });
+      }
+    }
+  }
+
+  // ── جلب حالة المخزون لعملاء sell_on_behalf (batch بـ source_customer_id) ──
+  const sellOnBehalfIds = baseCustomers
+    .filter((c) => c.operation_type === "sell_on_behalf")
+    .map((c) => c.id);
+
+  // ── جلب حالة المخزون للمشترين (batch بـ selected_inventory_id) ────────────
+  const selectedInventoryIds = baseCustomers
+    .map((c) => c.selected_inventory_id)
+    .filter((id): id is string => Boolean(id));
+
+  // ── المشترون غير المرتبطين بسيارة محددة (للمطابقة التلقائية بالاسم) ────────
+  const unlinkedBuyers = baseCustomers.filter(
+    (c) => c.operation_type !== "sell_on_behalf" && !c.selected_inventory_id,
+  );
+
+  const [invBySourceResult, invByIdResult, allInventoryResult] = await Promise.all([
+    sellOnBehalfIds.length > 0
+      ? supabase
+          .from("inventory")
+          .select("source_customer_id, availability_status")
+          .in("source_customer_id", sellOnBehalfIds)
+          .order("updated_at", { ascending: false })
+      : Promise.resolve({ data: [] as Array<{ source_customer_id: string | null; availability_status: string }> }),
+    selectedInventoryIds.length > 0
+      ? supabase
+          .from("inventory")
+          .select("id, availability_status")
+          .in("id", selectedInventoryIds)
+      : Promise.resolve({ data: [] as Array<{ id: string; availability_status: string }> }),
+    unlinkedBuyers.length > 0
+      ? (() => {
+          // نجمع branch_ids الفريدة للمشترين غير المرتبطين لتضييق نطاق البحث
+          const buyerBranchIds = [...new Set(
+            unlinkedBuyers.map((c) => c.branch_id).filter((id): id is string => Boolean(id)),
+          )];
+          const q = supabase
+            .from("inventory")
+            .select("model, availability_status, branch_id");
+          return buyerBranchIds.length > 0
+            ? q.in("branch_id", buyerBranchIds)
+            : q; // fallback إذا لم تكن branch_id متاحة
+        })()
+      : Promise.resolve({ data: [] as Array<{ model: string | null; availability_status: string | null; branch_id: string | null }> }),
+  ]);
+
+  // أحدث سجل فقط لكل عميل (الاستعلام مرتب desc، نأخذ الأول)
+  const invBySource = new Map<string, string>();
+  for (const row of (invBySourceResult.data ?? [])) {
+    const cid = String(row.source_customer_id ?? "");
+    if (cid && !invBySource.has(cid)) invBySource.set(cid, String(row.availability_status ?? ""));
+  }
+  const invById = new Map<string, string>();
+  for (const row of (invByIdResult.data ?? [])) {
+    invById.set(String(row.id), String(row.availability_status ?? ""));
+  }
+
+  // ── بناء فهرس المخزون (branchId:normModel → أعلى أولوية للحالة) ────────────
+  // أولوية الحالات: متوفرة=3، محجوزة=2، مباعة=1، غيرها=0
+  function statusPriority(s: string) {
+    if (s.includes("متوفرة")) return 3;
+    if (s.includes("محجوزة")) return 2;
+    if (s.includes("مباعة"))  return 1;
+    return 0;
+  }
+  // خريطة: "branchId::normModel" → { status, priority } (مُقيَّدة بالفرع لدقة أكبر)
+  const invModelIndex = new Map<string, { status: string; priority: number }>();
+  for (const row of (allInventoryResult.data ?? [])) {
+    const m = (row.model ?? "").trim();
+    const s = (row.availability_status ?? "").trim();
+    const b = (("branch_id" in row ? (row as { branch_id?: string | null }).branch_id : null) ?? "");
+    if (!m) continue;
+    const norm = m.toLowerCase().replace(/\s+/g, " ");
+    const key = `${b}::${norm}`;
+    const p = statusPriority(s);
+    const existing = invModelIndex.get(key);
+    if (!existing || p > existing.priority) {
+      invModelIndex.set(key, { status: s, priority: p });
+    }
+  }
+
+  // ── ربط تلقائي بالاسم لكل مشترٍ غير مرتبط ───────────────────────────────
+  function cleanRequestedCarName(raw: string): string {
+    return raw
+      .split("|")[0]
+      .replace(/\(?\s*طلب\s+خاص\s*\)?/gi, "")
+      .replace(/\s*-\s*موديل\s*:?\s*\S+/gi, "")
+      .replace(/\s*-\s*model\s*:?\s*\S+/gi, "")
+      .replace(/\s*-\s*شاصي\s*:\s*\S+/gi, "")
+      .replace(/\s*-\s*chassis\s*:\s*\S+/gi, "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+  }
+
+  const invByNameMatch = new Map<string, string>(); // customerId → availability_status
+  for (const c of unlinkedBuyers) {
+    const normReq = cleanRequestedCarName(c.requested_car ?? "");
+    if (!normReq || normReq.length < 2) continue;
+
+    const branchPrefix = (c.branch_id ?? "") + "::";
+    let bestStatus: string | null = null;
+    let bestPriority = -1;
+
+    for (const [key, { status, priority }] of invModelIndex) {
+      // فلترة بالفرع أولاً: المفتاح يبدأ بـ "branchId::"
+      if (!key.startsWith(branchPrefix)) continue;
+      const normModel = key.slice(branchPrefix.length);
+      // مطابقة جزئية: اسم السيارة المطلوبة يتضمن اسم المخزون أو العكس
+      if (!normModel.includes(normReq) && !normReq.includes(normModel)) continue;
+      if (priority > bestPriority) {
+        bestPriority = priority;
+        bestStatus = status;
+      }
+    }
+
+    if (bestStatus !== null) {
+      invByNameMatch.set(c.id, bestStatus);
+    }
   }
 
   return baseCustomers.map((customer) => {
-    const offerModel = latestOfferByCustomer.get(customer.id);
-    if (!offerModel) return customer;
+    const trade = latestTradeByCustomer.get(customer.id);
+    const opType = customer.operation_type;
+
+    // حالة السيارة في المخزون (sell_on_behalf → source، مشتري محدد → id، غيرهم → مطابقة بالاسم)
+    const inventory_availability =
+      opType === "sell_on_behalf"
+        ? (invBySource.get(customer.id) ?? null)
+        : customer.selected_inventory_id
+          ? (invById.get(customer.selected_inventory_id) ?? null)
+          : (invByNameMatch.get(customer.id) ?? null);
+
+    if (!trade) return { ...customer, inventory_availability, trade_in_status: null };
+
     const reportBase = (customer.requested_car ?? "").trim();
     const requested_car_report = reportBase
-      ? reportBase.includes(offerModel)
+      ? reportBase.includes(trade.model)
         ? reportBase
-        : `${reportBase} | ${offerModel}`
-      : offerModel;
+        : `${reportBase} | ${trade.model}`
+      : trade.model;
+
     return {
       ...customer,
       requested_car_report,
-      sale_offer_car: offerModel,
+      sale_offer_car: trade.isOffer ? trade.model : (customer.sale_offer_car ?? null),
+      inventory_availability,
+      trade_in_status: trade.status ?? null,
     };
   });
 }
@@ -499,11 +703,49 @@ export async function getDashboardMetrics(): Promise<DashboardMetric[]> {
   const notificationsCount = "count" in notificationsResult ? notificationsResult.count : 0;
 
   return [
-    { label: "\u0627\u0644\u0639\u0645\u0644\u0627\u0621", value: customersCount ?? 0, hint: "\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0633\u062c\u0644\u0627\u062a \u0627\u0644\u0646\u0634\u0637\u0629 \u062f\u0627\u062e\u0644 \u0642\u0627\u0639\u062f\u0629 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a", tone: "sky" },
-    { label: "\u0627\u0644\u0645\u062e\u0632\u0648\u0646", value: inventoryCount ?? 0, hint: "\u0643\u0644 \u0627\u0644\u0645\u0631\u0643\u0628\u0627\u062a \u0627\u0644\u0645\u0633\u062c\u0644\u0629 \u0639\u0644\u0649 \u0627\u0644\u0648\u064a\u0628 \u0627\u0644\u062c\u062f\u064a\u062f", tone: "emerald" },
-    { label: "\u0627\u0644\u0645\u0647\u0627\u0645 \u0627\u0644\u0645\u0641\u062a\u0648\u062d\u0629", value: remindersCount ?? 0, hint: "\u0627\u0644\u0645\u0647\u0627\u0645 \u0627\u0644\u062a\u064a \u0644\u0645 \u062a\u064f\u063a\u0644\u0642 \u0628\u0639\u062f", tone: "amber" },
-    { label: "\u062a\u0646\u0628\u064a\u0647\u0627\u062a \u063a\u064a\u0631 \u0645\u0642\u0631\u0648\u0621\u0629", value: notificationsCount ?? 0, hint: "\u0627\u0644\u0645\u0631\u0643\u0632 \u0627\u0644\u064a\u0648\u0645\u064a \u064a\u062d\u062a\u0627\u062c \u0645\u0631\u0627\u062c\u0639\u0629", tone: "rose" },
+    { label: "العملاء", value: customersCount ?? 0, hint: "إجمالي السجلات النشطة داخل قاعدة البيانات", tone: "sky" },
+    { label: "المخزون", value: inventoryCount ?? 0, hint: "كل المركبات المسجلة على الويب الجديد", tone: "emerald" },
+    { label: "المهام المفتوحة", value: remindersCount ?? 0, hint: "المهام التي لم تُغلق بعد", tone: "amber" },
+    { label: "تنبيهات غير مقروءة", value: notificationsCount ?? 0, hint: "المركز اليومي يحتاج مراجعة", tone: "rose" },
   ];
+}
+
+export type InventoryFilterContext = {
+  isGeneralManager: boolean;
+  isManager: boolean;
+  branchId: string | null;
+  branchName: string | null;
+  isMuallimBranch: boolean;
+  branches: string[];
+  branchObjects: Array<{ id: string; name: string }>;
+};
+
+export async function getInventoryFilterContext(): Promise<InventoryFilterContext> {
+  const { profile, capabilities } = await getScopedProfile();
+  const supabase = await createClient();
+
+  const [{ data: branchRow }, { data: branchesRows }] = await Promise.all([
+    profile?.branch_id
+      ? supabase.from("branches").select("name").eq("id", profile.branch_id).maybeSingle()
+      : Promise.resolve({ data: null } as { data: { name?: string } | null }),
+    supabase.from("branches").select("id, name").eq("is_active", true).order("name"),
+  ]);
+
+  const branchName = (branchRow?.name ?? null) as string | null;
+  const branchObjects = (branchesRows ?? [])
+    .filter((row) => Boolean(row.name) && !isVirtualBranch(row.name))
+    .map((row) => ({ id: row.id as string, name: (row.name ?? "").trim() }));
+  const branches = branchObjects.map((b) => b.name);
+
+  return {
+    isGeneralManager: capabilities.isGeneralManager,
+    isManager: capabilities.isManager,
+    branchId: profile?.branch_id ?? null,
+    branchName,
+    isMuallimBranch: (branchName ?? "").includes("المعلم"),
+    branches,
+    branchObjects,
+  };
 }
 
 export async function getRecentCustomers(limit = 8): Promise<CustomerItem[]> {
@@ -516,7 +758,7 @@ export async function getRecentCustomers(limit = 8): Promise<CustomerItem[]> {
   const recentCustomersQuery = supabase
     .from("customers")
     .select(
-      "id, full_name, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, metadata, branches(name), app_users(full_name)",
+      "id, full_name, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, operation_type, metadata, branches(name), app_users(full_name)",
     );
   const { data } = await (applyBranchScope(
     recentCustomersQuery,
@@ -530,23 +772,32 @@ export async function getRecentCustomers(limit = 8): Promise<CustomerItem[]> {
   return enrichCustomersWithSaleOfferInReport(baseCustomers, supabase);
 }
 
-export async function getCustomersDirectory(limit = 120): Promise<CustomerItem[]> {
+export async function getCustomersDirectory(
+  limit = 120,
+  options?: { onlyAssignedToCurrentUser?: boolean },
+): Promise<CustomerItem[]> {
   if (!hasSupabaseEnv()) {
     return [];
   }
 
   const supabase = await createClient();
   const { profile, capabilities } = await getScopedProfile();
+  const userId = profile?.id ?? null;
   const customersDirectoryQuery = supabase
     .from("customers")
     .select(
-      "id, full_name, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, metadata, branches(name), app_users(full_name)",
+      "id, full_name, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, operation_type, metadata, branches(name), app_users(full_name)",
     );
-  const { data } = await (applyBranchScope(
+  const branchScoped = applyBranchScope(
     customersDirectoryQuery,
     profile?.branch_id,
     capabilities.isGeneralManager,
-  ) as typeof customersDirectoryQuery)
+  ) as typeof customersDirectoryQuery;
+  const fullyScoped =
+    options?.onlyAssignedToCurrentUser && userId
+      ? (branchScoped.eq("assigned_user_id", userId) as typeof branchScoped)
+      : branchScoped;
+  const { data } = await fullyScoped
     .order("updated_at", { ascending: false })
     .limit(limit);
 
@@ -565,7 +816,7 @@ export async function getCustomersSearchResults(query: string, limit = 120): Pro
   const customersSearchQuery = supabase
     .from("customers")
     .select(
-      "id, full_name, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, metadata, branches(name), app_users(full_name)",
+      "id, full_name, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, operation_type, metadata, branches(name), app_users(full_name)",
     );
 
   const scoped = applyBranchScope(
@@ -574,7 +825,8 @@ export async function getCustomersSearchResults(query: string, limit = 120): Pro
     capabilities.isGeneralManager,
   ) as typeof customersSearchQuery;
 
-  const likeValue = `%${normalized.replace(/[%_]/g, " ")}%`;
+  // نحذف أحرف wildcards الخاصة بـ SQL لمنع تحريف نتائج البحث
+  const likeValue = `%${normalized.replace(/[%_\\]/g, "")}%`;
   const { data } = await scoped
     .or(
       [
@@ -601,7 +853,7 @@ export async function getRecentInventory(limit = 8): Promise<InventoryItem[]> {
   const { profile, capabilities } = await getScopedProfile();
   const recentInventoryQuery = supabase
     .from("inventory")
-    .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, mileage, specs, inspection, branches(name)");
+    .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, gearbox, fuel_type, mileage, specs, inspection, photo_urls, source_customer_id, branches(name)");
   const { data } = await (applyBranchScope(
     recentInventoryQuery,
     profile?.branch_id,
@@ -621,11 +873,142 @@ export async function getRecentInventory(limit = 8): Promise<InventoryItem[]> {
     price: item.price,
     production_year: item.production_year,
     color: item.color,
+    gearbox: item.gearbox ?? null,
+    fuel_type: item.fuel_type ?? null,
     mileage: item.mileage ?? null,
     specs: item.specs ?? null,
     inspection: item.inspection ?? null,
+    photo_urls: Array.isArray(item.photo_urls) ? (item.photo_urls as string[]) : [],
+    source_customer_id: (item as { source_customer_id?: string | null }).source_customer_id ?? null,
     branch_name: getRelationshipName(item.branches),
   }));
+}
+
+/**
+ * يجلب صور السيارة من مصدرين:
+ * 1. inventory.photo_urls (رفع مباشر مستقبلاً)
+ * 2. customer_attachments حيث file_category = 'trade_photo' عبر source_customer_id
+ */
+export async function getInventoryCarPhotos(
+  inventoryId: string,
+  sourceCustomerId: string | null | undefined,
+  existingPhotoUrls: string[],
+): Promise<string[]> {
+  const attachments = await getInventoryCarAttachments(inventoryId, sourceCustomerId, existingPhotoUrls);
+  return attachments.filter((item) => item.isImage).map((item) => item.url);
+}
+
+export async function getInventoryCarAttachments(
+  inventoryId: string,
+  sourceCustomerId: string | null | undefined,
+  existingPhotoUrls: string[],
+): Promise<InventoryCarAttachment[]> {
+  if (!hasSupabaseEnv()) {
+    return existingPhotoUrls.filter(Boolean).map((url) => ({
+      url,
+      fileName: null,
+      mimeType: null,
+      category: "inventory_photo",
+      isImage: true,
+    }));
+  }
+
+  const combined: InventoryCarAttachment[] = [...existingPhotoUrls.filter(Boolean).map((url) => ({
+    url,
+    fileName: null,
+    mimeType: null,
+    category: "inventory_photo",
+    isImage: true,
+  }))];
+  const seen = new Set(combined.map((item) => item.url));
+
+  const isLikelyImage = (fileName: string | null | undefined, mimeType: string | null | undefined) => {
+    const mime = (mimeType ?? "").toLowerCase().trim();
+    if (mime.startsWith("image/")) return true;
+    const name = (fileName ?? "").toLowerCase().trim();
+    return [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".svg", ".avif", ".heic", ".heif", ".jfif"].some((ext) => name.endsWith(ext));
+  };
+
+  if (sourceCustomerId) {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("customer_attachments")
+      .select("public_url, storage_path, file_name, mime_type, file_category")
+      .eq("customer_id", sourceCustomerId)
+      .in("file_category", ["trade_photo", "trade_files_photos", "trade_inspection", "trade_license", "trade_insurance"])
+      .order("created_at", { ascending: true });
+
+    if (data) {
+      for (const row of data as Array<{
+        public_url: string | null;
+        storage_path: string | null;
+        file_name: string | null;
+        mime_type: string | null;
+        file_category: string | null;
+      }>) {
+        let resolvedUrl = row.public_url;
+        if (!resolvedUrl && row.storage_path) {
+          const signed = await supabase.storage
+            .from("customer-attachments")
+            .createSignedUrl(row.storage_path, 60 * 60);
+          if (!signed.error) {
+            resolvedUrl = signed.data.signedUrl;
+          }
+        }
+
+        if (!resolvedUrl || seen.has(resolvedUrl)) continue;
+        seen.add(resolvedUrl);
+        combined.push({
+          url: resolvedUrl,
+          fileName: row.file_name,
+          mimeType: row.mime_type,
+          category: row.file_category,
+          isImage: isLikelyImage(row.file_name, row.mime_type),
+        });
+      }
+    }
+  }
+
+  if (!sourceCustomerId) {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("customer_attachments")
+      .select("public_url, storage_path, file_name, mime_type, file_category, metadata")
+      .contains("metadata", { inventory_id: inventoryId })
+      .order("created_at", { ascending: true });
+
+    if (data) {
+      for (const row of data as Array<{
+        public_url: string | null;
+        storage_path: string | null;
+        file_name: string | null;
+        mime_type: string | null;
+        file_category: string | null;
+      }>) {
+        let resolvedUrl = row.public_url;
+        if (!resolvedUrl && row.storage_path) {
+          const signed = await supabase.storage
+            .from("customer-attachments")
+            .createSignedUrl(row.storage_path, 60 * 60);
+          if (!signed.error) {
+            resolvedUrl = signed.data.signedUrl;
+          }
+        }
+
+        if (!resolvedUrl || seen.has(resolvedUrl)) continue;
+        seen.add(resolvedUrl);
+        combined.push({
+          url: resolvedUrl,
+          fileName: row.file_name,
+          mimeType: row.mime_type,
+          category: row.file_category,
+          isImage: isLikelyImage(row.file_name, row.mime_type),
+        });
+      }
+    }
+  }
+
+  return combined;
 }
 
 export async function getInventoryDirectory(
@@ -640,7 +1023,7 @@ export async function getInventoryDirectory(
   const { profile, capabilities } = await getScopedProfile();
   const inventoryDirectoryQuery = supabase
     .from("inventory")
-    .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, mileage, specs, inspection, branches(name)");
+    .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, gearbox, fuel_type, mileage, specs, inspection, photo_urls, source_customer_id, branches(name)");
   const { data } = await (applyBranchScope(
     inventoryDirectoryQuery,
     profile?.branch_id,
@@ -660,14 +1043,36 @@ export async function getInventoryDirectory(
     price: item.price,
     production_year: item.production_year,
     color: item.color,
+    gearbox: item.gearbox ?? null,
+    fuel_type: item.fuel_type ?? null,
     mileage: item.mileage ?? null,
     specs: item.specs ?? null,
     inspection: item.inspection ?? null,
+    photo_urls: Array.isArray(item.photo_urls) ? (item.photo_urls as string[]) : [],
+    source_customer_id: (item as { source_customer_id?: string | null }).source_customer_id ?? null,
     branch_name: getRelationshipName(item.branches),
   }));
 
+  const normalizeStatus = (value: string | null | undefined) => (value ?? "").trim().toLowerCase();
+  const isAvailableStatus = (value: string | null | undefined) => {
+    const status = normalizeStatus(value);
+    return (
+      !status.includes("مباع") &&
+      !status.includes("مباعة") &&
+      !status.includes("محجوز") &&
+      !status.includes("مسحوب") &&
+      status !== "sold" &&
+      status !== "reserved" &&
+      status !== "withdrawn"
+    );
+  };
+  const isCrossDealType = (value: string | null | undefined) => {
+    const deal = (value ?? "").trim();
+    return deal.includes("استبدال") || deal.includes("حيازة") || deal.includes("برسم البيع");
+  };
+
   const includeCrossBranchForMuallim = options?.includeCrossBranchForMuallim === true;
-  if (!includeCrossBranchForMuallim || capabilities.isGeneralManager || !profile?.branch_id) {
+  if (!includeCrossBranchForMuallim || !profile?.branch_id) {
     return scopedItems;
   }
 
@@ -677,14 +1082,28 @@ export async function getInventoryDirectory(
     .eq("id", profile.branch_id)
     .maybeSingle();
   const branchName = (branchRow?.name ?? "").trim();
-  const isMuallimBranch = branchName.includes("\u0627\u0644\u0645\u0639\u0644\u0645");
+  const isMuallimBranch = branchName.includes("المعلم");
   if (!isMuallimBranch) {
     return scopedItems;
   }
 
+  // Special handling for Muallim when the viewer is a general manager:
+  // items from other branches should be shown as "برسم البيع" in حالة/الصفقة.
+  if (capabilities.isGeneralManager) {
+    return scopedItems
+      .filter((item) => isAvailableStatus(item.availability_status))
+      .map((item) => {
+        const fromOtherBranch = (item.branch_name ?? "").trim() !== branchName;
+        if (fromOtherBranch && isCrossDealType(item.deal_type)) {
+          return { ...item, deal_type: "برسم البيع" };
+        }
+        return item;
+      });
+  }
+
   const externalInventoryQuery = supabase
     .from("inventory")
-    .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, mileage, specs, inspection, branches(name), branch_id")
+    .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, gearbox, fuel_type, mileage, specs, inspection, photo_urls, source_customer_id, branches(name), branch_id")
     .neq("branch_id", profile.branch_id)
     .order("updated_at", { ascending: false })
     .limit(limit);
@@ -700,9 +1119,13 @@ export async function getInventoryDirectory(
     price: number | null;
     production_year: number | null;
     color: string | null;
+    gearbox: string | null;
+    fuel_type: string | null;
     mileage: number | null;
     specs: string | null;
     inspection: string | null;
+    photo_urls: string[] | null;
+    source_customer_id: string | null;
     branches: { name?: string } | { name?: string }[] | null;
     branch_id: string | null;
   }> = [];
@@ -711,7 +1134,7 @@ export async function getInventoryDirectory(
     const admin = createAdminClient();
     const { data } = await admin
       .from("inventory")
-      .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, mileage, specs, inspection, branches(name), branch_id")
+      .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, gearbox, fuel_type, mileage, specs, inspection, photo_urls, source_customer_id, branches(name), branch_id")
       .neq("branch_id", profile.branch_id)
       .order("updated_at", { ascending: false })
       .limit(limit);
@@ -723,36 +1146,25 @@ export async function getInventoryDirectory(
 
   const externalItems: InventoryItem[] = (externalRows ?? [])
     .filter((item) => {
-      const deal = (item.deal_type ?? "").trim();
-      const isCrossDeal =
-        deal.includes("\u0627\u0633\u062a\u0628\u062f\u0627\u0644") ||
-        deal.includes("\u062d\u064a\u0627\u0632\u0629") ||
-        deal.includes("\u0628\u0631\u0633\u0645 \u0627\u0644\u0628\u064a\u0639");
-      const status = (item.availability_status ?? "").trim().toLowerCase();
-      const isAvailable =
-        !status.includes("مباع") &&
-        !status.includes("مباعة") &&
-        !status.includes("محجوز") &&
-        !status.includes("مسحوب") &&
-        status !== "sold" &&
-        status !== "reserved" &&
-        status !== "withdrawn";
-      return isCrossDeal && isAvailable;
+      return isCrossDealType(item.deal_type) && isAvailableStatus(item.availability_status);
     })
     .map((item) => ({
       id: item.id,
       model: item.model,
       owner_name: item.owner_name,
-      deal_type: "\u0628\u0631\u0633\u0645 \u0627\u0644\u0628\u064a\u0639",
+      deal_type: "برسم البيع",
       chassis_no: item.chassis_no ?? null,
       condition_label: item.condition_label ?? null,
       availability_status: item.availability_status,
       price: item.price,
       production_year: item.production_year,
       color: item.color,
+      gearbox: item.gearbox ?? null,
+      fuel_type: item.fuel_type ?? null,
       mileage: item.mileage ?? null,
       specs: item.specs ?? null,
       inspection: item.inspection ?? null,
+      photo_urls: Array.isArray(item.photo_urls) ? (item.photo_urls as string[]) : [],
       branch_name: getRelationshipName(item.branches),
     }));
 
@@ -786,14 +1198,22 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
   const branchId = profile?.branch_id ?? null;
   const userId = profile?.id ?? null;
 
-  const dashboardCustomersQuery = supabase
+  // نحسب آخر دقيقة من اليوم لتصفية المتابعات من DB مباشرة
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+  const todayEndIso = todayEnd.toISOString();
+
+  // ── استعلام المتابعات (بيانات كاملة، مُفلترة من DB للأداء) ──────────────
+  const dashboardFollowUpsQuery = supabase
     .from("customers")
     .select(
-      "id, full_name, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, metadata, branches(name), app_users(full_name)",
-    );
-  const dashboardInventoryQuery = supabase
-    .from("inventory")
-    .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, branches(name)");
+      "id, full_name, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, operation_type, metadata, branches(name), app_users(full_name)",
+    )
+    .not("next_follow_up_at", "is", null)
+    .lte("next_follow_up_at", todayEndIso)
+    .or("status.ilike.%متابعة%,status.ilike.%حجز%")
+    .order("next_follow_up_at", { ascending: true });
+
   const dashboardNotificationsQuery = supabase
     .from("notifications")
     .select("id, message, status, created_at, recipient_label")
@@ -807,20 +1227,16 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
 
   const [
     metrics,
-    { data: customerRows },
-    { data: inventoryRows },
+    { data: followUpRows },
     { data: notificationRows },
     { data: reminderRows },
-    recentCustomers,
-    recentInventory,
   ] = await Promise.all([
     getDashboardMetrics(),
     (applyStaffScope(
-      applyBranchScope(dashboardCustomersQuery, branchId, capabilities.isGeneralManager) as typeof dashboardCustomersQuery,
+      applyBranchScope(dashboardFollowUpsQuery, branchId, capabilities.isGeneralManager) as typeof dashboardFollowUpsQuery,
       userId,
       capabilities.isManager,
-    ) as typeof dashboardCustomersQuery).limit(250),
-    (applyBranchScope(dashboardInventoryQuery, branchId, capabilities.isGeneralManager) as typeof dashboardInventoryQuery).limit(250),
+    ) as typeof dashboardFollowUpsQuery).limit(6),
     (applyStaffScope(
       applyBranchScope(
         dashboardNotificationsQuery,
@@ -837,70 +1253,16 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
       userId,
       capabilities.isManager,
     ) as typeof dashboardRemindersQuery).limit(8),
-    getRecentCustomers(8),
-    getRecentInventory(8),
   ]);
 
-  const customerStatusMap = new Map<string, number>();
-  const inventoryStatusMap = new Map<string, number>();
-  const branchMap = new Map<string, BranchSnapshot>();
-
-  const customerItems: CustomerItem[] = (customerRows ?? []).map(mapCustomerRow);
-  const inventoryItems: InventoryItem[] = (inventoryRows ?? []).map((item) => ({
-    id: item.id,
-    model: item.model,
-    owner_name: item.owner_name,
-    deal_type: item.deal_type ?? null,
-    chassis_no: item.chassis_no ?? null,
-    condition_label: item.condition_label ?? null,
-    availability_status: item.availability_status,
-    price: item.price,
-    production_year: item.production_year,
-    color: item.color,
-    branch_name: getRelationshipName(item.branches),
-  }));
-
-  for (const item of customerItems) {
-    incrementCount(customerStatusMap, item.status);
-    const branchName = item.branch_name ?? "\u0628\u062f\u0648\u0646 \u0641\u0631\u0639";
-    const current = branchMap.get(branchName) ?? { branch_name: branchName, customers: 0, inventory: 0 };
-    current.customers += 1;
-    branchMap.set(branchName, current);
-  }
-
-  for (const item of inventoryItems) {
-    incrementCount(inventoryStatusMap, item.availability_status);
-    const branchName = item.branch_name ?? "\u0628\u062f\u0648\u0646 \u0641\u0631\u0639";
-    const current = branchMap.get(branchName) ?? { branch_name: branchName, customers: 0, inventory: 0 };
-    current.inventory += 1;
-    branchMap.set(branchName, current);
-  }
-
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
-  const todayEndTs = todayEnd.getTime();
-  const followUps = [...customerItems]
-    .filter((item) => {
-      if (!item.next_follow_up_at) return false;
-      const status = String(item.status ?? "");
-      if (!status.includes("متابعة") && !status.includes("حجز")) return false;
-      const time = new Date(item.next_follow_up_at).getTime();
-      return !Number.isNaN(time) && time <= todayEndTs;
-    })
-    .sort((a, b) => {
-      const left = new Date(a.next_follow_up_at ?? "").getTime();
-      const right = new Date(b.next_follow_up_at ?? "").getTime();
-      return left - right;
-    })
-    .slice(0, 6);
+  // المتابعات جاءت مُفلترة مسبقاً من DB — نحوّلها مباشرة
+  const followUps = (followUpRows ?? []).map(mapCustomerRow);
 
   return {
     metrics,
-    customerStatus: toSortedBreakdown(customerStatusMap),
-    inventoryStatus: toSortedBreakdown(inventoryStatusMap),
-    branches: [...branchMap.values()]
-      .sort((a, b) => b.customers + b.inventory - (a.customers + a.inventory))
-      .slice(0, 6),
+    customerStatus: [],   // غير مستخدمة حالياً — مجال لتوسع مستقبلي
+    inventoryStatus: [],  // غير مستخدمة حالياً
+    branches: [],         // غير مستخدمة حالياً
     notifications: (notificationRows ?? []).map((item) => ({
       id: item.id,
       message: item.message,
@@ -921,8 +1283,85 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
       branch_id: item.branch_id ?? null,
     })),
     followUps,
-    recentCustomers,
-    recentInventory,
+    recentCustomers: [],
+    recentInventory: [],
+  };
+}
+
+export type EmployeeDashboardStats = {
+  myActiveCustomers: number;
+  myClosedCustomers: number;
+  mySales: number;
+  myFollowupsToday: number;
+  myOverdueFollowups: number;
+  myPendingReminders: number;
+  conversionRate: number;
+  myRecentCustomers: { id: string; full_name: string; status: string; next_follow_up_at: string | null }[];
+  myOverdueList: { id: string; full_name: string; status: string; next_follow_up_at: string | null; phone: string }[];
+};
+
+export async function getEmployeeDashboardStats(): Promise<EmployeeDashboardStats> {
+  const empty: EmployeeDashboardStats = {
+    myActiveCustomers: 0, myClosedCustomers: 0, mySales: 0,
+    myFollowupsToday: 0, myOverdueFollowups: 0, myPendingReminders: 0,
+    conversionRate: 0, myRecentCustomers: [], myOverdueList: [],
+  };
+  if (!hasSupabaseEnv()) return empty;
+
+  const supabase = await createClient();
+  const { profile } = await getScopedProfile();
+  const userId = profile?.id;
+  if (!userId) return empty;
+
+  const now = new Date().toISOString();
+  const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+  const todayEndIso = todayEnd.toISOString();
+
+  const [
+    { count: myActive },
+    { count: myClosed },
+    { count: mySales },
+    { count: myToday },
+    { count: myOverdue },
+    { count: myReminders },
+    { data: recentRows },
+    { data: overdueRows },
+  ] = await Promise.all([
+    supabase.from("customers").select("*", { count: "exact", head: true }).eq("assigned_user_id", userId).eq("is_active", true),
+    supabase.from("customers").select("*", { count: "exact", head: true }).eq("assigned_user_id", userId).eq("is_active", false),
+    supabase.from("customers").select("*", { count: "exact", head: true }).eq("assigned_user_id", userId).ilike("status", "%تمت عملية البيع%"),
+    supabase.from("customers").select("*", { count: "exact", head: true }).eq("assigned_user_id", userId).eq("is_active", true).not("next_follow_up_at", "is", null).lte("next_follow_up_at", todayEndIso),
+    supabase.from("customers").select("*", { count: "exact", head: true }).eq("assigned_user_id", userId).eq("is_active", true).not("next_follow_up_at", "is", null).lt("next_follow_up_at", now),
+    supabase.from("reminders").select("*", { count: "exact", head: true }).eq("assigned_user_id", userId).eq("status", "pending"),
+    supabase.from("customers").select("id, full_name, status, next_follow_up_at").eq("assigned_user_id", userId).eq("is_active", true).order("updated_at", { ascending: false }).limit(5),
+    supabase.from("customers").select("id, full_name, status, next_follow_up_at, phone").eq("assigned_user_id", userId).eq("is_active", true).not("next_follow_up_at", "is", null).lt("next_follow_up_at", now).order("next_follow_up_at", { ascending: true }).limit(10),
+  ]);
+
+  const active = myActive ?? 0;
+  const sales = mySales ?? 0;
+  const total = active + (myClosed ?? 0);
+
+  return {
+    myActiveCustomers: active,
+    myClosedCustomers: myClosed ?? 0,
+    mySales: sales,
+    myFollowupsToday: myToday ?? 0,
+    myOverdueFollowups: myOverdue ?? 0,
+    myPendingReminders: myReminders ?? 0,
+    conversionRate: total > 0 ? Math.round((sales / total) * 100) : 0,
+    myRecentCustomers: (recentRows ?? []).map((r) => ({
+      id: r.id as string,
+      full_name: (r.full_name ?? "") as string,
+      status: (r.status ?? "") as string,
+      next_follow_up_at: r.next_follow_up_at as string | null,
+    })),
+    myOverdueList: (overdueRows ?? []).map((r) => ({
+      id: r.id as string,
+      full_name: (r.full_name ?? "") as string,
+      status: (r.status ?? "") as string,
+      next_follow_up_at: r.next_follow_up_at as string | null,
+      phone: (r.phone ?? "") as string,
+    })),
   };
 }
 
@@ -951,7 +1390,7 @@ export async function getStaffOverview(): Promise<StaffOverviewItem[]> {
     const current = customerStats.get(row.assigned_user_id) ?? { total: 0, sold: 0, followups: 0 };
     current.total += 1;
 
-    if (String(row.status ?? "").includes("\u062a\u0645 \u0627\u0644\u0628\u064a\u0639") || String(row.status ?? "").includes("\u0645\u0628\u0627\u0639\u0629")) {
+    if (String(row.status ?? "").includes("تم البيع") || String(row.status ?? "").includes("مباعة")) {
       current.sold += 1;
     }
 
@@ -989,6 +1428,7 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
       reminders: [],
       followUps: [],
       notifications: [],
+      incompleteCustomers: [],
     };
   }
 
@@ -1018,7 +1458,15 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
     .select("id, message, status, created_at, recipient_user_id, recipient_branch_id, recipient_label")
     .eq("status", "unread");
 
-  const [{ data: reminderRows }, { data: followUpRows }, { data: notificationRows }] = await Promise.all([
+  const agendaIncompleteQuery = supabase
+    .from("customers")
+    .select("id, full_name, phone, created_at, branch_id, assigned_user_id, branches(name), app_users(full_name)")
+    .eq("status", "غير مكتمل")
+    .eq("is_active", true)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  const [{ data: reminderRows }, { data: followUpRows }, { data: notificationRows }, { data: incompleteRows }] = await Promise.all([
     (applyStaffScope(
       applyBranchScope(
         agendaRemindersQuery,
@@ -1054,6 +1502,15 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
     ) as typeof agendaNotificationsQuery)
       .order("created_at", { ascending: false })
       .limit(10),
+    (applyStaffScope(
+      applyBranchScope(
+        agendaIncompleteQuery,
+        branchId,
+        capabilities.isGeneralManager,
+      ) as typeof agendaIncompleteQuery,
+      userId,
+      capabilities.isManager,
+    ) as typeof agendaIncompleteQuery),
   ]);
 
   const reminders: AgendaTaskItem[] = (reminderRows ?? [])
@@ -1079,7 +1536,8 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
     });
 
   const followUps: AgendaTaskItem[] = (followUpRows ?? [])
-    .filter((item) => String(item.status ?? "").includes("متابعة") || String(item.status ?? "").includes("حجز"))
+    // نعرض جميع العملاء النشطين (غير المغلقة ملفاتهم) بغض النظر عن الحالة
+    .filter((item) => !isClosedStatus(String(item.status ?? "")))
     .filter((item) => {
       if (!item.next_follow_up_at) return false;
       const time = new Date(item.next_follow_up_at).getTime();
@@ -1104,7 +1562,7 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
   const notifications: AgendaTaskItem[] = (notificationRows ?? []).map((item) => ({
     id: item.id,
     source: "notification",
-    label: "\u062a\u0646\u0628\u064a\u0647 \u063a\u064a\u0631 \u0645\u0642\u0631\u0648\u0621",
+    label: "تنبيه غير مقروء",
     customer_id: null,
     customer_name: null,
     branch_name: item.recipient_label,
@@ -1129,12 +1587,22 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
     return !Number.isNaN(time) && time < now;
   }).length;
 
+  const incompleteCustomers: IncompleteCustomerItem[] = (incompleteRows ?? []).map((item) => ({
+    id: item.id,
+    full_name: item.full_name,
+    phone: item.phone,
+    branch_name: getRelationshipName(item.branches),
+    staff_name: getRelationshipFullName(item.app_users),
+    created_at: item.created_at,
+  }));
+
   return {
     dueToday,
     overdue,
     reminders,
     followUps,
     notifications,
+    incompleteCustomers,
   };
 }
 
@@ -1158,7 +1626,7 @@ export async function getNotificationsCenter(limit = 120): Promise<{
 
   const centerQuery = supabase
     .from("notifications")
-    .select("id, title, message, status, notification_type, recipient_user_id, recipient_branch_id, recipient_label, created_at");
+    .select("id, title, message, status, notification_type, payload, recipient_user_id, recipient_branch_id, recipient_label, created_at");
 
   const scopedUnread = applyBranchScope(
     unreadCountQuery,
@@ -1200,6 +1668,7 @@ export async function getNotificationsCenter(limit = 120): Promise<{
       message: item.message,
       status: item.status,
       notification_type: item.notification_type ?? null,
+      payload: (item as { payload?: Record<string, unknown> | null }).payload ?? null,
       recipient_label: item.recipient_label ?? null,
       created_at: item.created_at,
     })),
@@ -1213,6 +1682,7 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
       staff: [],
       inventoryOptions: [],
       statuses: CUSTOMER_STATUSES,
+      statusesByType: STATUS_BY_TYPE,
       sources: CUSTOMER_SOURCES,
       profile: null,
       capabilities: { isGeneralManager: false, isManager: false },
@@ -1226,7 +1696,7 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
     .select("id, model, chassis_no, production_year, availability_status, deal_type, condition_label, branch_id, branches(name)")
     .order("model");
   const [{ data: branches }, { data: staff }, { data: inventoryScoped }] = await Promise.all([
-    supabase.from("branches").select("id, name").eq("is_active", true).order("name"),
+    supabase.from("branches").select("id, name, whatsapp_number, whatsapp_prefix").eq("is_active", true).order("name"),
     supabase
       .from("app_users")
       .select("id, full_name, role, branch_id")
@@ -1240,15 +1710,15 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
   ]);
 
   const normalizeStatus = (value: string | null | undefined) => (value ?? "").trim().toLowerCase();
-  const AR_SOLD = "\u0645\u0628\u0627\u0639";
-  const AR_SOLD_F = "\u0645\u0628\u0627\u0639\u0629";
-  const AR_RESERVED = "\u0645\u062d\u062c\u0648\u0632";
-  const AR_WITHDRAWN = "\u0645\u0633\u062d\u0648\u0628";
-  const AR_MUALLIM = "\u0627\u0644\u0645\u0639\u0644\u0645";
-  const AR_DEAL_SWAP = "\u0627\u0633\u062a\u0628\u062f\u0627\u0644";
-  const AR_DEAL_HIAZA = "\u062d\u064a\u0627\u0632\u0629";
-  const AR_DEAL_CONSIGN = "\u0628\u0631\u0633\u0645 \u0627\u0644\u0628\u064a\u0639";
-  const AR_USED = "\u0645\u0633\u062a\u0639\u0645\u0644\u0629";
+  const AR_SOLD = "مباع";
+  const AR_SOLD_F = "مباعة";
+  const AR_RESERVED = "محجوز";
+  const AR_WITHDRAWN = "مسحوب";
+  const AR_MUALLIM = "المعلم";
+  const AR_DEAL_SWAP = "استبدال";
+  const AR_DEAL_HIAZA = "حيازة";
+  const AR_DEAL_CONSIGN = "برسم البيع";
+  const AR_USED = "مستعملة";
   const isAvailable = (value: string | null | undefined) => {
     const status = normalizeStatus(value);
     if (!status) return true;
@@ -1268,12 +1738,9 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
     .map(toOption);
 
   if (!capabilities.isGeneralManager && profile?.branch_id) {
-    const { data: branchRow } = await supabase
-      .from("branches")
-      .select("name")
-      .eq("id", profile.branch_id)
-      .maybeSingle();
-    const isMuallimBranch = (branchRow?.name ?? "").includes(AR_MUALLIM);
+    // نستخدم قائمة الفروع المجلوبة مسبقاً بدل استعلام إضافي
+    const currentBranch = (branches ?? []).find((b) => b.id === profile!.branch_id);
+    const isMuallimBranch = (currentBranch?.name ?? "").includes(AR_MUALLIM);
     if (isMuallimBranch) {
       let externalRows: Array<{
         id: string;
@@ -1323,7 +1790,12 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
   return {
     branches: (branches ?? [])
       .filter((item) => !isVirtualBranch(item.name))
-      .map((item) => ({ id: item.id, name: item.name })),
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        whatsapp_number: (item.whatsapp_number as string | null) ?? null,
+        whatsapp_prefix: (item.whatsapp_prefix as string | null) ?? "+966",
+      })),
     staff: (staff ?? []).map((item) => ({
       id: item.id,
       full_name: item.full_name,
@@ -1332,6 +1804,7 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
     })),
     inventoryOptions,
     statuses: CUSTOMER_STATUSES,
+    statusesByType: STATUS_BY_TYPE,
     sources: CUSTOMER_SOURCES,
     profile,
     capabilities,
@@ -1349,7 +1822,7 @@ export async function getCustomerById(customerId: string): Promise<CustomerDetai
   const customerQuery = supabase
     .from("customers")
     .select(
-      "id, full_name, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, nickname, address, whatsapp_prefix, attachment_notes, metadata, branches(name), app_users(full_name)",
+      "id, full_name, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, nickname, address, whatsapp_prefix, attachment_notes, metadata, operation_type, cycle_number, parent_customer_id, branches(name), app_users(full_name)",
     )
     .eq("id", customerId);
 
@@ -1372,10 +1845,10 @@ export async function getCustomerById(customerId: string): Promise<CustomerDetai
         .limit(12),
       supabase
         .from("customer_attachments")
-        .select("id, file_name, file_category, public_url, storage_path, created_at")
+        .select("id, file_name, file_category, public_url, storage_path, mime_type, created_at")
         .eq("customer_id", customerId)
         .order("created_at", { ascending: false })
-        .limit(12),
+        .limit(50),
       supabase
         .from("trade_ins")
         .select(
@@ -1388,27 +1861,96 @@ export async function getCustomerById(customerId: string): Promise<CustomerDetai
 
   if (!customer) return null;
 
-  const base = mapCustomerRow(customer);
-  const attachmentsWithUrls = await Promise.all(
-    (attachments ?? []).map(async (item) => {
-      let resolvedUrl = item.public_url ?? null;
-      if (!resolvedUrl && item.storage_path) {
-        const signed = await supabase.storage.from("customer-attachments").createSignedUrl(item.storage_path, 60 * 60);
-        if (!signed.error) {
-          resolvedUrl = signed.data.signedUrl;
-        }
-      }
+  const parentCustomerId = (customer as Record<string, unknown>).parent_customer_id as string | null ?? null;
+  const cycleNumber = (customer as Record<string, unknown>).cycle_number as number ?? 1;
 
-      return {
-        id: item.id,
-        file_name: item.file_name,
-        file_category: item.file_category,
-        public_url: resolvedUrl,
-        storage_path: item.storage_path ?? null,
-        created_at: item.created_at,
-      };
-    }),
-  );
+  // ── 1. جلب الدورات اللاحقة (متوازٍ مع traversal الأجداد) ───────────────────
+  const childCyclesPromise = supabase
+    .from("customers")
+    .select("id, status, cycle_number, created_at")
+    .eq("parent_customer_id", customerId)
+    .order("cycle_number", { ascending: true })
+    .limit(10);
+
+  // ── 2. Traversal متسلسل لكل سلسلة الأجداد (max 8 دورات) ─────────────────
+  type AncestorInfo = { id: string; status: string; cycle_number: number };
+  const ancestorInfos: AncestorInfo[] = [];
+  const visitedIds = new Set<string>([customerId]);
+  let traverseId: string | null = parentCustomerId;
+
+  while (traverseId && !visitedIds.has(traverseId) && ancestorInfos.length < 8) {
+    visitedIds.add(traverseId);
+    const { data: anc } = await supabase
+      .from("customers")
+      .select("id, status, cycle_number, parent_customer_id")
+      .eq("id", traverseId)
+      .maybeSingle();
+    if (!anc) break;
+    ancestorInfos.push({
+      id: anc.id,
+      status: anc.status ?? "",
+      cycle_number: (anc as Record<string, unknown>).cycle_number as number ?? 1,
+    });
+    traverseId = (anc as Record<string, unknown>).parent_customer_id as string | null;
+  }
+
+  // ── 3. Batch fetch سجلات كل الأجداد بطلب واحد ────────────────────────────
+  const ancestorIds = ancestorInfos.map((a) => a.id);
+  const [{ data: childCyclesRows }, { data: ancestorLogsRows }] = await Promise.all([
+    childCyclesPromise,
+    ancestorIds.length > 0
+      ? supabase
+          .from("customer_logs")
+          .select("id, action, details, actor_name, next_follow_up_at, created_at, customer_id")
+          .in("customer_id", ancestorIds)
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] as Array<{ id: string; action: string; details: string | null; actor_name: string | null; next_follow_up_at: string | null; created_at: string; customer_id: string }> }),
+  ]);
+
+  // ── 4. تجميع السجلات حسب الدورة ──────────────────────────────────────────
+  const logsByAncestorId = new Map<string, CustomerLogItem[]>();
+  for (const row of ancestorLogsRows ?? []) {
+    const entry: CustomerLogItem = {
+      id: row.id,
+      action: row.action,
+      details: row.details,
+      actor_name: row.actor_name,
+      next_follow_up_at: row.next_follow_up_at,
+      created_at: row.created_at,
+    };
+    const arr = logsByAncestorId.get(row.customer_id) ?? [];
+    arr.push(entry);
+    logsByAncestorId.set(row.customer_id, arr);
+  }
+
+  // الدورة الأم المباشرة (للتنقل)
+  const parentCycleRow = ancestorInfos[0] ?? null;
+
+  const base = mapCustomerRow(customer);
+
+  // ── توقيع URLs دفعةً واحدة بدل حلقة متسلسلة (batch signed URLs) ──────────
+  const pathsNeedingSigning = (attachments ?? [])
+    .filter((item) => !item.public_url && item.storage_path)
+    .map((item) => item.storage_path as string);
+
+  const signedUrlMap = new Map<string, string>();
+  if (pathsNeedingSigning.length > 0) {
+    const { data: signedBatch } = await supabase.storage
+      .from("customer-attachments")
+      .createSignedUrls(pathsNeedingSigning, 60 * 60);
+    for (const s of signedBatch ?? []) {
+      if (s.signedUrl) signedUrlMap.set(s.path ?? "", s.signedUrl);
+    }
+  }
+
+  const attachmentsWithUrls = (attachments ?? []).map((item) => ({
+    id: item.id,
+    file_name: item.file_name,
+    file_category: item.file_category,
+    public_url: item.public_url ?? signedUrlMap.get(item.storage_path ?? "") ?? null,
+    storage_path: item.storage_path ?? null,
+    created_at: item.created_at,
+  }));
 
   return {
     ...base,
@@ -1417,6 +1959,23 @@ export async function getCustomerById(customerId: string): Promise<CustomerDetai
     whatsapp_prefix: customer.whatsapp_prefix ?? null,
     attachment_notes: customer.attachment_notes ?? null,
     metadata: (customer.metadata as Record<string, unknown> | null) ?? {},
+    cycle_number: cycleNumber,
+    parent_customer_id: parentCustomerId,
+    parent_cycle: parentCycleRow
+      ? { id: parentCycleRow.id, status: parentCycleRow.status, cycle_number: parentCycleRow.cycle_number }
+      : null,
+    ancestor_cycles: ancestorInfos.map((a) => ({
+      id: a.id,
+      status: a.status,
+      cycle_number: a.cycle_number,
+      logs: logsByAncestorId.get(a.id) ?? [],
+    })),
+    child_cycles: (childCyclesRows ?? []).map((r) => ({
+      id: r.id,
+      status: r.status ?? "",
+      cycle_number: (r as Record<string, unknown>).cycle_number as number ?? 1,
+      created_at: r.created_at ?? "",
+    })),
     logs: (logs ?? []).map((item) => ({
       id: item.id,
       action: item.action,
@@ -1476,20 +2035,20 @@ function getTradeMissingFields(item: {
   const valueOrEmpty = (value: unknown) => (typeof value === "string" ? value.trim() : "");
   const numberMissing = (value: number | null | undefined) => value == null || Number.isNaN(value) || value <= 0;
 
-  if (!valueOrEmpty(item.model)) missing.push("\u0646\u0648\u0639 \u0627\u0644\u0633\u064a\u0627\u0631\u0629");
-  if (!valueOrEmpty(item.color)) missing.push("\u0627\u0644\u0644\u0648\u0646");
-  if (numberMissing(item.production_year)) missing.push("\u0633\u0646\u0629 \u0627\u0644\u062a\u0635\u0646\u064a\u0639");
-  if (numberMissing(item.mileage)) missing.push("\u0627\u0644\u0639\u062f\u0627\u062f");
-  if (!valueOrEmpty(item.specs)) missing.push("\u0627\u0644\u0645\u0648\u0627\u0635\u0641\u0627\u062a");
-  if (!valueOrEmpty(item.inspection)) missing.push("\u0627\u0644\u0641\u062d\u0635");
-  if (numberMissing(item.price)) missing.push("\u0633\u0639\u0631 \u0627\u0644\u062a\u0642\u064a\u064a\u0645");
-  if (!valueOrEmpty(item.chassis_no)) missing.push("\u0627\u0644\u0634\u0627\u0635\u064a");
-  if (!valueOrEmpty(item.license_expiry)) missing.push("\u062a\u0627\u0631\u064a\u062e \u0627\u0646\u062a\u0647\u0627\u0621 \u0627\u0644\u0631\u062e\u0635\u0629");
+  if (!valueOrEmpty(item.model)) missing.push("نوع السيارة");
+  if (!valueOrEmpty(item.color)) missing.push("اللون");
+  if (numberMissing(item.production_year)) missing.push("سنة التصنيع");
+  if (numberMissing(item.mileage)) missing.push("العداد");
+  if (!valueOrEmpty(item.specs)) missing.push("المواصفات");
+  if (!valueOrEmpty(item.inspection)) missing.push("الفحص");
+  if (numberMissing(item.price)) missing.push("سعر التقييم");
+  if (!valueOrEmpty(item.chassis_no)) missing.push("الشاصي");
+  if (!valueOrEmpty(item.license_expiry)) missing.push("تاريخ انتهاء الرخصة");
 
   const fuel = valueOrEmpty(item.metadata?.fuel);
   const gear = valueOrEmpty(item.metadata?.gear);
-  if (!fuel) missing.push("\u0646\u0648\u0639 \u0627\u0644\u0648\u0642\u0648\u062f");
-  if (!gear) missing.push("\u0646\u0627\u0642\u0644 \u0627\u0644\u062d\u0631\u0643\u0629");
+  if (!fuel) missing.push("نوع الوقود");
+  if (!gear) missing.push("ناقل الحركة");
 
   return missing;
 }
@@ -1506,9 +2065,48 @@ export function getLicenseAlertText(licenseExpiry: string | null) {
 
   const days = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-  if (days < 0) return `\u0627\u0644\u0631\u062e\u0635\u0629 \u0645\u0646\u062a\u0647\u064a\u0629 \u0645\u0646\u0630 ${Math.abs(days)} \u064a\u0648\u0645`;
-  if (days <= 30) return `\u0627\u0644\u0631\u062e\u0635\u0629 \u062a\u0646\u062a\u0647\u064a \u062e\u0644\u0627\u0644 ${days} \u064a\u0648\u0645`;
+  if (days < 0) return `الرخصة منتهية منذ ${Math.abs(days)} يوم`;
+  if (days <= 30) return `الرخصة تنتهي خلال ${days} يوم`;
   return null;
+}
+
+/**
+ * إحصائيات جودة البيانات — queries خفيفة بدلاً من جلب آلاف السجلات
+ */
+export async function getDataQualityCounts(): Promise<{
+  active: number;
+  closed: number;
+  missingFollowup: number;
+  missingRequestedCar: number;
+}> {
+  if (!hasSupabaseEnv()) return { active: 0, closed: 0, missingFollowup: 0, missingRequestedCar: 0 };
+
+  const supabase = await createClient();
+  const { profile, capabilities } = await getScopedProfile();
+  const branchId = profile?.branch_id ?? null;
+
+  const base = supabase.from("customers").select("*", { count: "exact", head: true });
+  const scoped = (q: typeof base) =>
+    applyBranchScope(q, branchId, capabilities.isGeneralManager) as typeof base;
+
+  const [
+    { count: active },
+    { count: closed },
+    { count: missingFollowup },
+    { count: missingRequestedCar },
+  ] = await Promise.all([
+    scoped(base.eq("is_active", true)),
+    scoped(base.eq("is_active", false)),
+    scoped(base.eq("is_active", true).is("next_follow_up_at", null)),
+    scoped(base.eq("is_active", true).or("requested_car.is.null,requested_car.eq.")),
+  ]);
+
+  return {
+    active: active ?? 0,
+    closed: closed ?? 0,
+    missingFollowup: missingFollowup ?? 0,
+    missingRequestedCar: missingRequestedCar ?? 0,
+  };
 }
 
 export async function getOperationalAlerts(): Promise<{
@@ -1530,7 +2128,7 @@ export async function getOperationalAlerts(): Promise<{
   const customersQuery = supabase
     .from("customers")
     .select(
-      "id, full_name, status, requested_car, branch_id, branches(name), app_users(full_name), trade_ins(id, model, status, license_expiry, color, production_year, mileage, specs, inspection, price, chassis_no, is_active, metadata)",
+      "id, full_name, status, requested_car, branch_id, assigned_user_id, branches(name), app_users(full_name), trade_ins(id, model, status, license_expiry, color, production_year, mileage, specs, inspection, price, chassis_no, is_active, metadata)",
     );
 
   const { data } = await (applyStaffScope(
@@ -1541,9 +2139,9 @@ export async function getOperationalAlerts(): Promise<{
 
   const incompleteTrades: OperationalAlertItem[] = [];
   const licenseDue: OperationalAlertItem[] = [];
-  const REJECT_WORD = "\u0631\u0641\u0636";
-  const BACK_OUT_WORD = "\u062a\u0631\u0627\u062c\u0639";
-  const SOLD_OUT_WORD = "\u0628\u064a\u0639 \u0627\u0644\u0633\u064a\u0627\u0631\u0629 \u0644\u0639\u0645\u064a\u0644 \u062e\u0627\u0631\u062c\u064a";
+  const REJECT_WORD = "رفض";
+  const BACK_OUT_WORD = "تراجع";
+  const SOLD_OUT_WORD = "بيع السيارة لعميل خارجي";
 
   for (const customer of data ?? []) {
     const tradeList = Array.isArray(customer.trade_ins) ? customer.trade_ins : [];
@@ -1554,7 +2152,9 @@ export async function getOperationalAlerts(): Promise<{
       const alertBase: OperationalAlertItem = {
         customer_id: customer.id,
         customer_name: customer.full_name,
+        branch_id: customer.branch_id ?? null,
         branch_name: getRelationshipName(customer.branches),
+        staff_id: customer.assigned_user_id ?? null,
         staff_name: getRelationshipFullName(customer.app_users),
         customer_status: customer.status,
         requested_car: customer.requested_car ?? null,
@@ -1586,5 +2186,80 @@ export async function getOperationalAlerts(): Promise<{
     incompleteTrades,
     licenseDue,
   };
+}
+
+// ─── Branch Admin ─────────────────────────────────────────────────────────────
+
+export type BranchAdminItem = {
+  id: string;
+  name: string;
+  city: string | null;
+  address: string | null;
+  whatsapp_number: string | null;
+  whatsapp_prefix: string | null;
+  is_active: boolean;
+  created_at: string | null;
+  total_staff: number;
+  total_customers: number;
+};
+
+/**
+ * جلب كل المعارض مع إحصائيات الموظفين والعملاء — للمدير العام فقط
+ */
+export async function getBranchesAdmin(): Promise<BranchAdminItem[]> {
+  if (!hasSupabaseEnv()) return [];
+
+  // نستخدم admin إن توفّر، وإلا نستخدم العميل العادي
+  const client = hasSupabaseServiceRoleEnv() ? createAdminClient() : await createClient();
+
+  // نجرّب أولاً مع الأعمدة الكاملة (بعد Migration)
+  // وإن فشلت نعيد المحاولة بالأعمدة الأساسية فقط
+  let branchData: { id: string; name: string; is_active: boolean | null; city?: string | null; address?: string | null; whatsapp_number?: string | null; whatsapp_prefix?: string | null; created_at?: string | null }[] = [];
+
+  const fullQuery = await client
+    .from("branches")
+    .select("id, name, city, address, whatsapp_number, whatsapp_prefix, is_active, created_at")
+    .order("is_active", { ascending: false })
+    .order("name");
+
+  if (fullQuery.error) {
+    // فشلت — نحاول بالأعمدة الأساسية فقط
+    const basicQuery = await client
+      .from("branches")
+      .select("id, name, is_active")
+      .order("is_active", { ascending: false })
+      .order("name");
+    branchData = (basicQuery.data ?? []) as typeof branchData;
+  } else {
+    branchData = (fullQuery.data ?? []) as typeof branchData;
+  }
+
+  const [{ data: staffRows }, { data: customerRows }] = await Promise.all([
+    client.from("app_users").select("branch_id").eq("is_active", true),
+    client.from("customers").select("branch_id").eq("is_active", true),
+  ]);
+
+  const staffCount = new Map<string, number>();
+  (staffRows ?? []).forEach((r) => {
+    if (r.branch_id) staffCount.set(r.branch_id, (staffCount.get(r.branch_id) ?? 0) + 1);
+  });
+
+  const custCount = new Map<string, number>();
+  (customerRows ?? []).forEach((r) => {
+    if (r.branch_id) custCount.set(r.branch_id, (custCount.get(r.branch_id) ?? 0) + 1);
+  });
+
+  return branchData.map((b) => ({
+    id: b.id as string,
+    name: (b.name ?? "") as string,
+    city: (b.city as string | null) ?? null,
+    address: (b.address as string | null) ?? null,
+    whatsapp_number: (b.whatsapp_number as string | null) ?? null,
+    whatsapp_prefix: (b.whatsapp_prefix as string | null) ?? "+966",
+    is_active: b.is_active !== false,
+    created_at: (b.created_at as string | null) ?? null,
+    total_staff: staffCount.get(b.id as string) ?? 0,
+    total_customers: custCount.get(b.id as string) ?? 0,
+  }));
 }
 

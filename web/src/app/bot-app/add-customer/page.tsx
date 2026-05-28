@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 
 type TelegramWebApp = {
   initDataUnsafe: { user?: { id?: number } };
@@ -33,6 +33,132 @@ type FormData = {
 
 const CLOSED_STATUSES = ["تم البيع", "تمت صفقة استبدال", "رفض من قبل العميل", "رفض من قبل المعرض", "العميل غير فعال"];
 
+// ─── Inline Voice Recorder ────────────────────────────────────────────────────
+type VoiceState = "idle" | "requesting" | "recording" | "done" | "error";
+
+function formatDur(s: number) {
+  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+}
+
+function InlineVoiceRecorder({
+  onFileReady,
+  colors,
+}: {
+  onFileReady: (file: File | null) => void;
+  colors: { btn: string; btnText: string; hint: string; border: string; card: string; text: string };
+}) {
+  const [state, setState] = useState<VoiceState>("idle");
+  const [duration, setDuration] = useState(0);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [errMsg, setErrMsg] = useState("");
+  const mrRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const durRef = useRef(0);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+  }, []);
+
+  async function start() {
+    setErrMsg("");
+    setState("requesting");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+      const mr = new MediaRecorder(stream, { mimeType: mime });
+      mrRef.current = mr;
+      chunksRef.current = [];
+
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const dur = durRef.current;
+        setDuration(dur);
+        const blob = new Blob(chunksRef.current, { type: mime });
+        const ext = mime.includes("webm") ? "webm" : "mp4";
+        const file = new File([blob], `voice-note-${Date.now()}.${ext}`, { type: mime });
+        const url = URL.createObjectURL(blob);
+        setAudioUrl(url);
+        setState("done");
+        onFileReady(file);
+      };
+
+      mr.start(250);
+      setState("recording");
+      setDuration(0);
+      durRef.current = 0;
+      timerRef.current = setInterval(() => {
+        durRef.current += 1;
+        setDuration((d) => d + 1);
+      }, 1000);
+    } catch (err) {
+      setState("error");
+      setErrMsg((err as { name?: string }).name === "NotAllowedError" ? "لم يُمنح إذن المايكروفون" : "تعذر بدء التسجيل");
+    }
+  }
+
+  function stop() {
+    if (mrRef.current?.state !== "inactive") mrRef.current?.stop();
+    if (timerRef.current) clearInterval(timerRef.current);
+  }
+
+  function del() {
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioUrl(null);
+    setDuration(0);
+    durRef.current = 0;
+    setState("idle");
+    onFileReady(null);
+  }
+
+  const base: React.CSSProperties = { fontFamily: "system-ui,sans-serif", direction: "rtl", fontSize: 13 };
+
+  if (state === "idle") return (
+    <button type="button" onClick={start} style={{ ...base, display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 10, border: `1.5px solid ${colors.border}`, background: colors.card, color: colors.hint, cursor: "pointer" }}>
+      🎤 تسجيل ملاحظة صوتية
+    </button>
+  );
+
+  if (state === "requesting") return (
+    <span style={{ ...base, color: colors.hint }}>جاري الوصول للمايكروفون…</span>
+  );
+
+  if (state === "recording") return (
+    <div style={{ ...base, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, border: "1.5px solid #f87171", background: "#fef2f2" }}>
+      <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#ef4444", display: "inline-block", animation: "pulse 1s infinite" }} />
+      <span style={{ fontWeight: 700, color: "#dc2626", fontVariantNumeric: "tabular-nums" }}>{formatDur(duration)}</span>
+      <button type="button" onClick={stop} style={{ padding: "4px 10px", borderRadius: 8, border: "none", background: "#ef4444", color: "#fff", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>
+        ⏹ إيقاف
+      </button>
+    </div>
+  );
+
+  if (state === "done" && audioUrl) return (
+    <div style={{ ...base, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, border: "1.5px solid #6ee7b7", background: "#f0fdf4" }}>
+      <span style={{ fontWeight: 700, color: "#065f46" }}>🎤 {formatDur(duration)}</span>
+      <audio controls src={audioUrl} style={{ height: 30, maxWidth: 180 }} />
+      <button type="button" onClick={del} style={{ padding: "4px 8px", borderRadius: 8, border: "none", background: "#fee2e2", color: "#b91c1c", cursor: "pointer", fontSize: 12 }}>
+        🗑 حذف
+      </button>
+    </div>
+  );
+
+  if (state === "error") return (
+    <div style={{ ...base, display: "flex", alignItems: "center", gap: 6 }}>
+      <span style={{ color: "#dc2626" }}>⚠️ {errMsg}</span>
+      <button type="button" onClick={() => setState("idle")} style={{ color: colors.hint, textDecoration: "underline", border: "none", background: "none", cursor: "pointer", fontSize: 12 }}>إعادة المحاولة</button>
+    </div>
+  );
+
+  return null;
+}
+
 export default function AddCustomerMiniApp() {
   const twa = useRef<TelegramWebApp | null>(null);
   const [chatId, setChatId] = useState<string | null>(null);
@@ -55,6 +181,7 @@ export default function AddCustomerMiniApp() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const voiceFileRef = useRef<File | null>(null);
 
   // Theme colors
   const tp = twa.current?.themeParams ?? {};
@@ -141,6 +268,20 @@ export default function AddCustomerMiniApp() {
 
       const json = await res.json();
       if (!res.ok) { setSubmitError(json.error ?? "حدث خطأ"); setLoading(false); return; }
+
+      // ── رفع الملف الصوتي إن وُجد ──────────────────────────────
+      const voiceFile = voiceFileRef.current;
+      if (voiceFile && json.id) {
+        try {
+          const fd = new FormData();
+          fd.append("customer_id", String(json.id));
+          fd.append("file", voiceFile);
+          fd.append("label", "ملاحظات عامة");
+          await fetch("/api/voice-upload", { method: "POST", body: fd });
+        } catch {
+          // best-effort — لا نوقف العملية
+        }
+      }
 
       setSuccess(true);
       setTimeout(() => twa.current?.close(), 2000);
@@ -333,6 +474,14 @@ export default function AddCustomerMiniApp() {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               style={{ ...input, resize: "vertical" }}
+            />
+          </div>
+
+          <div style={field}>
+            <span style={label}>ملاحظة صوتية</span>
+            <InlineVoiceRecorder
+              onFileReady={(file) => { voiceFileRef.current = file; }}
+              colors={{ btn: btnBg, btnText: btnText, hint: hintColor, border: borderColor, card: cardBg, text: textColor }}
             />
           </div>
         </div>

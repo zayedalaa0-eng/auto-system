@@ -16,6 +16,9 @@ export function CustomerForm({ customer, options, returnPath }: CustomerFormProp
   const effectiveBranchId = customer?.branch_id ?? currentProfile?.branch_id ?? "";
   const shouldAutoAssignCurrentUser = !options.capabilities.isManager && Boolean(currentProfile?.id);
   const primaryTradeIn = customer?.tradeIns[0] ?? null;
+  // اختيار قائمة الحالات بناءً على نوع العملية المخزن في metadata
+  const operationType = (customer?.metadata?.operation_type as string | undefined) ?? "buyer";
+  const statusList = options.statusesByType[operationType as keyof typeof options.statusesByType] ?? options.statuses;
   const branchScopedStaff = customer?.branch_id
     ? options.staff.filter((item) => item.branch_id === customer.branch_id || item.branch_id === null)
     : options.staff;
@@ -167,7 +170,7 @@ export function CustomerForm({ customer, options, returnPath }: CustomerFormProp
                   defaultValue={customer?.status ?? "قيد المتابعة"}
                   className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-slate-900 outline-none transition focus:border-sky-300 focus:bg-white"
                 >
-                  {options.statuses.map((status) => (
+                  {statusList.map((status) => (
                     <option key={status} value={status}>
                       {status}
                     </option>
@@ -335,13 +338,7 @@ export function CustomerForm({ customer, options, returnPath }: CustomerFormProp
                 />
               </label>
 
-              <label className="space-y-2">
-                <span className="text-sm font-medium text-slate-700">حالة سيارة العميل</span>
-                <input name="trade_in_status" type="hidden" value={primaryTradeIn?.status ?? "استبدال (بانتظار التقييم)"} />
-                <div className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-slate-900 flex items-center">
-                  {primaryTradeIn?.status ?? "استبدال (بانتظار التقييم)"}
-                </div>
-              </label>
+              <input name="trade_in_status" type="hidden" value={primaryTradeIn?.status ?? "استبدال (بانتظار التقييم)"} />
 
               <label className="space-y-2">
                 <span className="text-sm font-medium text-slate-700">ناقل الحركة</span>

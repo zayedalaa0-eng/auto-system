@@ -1,8 +1,5 @@
-const dateFormatter = new Intl.DateTimeFormat("ar", {
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-});
+// formatter يدوي 100% deterministic لتجنّب hydration mismatch نهائياً
+// (Intl.DateTimeFormat ينتج نتائج مختلفة بين Node.js والمتصفح)
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -10,7 +7,7 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
-const relativeFormatter = new Intl.RelativeTimeFormat("ar", {
+const relativeFormatter = new Intl.RelativeTimeFormat("ar-u-nu-latn", {
   numeric: "auto",
 });
 
@@ -20,7 +17,11 @@ export function formatDate(value: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
 
-  return dateFormatter.format(date);
+  // نستخدم getUTC* لضمان نفس النتيجة على السيرفر والمتصفح
+  const day = date.getUTCDate();
+  const month = date.getUTCMonth() + 1;
+  const year = date.getUTCFullYear();
+  return `${day}/${month}/${year}`;
 }
 
 export function formatCurrency(value: number | null) {

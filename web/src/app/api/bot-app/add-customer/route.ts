@@ -57,10 +57,13 @@ export async function POST(req: NextRequest) {
 
     const resolvedStatus = status?.trim() || "جديد";
     const isClosedStatus =
-      resolvedStatus.includes("العميل غير فعال") ||
-      resolvedStatus.includes("تم البيع") ||
-      resolvedStatus.includes("تمت صفقة استبدال") ||
-      resolvedStatus.includes("رفض");
+      resolvedStatus.includes("تمت عملية البيع") ||
+      resolvedStatus.includes("شراء من قبل المعرض") ||
+      resolvedStatus.includes("رفض من قبل العميل") ||
+      resolvedStatus.includes("رفض من قبل المعرض") ||
+      resolvedStatus.includes("تراجع العميل عن الاستبدال") ||
+      resolvedStatus.includes("سحب السيارة من البيع") ||
+      resolvedStatus === "إغلاق الملف";
 
     const resolvedAssignedUser =
       caps.isManager && assigned_user_id ? assigned_user_id : user.id;

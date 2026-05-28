@@ -24,13 +24,26 @@ export type Session = {
   data: SessionData;
 };
 
+/** مدة انتهاء صلاحية الجلسة — 24 ساعة */
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+
 export async function getSession(chatId: string): Promise<Session> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("bot_sessions")
-    .select("state, data")
+    .select("state, data, updated_at")
     .eq("telegram_chat_id", chatId)
     .maybeSingle();
+
+  // تحقق من انتهاء صلاحية الجلسة
+  if (data?.updated_at) {
+    const age = Date.now() - new Date(data.updated_at).getTime();
+    if (age > SESSION_TTL_MS && data.state !== "idle") {
+      // الجلسة منتهية — نُصفّيها في الخلفية
+      void clearSession(chatId);
+      return { state: "idle", data: {} };
+    }
+  }
 
   return {
     state: (data?.state as SessionState) ?? "idle",

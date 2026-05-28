@@ -38,12 +38,89 @@ export async function sendMessage(
   return res.json();
 }
 
+/**
+ * إرسال صورة واحدة عبر تيليجرام
+ * photo: رابط عام أو file_id
+ */
+export async function sendPhoto(
+  chatId: number | string,
+  photo: string,
+  caption?: string,
+) {
+  const res = await fetch(`${getBaseUrl()}/sendPhoto`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      photo,
+      ...(caption ? { caption, parse_mode: "HTML" } : {}),
+    }),
+  });
+  return res.json();
+}
+
+/**
+ * إرسال مجموعة صور كألبوم (2-10 صور)
+ * caption يُضاف على الصورة الأولى فقط
+ */
+export async function sendMediaGroup(
+  chatId: number | string,
+  photoUrls: string[],
+  caption?: string,
+) {
+  const batch = photoUrls.slice(0, 10);
+  const media = batch.map((url, i) => ({
+    type: "photo",
+    media: url,
+    ...(i === 0 && caption ? { caption, parse_mode: "HTML" } : {}),
+  }));
+  const res = await fetch(`${getBaseUrl()}/sendMediaGroup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, media }),
+  });
+  return res.json();
+}
+
 export async function sendChatAction(chatId: number | string, action = "typing") {
   await fetch(`${getBaseUrl()}/sendChatAction`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ chat_id: chatId, action }),
   });
+}
+
+/**
+ * إرسال رسالة صوتية عبر تيليجرام
+ * voice: رابط عام أو file_id
+ */
+export async function sendVoice(
+  chatId: number | string,
+  voice: string,
+  caption?: string,
+) {
+  const res = await fetch(`${getBaseUrl()}/sendVoice`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      voice,
+      ...(caption ? { caption, parse_mode: "HTML" } : {}),
+    }),
+  });
+  return res.json();
+}
+
+/**
+ * إعادة توجيه رسالة صوتية مُستلَمة من مستخدم آخر
+ * file_id: معرّف الملف من Telegram
+ */
+export async function forwardVoiceToChat(
+  chatId: number | string,
+  fileId: string,
+  caption?: string,
+) {
+  return sendVoice(chatId, fileId, caption);
 }
 
 export function escapeHtml(text: string) {

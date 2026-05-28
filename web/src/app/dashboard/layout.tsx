@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
-import { Bell, CarFront, LogOut, UserCircle2 } from "lucide-react";
+import { Suspense } from "react";
+import { Bell } from "lucide-react";
 
 import { signOutAction } from "@/app/dashboard/actions";
 import { ActionFeedbackModal } from "@/components/action-feedback-modal";
 import { AgendaCenterClient } from "@/components/agenda-center-client";
-import { NavLink } from "@/components/nav-link";
 import { SetupNotice } from "@/components/setup-notice";
+import { SidebarNav } from "@/components/sidebar-nav";
 import {
   getAgendaOverview,
   getCustomersDirectory,
@@ -15,17 +16,6 @@ import {
 } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
 import { getRoleCapabilities } from "@/lib/roles";
-
-const navigation = [
-  { href: "/dashboard/customers/new", label: "إدخال عميل جديد", icon: "new-customer" as const },
-  { href: "/dashboard/customers", label: "تقرير عملائي", icon: "customers-report" as const },
-  { href: "/dashboard/search", label: "بحث المعرض", icon: "search" as const },
-  { href: "/dashboard/inventory", label: "المخزون", icon: "inventory" as const },
-  { href: "/dashboard/notifications", label: "التنبيهات", icon: "notifications" as const },
-  { href: "/dashboard", label: "الإحصائيات", icon: "stats" as const, managerOnly: true },
-  { href: "/dashboard/management", label: "تقرير الإدارة", icon: "management" as const, managerOnly: true },
-  { href: "/dashboard/staff", label: "الموظفين", icon: "staff" as const, managerOnly: true },
-];
 
 export default async function DashboardLayout({
   children,
@@ -70,43 +60,21 @@ export default async function DashboardLayout({
     pendingEvaluation.length > 0;
 
   return (
-    <div>
-      <nav className="legacy-navbar">
-        <div className="legacy-container">
-          <div className="legacy-navbar-row">
-            <div className="legacy-brand">
-              <CarFront className="h-5 w-5 text-sky-400" />
-              أوتو سيستم
-              <span className="legacy-role-badge">{profile?.role ?? "لوحة التشغيل"}</span>
-            </div>
+    <div className="app-layout">
+      <SidebarNav
+        userName={profile?.full_name ?? session?.user.email ?? "وضع الإعداد"}
+        userRole={profile?.role ?? "لوحة التشغيل"}
+        isManager={capabilities.isManager}
+        isGeneralManager={capabilities.isGeneralManager}
+        unreadCount={unreadCount}
+        signOutAction={signOutAction}
+      />
 
-            <div className="legacy-nav">
-              {navigation
-                .filter((item) => !item.managerOnly || capabilities.isManager)
-                .map((item) => (
-                  <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} />
-                ))}
-            </div>
-
-            <div className="legacy-userbar">
-              <span className="legacy-user-pill">
-                <UserCircle2 className="me-1 inline h-4 w-4 text-sky-300" />
-                {profile?.full_name ?? session?.user.email ?? "وضع الإعداد"}
-              </span>
-              <form action={signOutAction}>
-                <button type="submit" className="legacy-logout-btn">
-                  <LogOut className="me-1 inline h-4 w-4" />
-                  تسجيل الخروج
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      <main className="legacy-main">
-        <div className="legacy-container">
-          <ActionFeedbackModal />
+      <main className="app-main">
+        <div className="app-content">
+          <Suspense fallback={null}>
+            <ActionFeedbackModal />
+          </Suspense>
           {!envReady ? <SetupNotice /> : null}
           {envReady && session && !profile ? (
             <div className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-bold text-rose-800">

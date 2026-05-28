@@ -1,20 +1,28 @@
-import { Send, Settings, UsersRound } from "lucide-react";
+import { redirect } from "next/navigation";
+import { Send, UsersRound } from "lucide-react";
 
 import {
-  dispatchStaffInstructionAction,
-  inviteStaffMemberAction,
   sendQuickReminderAction,
-  sendStaffPasswordRecoveryAction,
   updateTelegramChatIdAction,
 } from "@/app/dashboard/actions";
-import { StaffAdminForm } from "@/components/staff-admin-form";
+import { StaffActionsForm } from "@/components/staff-actions-form";
 import { getCustomerFormOptions, getStaffOverview } from "@/lib/data";
+import { getRoleCapabilities } from "@/lib/roles";
+import { createClient } from "@/lib/supabase/server";
 
 type StaffPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
 export default async function StaffPage({ searchParams }: StaffPageProps) {
+  // ── حماية الصفحة: المديرون فقط ──────────────────────────────────────────
+  const supabase = await createClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) redirect("/login");
+  const { data: profile } = await supabase
+    .from("app_users").select("role").eq("auth_user_id", session.user.id).maybeSingle();
+  if (!getRoleCapabilities(profile?.role).isManager) redirect("/dashboard/unauthorized");
+
   const [staff, options] = await Promise.all([getStaffOverview(), getCustomerFormOptions()]);
   const params = (await searchParams) ?? {};
   const notice = typeof params.staff_notice === "string" ? decodeURIComponent(params.staff_notice) : null;
@@ -30,65 +38,11 @@ export default async function StaffPage({ searchParams }: StaffPageProps) {
       {notice ? <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-emerald-800">{notice}</div> : null}
       {error ? <div className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-rose-800">{error}</div> : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <form action={inviteStaffMemberAction} className="legacy-card border-t-4 border-sky-500">
-          <h5 className="mb-4 text-xl font-bold text-sky-700">تعيين موظف جديد + إرسال رابط التفعيل</h5>
-          <div className="grid gap-3">
-            <input className="legacy-input" name="full_name" placeholder="الاسم الكامل" required />
-            <input className="legacy-input" name="email" type="email" placeholder="البريد الإلكتروني" required />
-            <input className="legacy-input" name="phone" placeholder="الهاتف (اختياري)" />
-            <select className="legacy-select" name="role" required defaultValue="">
-              <option value="" disabled>
-                اختر الدور
-              </option>
-              <option value="موظف">موظف</option>
-              <option value="مدير معرض">مدير معرض</option>
-              <option value="المدير العام">المدير العام</option>
-            </select>
-            <select className="legacy-select" name="branch_id" defaultValue="">
-              <option value="">بدون معرض</option>
-              {options.branches.map((branch) => (
-                <option key={branch.id} value={branch.id}>
-                  {branch.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button className="legacy-btn legacy-btn-info mt-4 w-full" type="submit">
-            إنشاء الحساب وإرسال رابط التفعيل
-          </button>
-        </form>
-
-        <form action={sendStaffPasswordRecoveryAction} className="legacy-card border-t-4 border-amber-500">
-          <h5 className="mb-4 text-xl font-bold text-amber-700">إرسال رابط تغيير كلمة المرور لموظف</h5>
-          <div className="grid gap-3">
-            <input className="legacy-input" name="email" type="email" placeholder="بريد الموظف الإلكتروني" required />
-          </div>
-          <button className="legacy-btn legacy-btn-warning mt-4 w-full" type="submit">
-            إرسال رابط تغيير كلمة المرور
-          </button>
-        </form>
-      </div>
-
-      <form action={dispatchStaffInstructionAction} className="legacy-card mx-auto w-full border-t-4 border-red-500" style={{ maxWidth: "800px" }}>
-        <h5 className="mb-4 text-xl font-bold text-red-600">
-          <Settings className="me-2 inline h-5 w-5" />
-          الإجراءات الإدارية والتوجيهات
-        </h5>
-
-        <StaffAdminForm
-          staff={staff}
-          branches={options.branches}
-          isGeneralManager={options.capabilities.isGeneralManager}
-        />
-
-        <input type="hidden" name="recipient_mode" value="single" />
-        <textarea name="message" required className="legacy-textarea mb-4" rows={3} placeholder="اكتب التوجيه هنا ليصل كتنبيه داخلي..." />
-
-        <button className="legacy-btn legacy-btn-danger w-full" type="submit">
-          تنفيذ فورًا
-        </button>
-      </form>
+      <StaffActionsForm
+        staff={staff}
+        branches={options.branches}
+        isGeneralManager={options.capabilities.isGeneralManager}
+      />
 
       <h5 className="mt-2 text-xl font-bold text-sky-700">أداء الموظفين وإحصائياتهم</h5>
 

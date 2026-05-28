@@ -1,8 +1,11 @@
 import Link from "next/link";
-import { Bell, Eye, Fuel, GaugeCircle, Search } from "lucide-react";
+import { Bell, Eye, Fuel, GaugeCircle, Settings2 } from "lucide-react";
 
+import { CarGalleryViewer } from "@/components/car-gallery-viewer";
 import { CustomerModalShell } from "@/components/customer-modal-shell";
-import { getInventoryDirectory } from "@/lib/data";
+import { InventoryFilterBar } from "@/components/inventory-filter-bar";
+import { InventoryImportBtn } from "@/components/inventory-import-btn";
+import { getInventoryCarAttachments, getInventoryDirectory, getInventoryFilterContext } from "@/lib/data";
 import { formatCurrency } from "@/lib/format";
 
 type InventoryFilters = {
@@ -11,17 +14,81 @@ type InventoryFilters = {
   owner?: string;
   deal?: string;
   status?: string;
+  gearbox?: string;
+  fuel?: string;
   car?: string;
   cross?: string;
 };
 
 function normalize(value: string | null | undefined) {
-  return (value ?? "").trim();
+  return (value ?? "").trim().toLowerCase();
 }
 
-function isSoldOrWithdrawnStatus(value: string | null | undefined) {
+
+function parseBranchFilter(value: string | undefined) {
+  const raw = (value ?? "").trim();
+  if (!raw) return { mode: "default" as const, branchName: null as string | null };
+  if (raw === "all") return { mode: "all" as const, branchName: null as string | null };
+  if (raw === "self") return { mode: "self" as const, branchName: null as string | null };
+  if (raw.startsWith("cross:")) return { mode: "cross" as const, branchName: raw.slice(6) || null };
+  if (raw.startsWith("branch:")) return { mode: "branch" as const, branchName: raw.slice(7) || null };
+  return { mode: "legacy-branch" as const, branchName: raw };
+}
+
+/**
+ * تطبيع النص العربي — يُزيل التشكيل وينوّع الهمزات والحروف
+ * حتى تعمل مطابقة "احمر" مع "أحمر"، و"اسود" مع "أسود" ... إلخ
+ */
+function normalizeArabic(text: string): string {
+  return text
+    .replace(/[ً-ٟؐ-ؚۖ-ۭ]/g, "") // إزالة التشكيل
+    .replace(/[أإآٱ]/g, "ا")   // توحيد الألف بكل أشكالها
+    .replace(/ة/g, "ه")         // تاء مربوطة → هاء
+    .replace(/ى/g, "ي")         // ألف مقصورة → ياء
+    .toLowerCase()
+    .trim();
+}
+
+/** خريطة الألوان — المفاتيح بعد تطبيع النص العربي */
+const COLOR_MAP: Array<[string[], string, string]> = [
+  // [keywords_normalized, background, border]
+  [["ابيض", "بيضاء", "white"],              "#ffffff", "#d1d5db"],
+  [["اسود", "سوداء", "black"],              "#1c1917", "#1c1917"],
+  [["رمادي", "رصاصي", "grey", "gray"],      "#9ca3af", "#9ca3af"],
+  [["فضي", "سيلفر", "silver"],              "#cbd5e1", "#94a3b8"],
+  [["احمر", "حمراء", "red"],               "#ef4444", "#ef4444"],
+  [["كحلي", "نيلي", "navy"],               "#1e3a8a", "#1e3a8a"],
+  [["ازرق", "زرقاء", "blue"],              "#3b82f6", "#3b82f6"],
+  [["سماوي", "تركواز", "تيفاني", "tiffany", "turquoise"], "#2dd4bf", "#2dd4bf"],
+  [["اخضر", "خضراء", "green"],             "#22c55e", "#22c55e"],
+  [["زيتي", "olive"],                       "#84cc16", "#84cc16"],
+  [["اصفر", "صفراء", "yellow"],            "#eab308", "#eab308"],
+  [["ذهبي", "ذهبيه", "gold"],              "#f59e0b", "#d97706"],
+  [["شمبانيا", "شامبين", "شمباني", "champagne"], "#f3e0b5", "#d4b896"],
+  [["بيج", "كريمي", "beige", "cream"],     "#e8dcc8", "#c9b99a"],
+  [["برتقالي", "برتقاليه", "orange"],      "#f97316", "#f97316"],
+  [["بني", "بنيه", "كافيه", "brown"],      "#92400e", "#92400e"],
+  [["خمري", "بورجندي", "burgundy", "wine"],"#881337", "#881337"],
+  [["بنفسجي", "بنفسجيه", "purple"],        "#a855f7", "#a855f7"],
+  [["وردي", "ورديه", "pink"],              "#ec4899", "#ec4899"],
+];
+
+function getColorSwatch(value: string | null | undefined): { bg: string; border: string } | null {
+  if (!value) return null;
+  const norm = normalizeArabic(value);
+  for (const [keywords, bg, border] of COLOR_MAP) {
+    if (keywords.some((kw) => norm.includes(kw))) return { bg, border };
+  }
+  return null;
+}
+
+function getDealBadgeClass(value: string | null | undefined) {
   const label = normalize(value);
-  return label.includes("مباع") || label.includes("مباعة") || label.includes("مسحوب");
+  if (label.includes("استبدال")) return "inv-deal-badge inv-deal-badge--trade";
+  if (label.includes("برسم البيع")) return "inv-deal-badge inv-deal-badge--consign";
+  if (label.includes("شراء")) return "inv-deal-badge inv-deal-badge--purchase";
+  if (label.includes("حيازة")) return "inv-deal-badge inv-deal-badge--owned";
+  return "inv-deal-badge inv-deal-badge--default";
 }
 
 export default async function InventoryPage({
@@ -30,15 +97,48 @@ export default async function InventoryPage({
   searchParams: Promise<InventoryFilters>;
 }) {
   const params = await searchParams;
-  const { q, branch, owner, deal, status, car, cross } = params;
-  const includeCross = normalize(cross) === "1";
+  const { q, branch, owner, deal, status, gearbox, fuel, car, cross } = params;
+  const ctx = await getInventoryFilterContext();
+  const branchFilter = parseBranchFilter(branch);
+  const includeCross =
+    ctx.isMuallimBranch && !ctx.isGeneralManager
+      ? branchFilter.mode === "all" || branchFilter.mode === "cross" || normalize(cross) === "1"
+      : normalize(cross) === "1";
   const inventory = await getInventoryDirectory(120, { includeCrossBranchForMuallim: includeCross });
 
-  const owners = [...new Set(inventory.map((i) => normalize(i.owner_name)).filter(Boolean))];
-  const branches = [...new Set(inventory.map((i) => normalize(i.branch_name)).filter(Boolean))];
+  // أسماء المعارض لاستبعادها من قائمة الملاك
+  const branchNamesSet = new Set(ctx.branches.map((b) => normalize(b)));
+
+  // أصحاب السيارات برسم البيع — عملاء فقط (بدون المعارض)
+  const consignmentOwners = [
+    ...new Set(
+      inventory
+        .filter((i) => normalize(i.deal_type).includes("برسم البيع"))
+        .map((i) => normalize(i.owner_name))
+        .filter((name) => Boolean(name) && !branchNamesSet.has(name)),
+    ),
+  ].sort((a, b) => a.localeCompare(b, "ar"));
+
+  const branches = [
+    ...new Set(
+      (ctx.branches.length > 0
+        ? ctx.branches
+        : inventory.map((i) => normalize(i.branch_name))
+      ).filter(Boolean),
+    ),
+  ];
   const deals = [...new Set(inventory.map((i) => normalize(i.deal_type)).filter(Boolean))];
   const statuses = [...new Set(inventory.map((i) => normalize(i.availability_status)).filter(Boolean))];
-  const query = normalize(q).toLowerCase();
+
+  // خيارات القير والوقود من البيانات الحية
+  const gearboxOptions = [...new Set(inventory.map((i) => normalize(i.gearbox)).filter(Boolean))].sort(
+    (a, b) => a.localeCompare(b, "ar"),
+  );
+  const fuelTypes = [...new Set(inventory.map((i) => normalize(i.fuel_type)).filter(Boolean))].sort(
+    (a, b) => a.localeCompare(b, "ar"),
+  );
+
+  const query = normalize(q);
   const selectedCarId = normalize(car);
 
   const filteredInventory = inventory.filter((item) => {
@@ -46,175 +146,238 @@ export default async function InventoryPage({
     const itemOwner = normalize(item.owner_name);
     const itemDeal = normalize(item.deal_type);
     const itemStatus = normalize(item.availability_status);
+    const itemGearbox = normalize(item.gearbox);
+    const itemFuel = normalize(item.fuel_type);
 
-    if (branch && branch !== "all" && itemBranch !== branch) return false;
-    if (owner && owner !== "all" && itemOwner !== owner) return false;
-    if (deal && deal !== "all" && itemDeal !== deal) return false;
-    if (status && status !== "all") {
-      if (itemStatus !== status) return false;
-    } else if (isSoldOrWithdrawnStatus(itemStatus)) {
-      return false;
+    // ── فلتر المعرض ──────────────────────────────────────────────────────────
+    if (ctx.isGeneralManager) {
+      if (branchFilter.mode === "branch" && branchFilter.branchName && itemBranch !== branchFilter.branchName)
+        return false;
+      if (branchFilter.mode === "legacy-branch" && branchFilter.branchName && itemBranch !== branchFilter.branchName)
+        return false;
+    } else if (ctx.isMuallimBranch) {
+      if (branchFilter.mode === "self") {
+        if (itemBranch !== normalize(ctx.branchName)) return false;
+      } else if (branchFilter.mode === "cross") {
+        if (!branchFilter.branchName || itemBranch !== branchFilter.branchName) return false;
+        if (normalize(item.deal_type) !== "برسم البيع") return false;
+      } else if (branchFilter.mode === "legacy-branch") {
+        if (branchFilter.branchName && itemBranch !== branchFilter.branchName) return false;
+      } else if (branchFilter.mode === "default") {
+        if (itemBranch !== normalize(ctx.branchName)) return false;
+      }
+    } else {
+      if (itemBranch !== normalize(ctx.branchName)) return false;
     }
 
+    // ── الفلاتر المنسدلة ──────────────────────────────────────────────────────
+    if (owner && owner !== "all" && itemOwner !== owner) return false;
+    if (deal && deal !== "all" && itemDeal !== deal) return false;
+    if (gearbox && gearbox !== "all" && itemGearbox !== gearbox) return false;
+    if (fuel && fuel !== "all" && itemFuel !== fuel) return false;
+    if (status && status !== "all") {
+      if (itemStatus !== status) return false;
+    }
+
+    // ── البحث النصي ──────────────────────────────────────────────────────────
     if (!query) return true;
-    return [item.model, item.chassis_no ?? "", item.owner_name ?? "", item.color ?? "", item.branch_name ?? ""]
+    return [
+      item.model,
+      item.chassis_no ?? "",
+      item.owner_name ?? "",
+      item.color ?? "",
+      item.branch_name ?? "",
+      item.gearbox ?? "",
+      item.fuel_type ?? "",
+    ]
       .join(" ")
       .toLowerCase()
       .includes(query);
   });
 
-  const selectedCar = selectedCarId ? filteredInventory.find((item) => item.id === selectedCarId) ?? null : null;
+  const selectedCar = selectedCarId
+    ? (filteredInventory.find((item) => item.id === selectedCarId) ?? null)
+    : null;
+
+  // جلب صور السيارة المختارة (من inventory.photo_urls + customer_attachments)
+  const selectedCarAttachments = selectedCar
+    ? await getInventoryCarAttachments(
+        selectedCar.id,
+        selectedCar.source_customer_id,
+        selectedCar.photo_urls ?? [],
+      )
+    : [];
+  const selectedCarPhotos = selectedCarAttachments.filter((item) => item.isImage).map((item) => item.url);
 
   const currentParams = new URLSearchParams();
   if (q) currentParams.set("q", q);
   if (branch) currentParams.set("branch", branch);
   if (owner) currentParams.set("owner", owner);
   if (deal) currentParams.set("deal", deal);
+  if (gearbox) currentParams.set("gearbox", gearbox);
+  if (fuel) currentParams.set("fuel", fuel);
   if (status) currentParams.set("status", status);
-  if (includeCross) currentParams.set("cross", "1");
+  if (includeCross && !(ctx.isMuallimBranch && !ctx.isGeneralManager))
+    currentParams.set("cross", "1");
   const baseQuery = currentParams.toString();
   const closeHref = baseQuery ? `/dashboard/inventory?${baseQuery}` : "/dashboard/inventory";
 
-  const getDealClassName = (value: string | null | undefined) => {
-    const label = normalize(value);
-    if (label.includes("استبدال")) return "bg-cyan-500 text-white";
-    if (label.includes("برسم البيع")) return "bg-amber-400 text-slate-900";
-    if (label.includes("شراء")) return "bg-emerald-500 text-white";
-    return "bg-slate-700 text-white";
-  };
-
   return (
     <div className="legacy-grid gap-6">
-      <form className="legacy-card space-y-3" method="get">
-        <div className="relative">
-          <Search className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-          <input
-            name="q"
-            defaultValue={q ?? ""}
-            className="legacy-input pe-12"
-            placeholder="بحث سريع: ابحث برقم الشاصي، الموديل، المالك أو المواصفات..."
+      {/* ── شريط الفلاتر الذكي ── */}
+      <div className="legacy-card">
+        <div className="flex items-center justify-end mb-3">
+          <InventoryImportBtn
+            isGeneralManager={ctx.isGeneralManager}
+            branchId={ctx.branchId}
+            branchName={ctx.branchName}
+            branchObjects={ctx.branchObjects}
           />
         </div>
+        <InventoryFilterBar
+          branches={branches}
+          consignmentOwners={consignmentOwners}
+          deals={deals}
+          statuses={statuses}
+          gearboxOptions={gearboxOptions}
+          fuelTypes={fuelTypes}
+          isMuallimBranch={ctx.isMuallimBranch}
+          isGeneralManager={ctx.isGeneralManager}
+          branchName={ctx.branchName}
+          totalCount={filteredInventory.length}
+        />
+      </div>
 
-        <div className="grid gap-2 rounded-[14px] border border-slate-200 bg-slate-50 p-2 md:grid-cols-4">
-          <select className="legacy-select text-blue-700" name="branch" defaultValue={branch ?? "all"}>
-            <option value="all">كل المعارض</option>
-            {branches.map((branchName) => (
-              <option key={branchName} value={branchName}>
-                {branchName}
-              </option>
-            ))}
-          </select>
-
-          <select className="legacy-select text-slate-700" name="owner" defaultValue={owner ?? "all"}>
-            <option value="all">كل الملاك (خارجي)</option>
-            {owners.map((ownerName) => (
-              <option key={ownerName} value={ownerName}>
-                {ownerName}
-              </option>
-            ))}
-          </select>
-
-          <select className="legacy-select text-emerald-700" name="deal" defaultValue={deal ?? "all"}>
-            <option value="all">الصفقات</option>
-            {deals.map((dealType) => (
-              <option key={dealType} value={dealType}>
-                {dealType}
-              </option>
-            ))}
-          </select>
-
-          <select className="legacy-select text-sky-700" name="status" defaultValue={status ?? "all"}>
-            <option value="all">حالة السيارة</option>
-            {statuses.map((statusValue) => (
-              <option key={statusValue} value={statusValue}>
-                {statusValue}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-bold text-sky-800">
-            <input type="checkbox" name="cross" value="1" defaultChecked={includeCross} />
-            خيار معرض المعلم: عرض سيارات المعارض الأخرى (مستعملة) كبند برسم البيع
-          </label>
-          <button className="legacy-btn legacy-btn-dark px-8" type="submit">
-            تحديث
-          </button>
-          <a className="legacy-btn legacy-btn-light" href="/dashboard/inventory">
-            مسح
-          </a>
-        </div>
-      </form>
-
-      <div className="overflow-x-auto">
+      {/* ── جدول المخزون ── */}
+      <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
         <table className="premium-table">
           <thead className="legacy-standard-head">
             <tr>
-              <th>المعرض / المالك</th>
-              <th>النوع والموديل</th>
-              <th>سعر البيع</th>
-              <th>الحالة / الصفقة</th>
-              <th>اللون والقير</th>
-              <th>العداد والوقود</th>
-              <th>إجراءات</th>
+              <th style={{ width: "175px" }}>المالك / المعرض</th>
+              <th style={{ width: "165px" }}>نوع السيارة</th>
+              <th style={{ width: "115px" }}>سعر البيع</th>
+              <th style={{ width: "145px" }}>الصفقة والحالة</th>
+              <th style={{ width: "105px" }}>اللون والعداد</th>
+              <th style={{ width: "120px" }}>القير والوقود</th>
+              <th style={{ width: "85px" }}>إجراءات</th>
             </tr>
           </thead>
           <tbody>
             {filteredInventory.length > 0 ? (
               filteredInventory.map((item) => (
                 <tr key={item.id}>
+                  {/* المالك / المعرض */}
                   <td>
-                    <div className="font-bold text-slate-900">{item.owner_name ?? "بدون مالك"}</div>
-                    <div className="mt-1 text-sm text-slate-500">{item.branch_name ?? "بدون معرض"}</div>
-                    <div className="mt-2 inline-flex rounded-lg bg-slate-500 px-3 py-1 text-xs font-bold text-white">
-                      {item.chassis_no ? `شاصي: ${item.chassis_no}` : "شاصي: بدون شاصي"}
+                    <div className="font-bold text-slate-900 leading-tight">
+                      {item.owner_name ?? "—"}
                     </div>
+                    {item.chassis_no ? (
+                      <div className="mt-1.5 font-mono text-xs text-slate-400 tracking-wide">
+                        {item.chassis_no}
+                      </div>
+                    ) : (
+                      <div className="mt-1.5 text-xs text-slate-300">بدون شاصي</div>
+                    )}
                   </td>
 
+                  {/* نوع السيارة */}
                   <td>
-                    <div className="font-extrabold text-blue-700">{item.model || "—"}</div>
-                    <div className="mt-2 inline-flex items-center rounded-lg bg-cyan-500 px-3 py-1 text-base font-bold text-slate-900">
-                      موديل:{item.production_year ?? "-"}
+                    <div className="font-bold text-blue-700 leading-tight">
+                      {item.model || "—"}
                     </div>
+                    {item.production_year ? (
+                      <div className="mt-1 text-xs text-slate-500">{item.production_year}</div>
+                    ) : null}
+                    {item.condition_label ? (
+                      <div className="mt-1.5 inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                        {item.condition_label}
+                      </div>
+                    ) : null}
                   </td>
 
-                  <td className="font-extrabold text-emerald-700">{formatCurrency(item.price)}</td>
-
+                  {/* سعر البيع */}
                   <td>
-                    <div className="mb-2 inline-flex min-w-[120px] items-center justify-center rounded-lg bg-slate-100 px-3 py-1 font-bold text-slate-900">
-                      {item.condition_label ?? "مستعملة"}
-                    </div>
-                    <div className={`inline-flex min-w-[120px] items-center justify-center rounded-lg px-3 py-1 font-bold ${getDealClassName(item.deal_type)}`}>
-                      {item.deal_type ?? "—"}
-                    </div>
+                    <span className="font-extrabold text-emerald-700">
+                      {formatCurrency(item.price)}
+                    </span>
                   </td>
 
+                  {/* الصفقة والحالة */}
                   <td>
-                    <div className="mb-2 inline-flex rounded-lg bg-slate-500 px-3 py-1 text-sm font-bold text-white">{item.color ?? "غير محدد"}</div>
-                    <div className="inline-flex rounded-lg bg-slate-900 px-3 py-1 text-sm font-bold text-white">أوتوماتيك</div>
+                    {item.deal_type ? (
+                      <div className={getDealBadgeClass(item.deal_type)}>{item.deal_type}</div>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
+                    {item.availability_status ? (
+                      <div className="mt-1.5 text-xs text-slate-500">{item.availability_status}</div>
+                    ) : null}
                   </td>
 
+                  {/* اللون والعداد */}
                   <td>
-                    <div className="mb-2 inline-flex items-center gap-1 text-sm font-bold text-slate-700">
-                      <GaugeCircle className="h-4 w-4" />
-                      {item.condition_label ?? "-"}
-                    </div>
-                    <div className="inline-flex items-center gap-1 rounded-lg bg-amber-400 px-3 py-1 text-sm font-extrabold text-slate-900">
-                      <Fuel className="h-4 w-4" />
-                      بنزين
-                    </div>
+                    {item.color ? (() => {
+                      const swatch = getColorSwatch(item.color);
+                      return (
+                        <div className="flex items-center gap-1.5">
+                          {swatch ? (
+                            <span
+                              className="inv-color-dot"
+                              style={{ background: swatch.bg, borderColor: swatch.border }}
+                              title={item.color}
+                            />
+                          ) : null}
+                          <span className="text-sm font-semibold text-slate-700">{item.color}</span>
+                        </div>
+                      );
+                    })() : (
+                      <div className="text-xs text-slate-400">—</div>
+                    )}
+                    {typeof item.mileage === "number" ? (
+                      <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                        <GaugeCircle className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+                        {item.mileage.toLocaleString("en-US")} كم
+                      </div>
+                    ) : null}
                   </td>
 
+                  {/* القير والوقود */}
                   <td>
-                    <div className="legacy-table-actions">
-                      <button type="button" className="legacy-table-icon-btn">
-                        <Bell className="h-4 w-4" />
-                      </button>
+                    {item.gearbox ? (
+                      <div className="flex items-center gap-1 text-sm font-semibold text-slate-700">
+                        <Settings2 className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+                        {item.gearbox}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-slate-400">—</div>
+                    )}
+                    {item.fuel_type ? (
+                      <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                        <Fuel className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+                        {item.fuel_type}
+                      </div>
+                    ) : null}
+                  </td>
+
+                  {/* الإجراءات */}
+                  <td>
+                    <div className="flex items-center gap-1.5">
+                      {item.source_customer_id ? (
+                        <Link
+                          href={`/dashboard/customers?customer=${item.source_customer_id}&mode=view`}
+                          className="inv-action-btn inv-action-btn--bell"
+                          title="فتح ملف العميل المرتبط"
+                        >
+                          <Bell className="h-4 w-4" />
+                        </Link>
+                      ) : null}
                       <Link
-                        href={baseQuery ? `/dashboard/inventory?${baseQuery}&car=${item.id}` : `/dashboard/inventory?car=${item.id}`}
-                        className="legacy-table-icon-btn"
+                        href={
+                          baseQuery
+                            ? `/dashboard/inventory?${baseQuery}&car=${item.id}`
+                            : `/dashboard/inventory?car=${item.id}`
+                        }
+                        className="inv-action-btn inv-action-btn--eye"
                         title="عرض بطاقة السيارة"
                       >
                         <Eye className="h-4 w-4" />
@@ -234,30 +397,142 @@ export default async function InventoryPage({
         </table>
       </div>
 
+      {/* ── درج تفاصيل السيارة ── */}
       {selectedCar ? (
-        <CustomerModalShell closeHref={closeHref} title="بطاقة السيارة">
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="legacy-input bg-slate-50">{selectedCar.model || "—"}</div>
-            <div className="legacy-input bg-slate-50">{selectedCar.production_year ?? "—"}</div>
-            <div className="legacy-input bg-slate-50">{selectedCar.chassis_no ?? "—"}</div>
-            <div className="legacy-input bg-slate-50">{selectedCar.owner_name ?? "—"}</div>
-            <div className="legacy-input bg-slate-50">{selectedCar.branch_name ?? "—"}</div>
-            <div className="legacy-input bg-slate-50">{selectedCar.deal_type ?? "—"}</div>
-            <div className="legacy-input bg-slate-50">{selectedCar.condition_label ?? "—"}</div>
-            <div className="legacy-input bg-slate-50">{selectedCar.availability_status ?? "—"}</div>
-            <div className="legacy-input bg-slate-50">{formatCurrency(selectedCar.price)}</div>
-            <div className="legacy-input bg-slate-50">{selectedCar.color ?? "—"}</div>
-            <div className="legacy-input bg-slate-50 md:col-span-2">
-              العداد: {typeof selectedCar.mileage === "number" ? selectedCar.mileage.toLocaleString("en-US") : "—"}
+        <CustomerModalShell closeHref={closeHref} title="بطاقة السيارة الكاملة">
+          <div className="car-card">
+
+            {/* ══ هيدر السيارة ══ */}
+            <div className="car-card__header">
+              <div className="car-card__header-top">
+                <div className="car-card__model">{selectedCar.model}</div>
+                <div className="car-card__price">{formatCurrency(selectedCar.price)}</div>
+              </div>
+              <div className="car-card__badges">
+                {selectedCar.production_year ? (
+                  <span className="car-card__badge car-card__badge--year">
+                    📅 {selectedCar.production_year}
+                  </span>
+                ) : null}
+                {selectedCar.condition_label ? (
+                  <span className="car-card__badge car-card__badge--condition">
+                    {selectedCar.condition_label}
+                  </span>
+                ) : null}
+                {selectedCar.deal_type ? (
+                  <span className={getDealBadgeClass(selectedCar.deal_type)}>
+                    {selectedCar.deal_type}
+                  </span>
+                ) : null}
+                {selectedCar.availability_status ? (
+                  <span className="car-card__badge car-card__badge--status">
+                    {selectedCar.availability_status}
+                  </span>
+                ) : null}
+              </div>
             </div>
-            <div className="legacy-subpanel md:col-span-2">
-              <div className="legacy-label mb-2">المواصفات</div>
-              <div className="legacy-input min-h-14 bg-white">{selectedCar.specs ?? "لا توجد مواصفات"}</div>
+
+            {/* ══ شبكة البيانات الأساسية ══ */}
+            <div className="car-card__section">
+              <div className="car-card__section-title">
+                <span>📋</span> البيانات الأساسية
+              </div>
+              <div className="car-card__grid">
+
+                <div className="car-card__field">
+                  <div className="car-card__field-label">👤 المالك</div>
+                  <div className="car-card__field-value">{selectedCar.owner_name ?? "—"}</div>
+                </div>
+
+                <div className="car-card__field">
+                  <div className="car-card__field-label">🏢 المالك / المعرض</div>
+                  <div className="car-card__field-value">{selectedCar.owner_name ?? "—"}</div>
+                </div>
+
+                <div className="car-card__field car-card__field--full">
+                  <div className="car-card__field-label">🔢 رقم الشاصي</div>
+                  <div className="car-card__field-value car-card__field-value--mono">
+                    {selectedCar.chassis_no ?? "—"}
+                  </div>
+                </div>
+
+                <div className="car-card__field">
+                  <div className="car-card__field-label">🎨 اللون</div>
+                  <div className="car-card__field-value">
+                    {selectedCar.color ? (() => {
+                      const swatch = getColorSwatch(selectedCar.color);
+                      return (
+                        <span className="flex items-center gap-2">
+                          {swatch ? (
+                            <span
+                              className="inv-color-dot inv-color-dot--lg"
+                              style={{ background: swatch.bg, borderColor: swatch.border }}
+                            />
+                          ) : null}
+                          {selectedCar.color}
+                        </span>
+                      );
+                    })() : "—"}
+                  </div>
+                </div>
+
+                <div className="car-card__field">
+                  <div className="car-card__field-label">⚙️ ناقل الحركة</div>
+                  <div className="car-card__field-value">{selectedCar.gearbox ?? "—"}</div>
+                </div>
+
+                <div className="car-card__field">
+                  <div className="car-card__field-label">⛽ نوع الوقود</div>
+                  <div className="car-card__field-value">{selectedCar.fuel_type ?? "—"}</div>
+                </div>
+
+                <div className="car-card__field">
+                  <div className="car-card__field-label">🛣 العداد</div>
+                  <div className="car-card__field-value">
+                    {typeof selectedCar.mileage === "number"
+                      ? `${selectedCar.mileage.toLocaleString("en-US")} كم`
+                      : "—"}
+                  </div>
+                </div>
+
+              </div>
             </div>
-            <div className="legacy-subpanel md:col-span-2">
-              <div className="legacy-label mb-2">الفحص</div>
-              <div className="legacy-input min-h-14 bg-white">{selectedCar.inspection ?? "لا توجد بيانات فحص"}</div>
+
+            {/* ══ المواصفات ══ */}
+            <div className="car-card__section">
+              <div className="car-card__section-title car-card__section-title--amber">
+                <span>📝</span> المواصفات
+              </div>
+              {selectedCar.specs ? (
+                <p className="car-card__text-body">{selectedCar.specs}</p>
+              ) : (
+                <p className="car-card__text-empty">لا توجد مواصفات مسجّلة لهذه السيارة.</p>
+              )}
             </div>
+
+            {/* ══ تقرير الفحص ══ */}
+            <div className="car-card__section car-card__section--inspect">
+              <div className="car-card__section-title car-card__section-title--teal">
+                <span>🔍</span> تقرير الفحص
+              </div>
+              {selectedCar.inspection ? (
+                <p className="car-card__text-body">{selectedCar.inspection}</p>
+              ) : (
+                <p className="car-card__text-empty">لا يوجد تقرير فحص مسجّل.</p>
+              )}
+            </div>
+
+            {/* ══ مجلد الصور — يظهر دائماً ══ */}
+            <div className="car-card__section car-card__section--gallery">
+              <CarGalleryViewer
+                photos={selectedCarPhotos}
+                files={selectedCarAttachments
+                  .filter((item) => !item.isImage)
+                  .map((item) => ({ url: item.url, fileName: item.fileName }))}
+                carLabel={selectedCar.model}
+              />
+            </div>
+
           </div>
         </CustomerModalShell>
       ) : null}

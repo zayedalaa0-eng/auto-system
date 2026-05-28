@@ -1,0 +1,9 @@
+{
+  "name": "auto-system-root",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix web run build",
+    "dev": "npm --prefix web run dev",
+    "start": "npm --prefix web run start"
+  }
+}

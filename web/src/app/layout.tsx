@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
-import { Geist_Mono, Noto_Naskh_Arabic } from "next/font/google";
+import { Geist_Mono, Tajawal } from "next/font/google";
 
 import "./globals.css";
 
-const notoNaskhArabic = Noto_Naskh_Arabic({
-  variable: "--font-noto-naskh-arabic",
+const tajawal = Tajawal({
+  variable: "--font-tajawal",
   subsets: ["arabic"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500", "700", "800"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -28,7 +29,7 @@ export default function RootLayout({
     <html
       lang="ar"
       dir="rtl"
-      className={`${notoNaskhArabic.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${tajawal.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">{children}</body>
     </html>

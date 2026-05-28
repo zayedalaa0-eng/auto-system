@@ -25,12 +25,16 @@ import {
   sendMessageToStaff,
   type BotUser,
 } from "./queries";
+import { pushTelegramVoiceToManagers } from "./push";
 import { clearSession, getSession, setSession } from "./sessions";
 
 export type TelegramUpdate = {
   message?: {
     chat: { id: number };
+    from?: { first_name?: string; username?: string };
     text?: string;
+    voice?: { file_id: string; duration: number; mime_type?: string; file_size?: number };
+    audio?: { file_id: string; duration: number; title?: string; mime_type?: string };
     reply_to_message?: { text?: string };
   };
 };
@@ -53,14 +57,16 @@ function menuKeyboard(user: BotUser) {
   return mainMenuKeyboard(user.capabilities.isManager, user.capabilities.isGeneralManager);
 }
 
-// ─── Customer statuses available in wizard ──────────────────────────────────
+// ─── Customer statuses available in bot wizard (subset for quick entry) ─────
 
 const CUSTOMER_STATUSES = [
-  "عميل جديد",
-  "متابعة",
+  "جديد",
+  "قيد المتابعة",
   "حجز",
-  "بيع مكتمل",
-  "غير مهتم",
+  "تمت عملية البيع",
+  "رفض من قبل العميل",
+  "رفض من قبل المعرض",
+  "إغلاق الملف",
 ];
 
 // ─── /start & welcome ───────────────────────────────────────────────────────
@@ -565,17 +571,55 @@ async function handleMsgWrite(
   );
 }
 
+// ─── Voice message handler ────────────────────────────────────────────────────
+
+async function handleVoiceMessage(
+  chatId: number,
+  user: BotUser,
+  voice: NonNullable<NonNullable<TelegramUpdate["message"]>["voice"]>,
+) {
+  const appUrl = getAppUrl();
+  const durationSec = voice.duration;
+  const mins = Math.floor(durationSec / 60);
+  const secs = durationSec % 60;
+  const durationStr = `${mins}:${secs.toString().padStart(2, "0")}`;
+
+  // أرسل إلى المديرين (best-effort)
+  void pushTelegramVoiceToManagers({
+    branchId: user.branch_id ?? null,
+    caption:
+      `🎤 <b>رسالة صوتية من البوت</b>\n` +
+      `👤 الموظف: ${escapeHtml(user.full_name)}\n` +
+      `⏱ المدة: ${durationStr}`,
+    voiceUrl: voice.file_id,   // Telegram يقبل file_id مباشرةً
+  });
+
+  // رد على المستخدم
+  if (appUrl) {
+    return sendMessageWithWebApp(
+      chatId,
+      `✅ <b>تم استلام تسجيلك الصوتي (${durationStr})</b>\n\nتم إرساله للمدير. لإرفاقه بملف عميل افتح ملف العميل من الويب:`,
+      [{ text: "🌐 فتح النظام", url: `${appUrl}/dashboard` }],
+    );
+  }
+
+  return sendMessage(
+    chatId,
+    `✅ <b>تم استلام تسجيلك الصوتي (${durationStr})</b>\n\nتم إرساله للمدير.\nلإرفاقه بملف عميل — افتح النظام وارفع الملف من هناك.`,
+    { replyMarkup: menuKeyboard(user) },
+  );
+}
+
 // ─── Main dispatcher ─────────────────────────────────────────────────────────
 
 export async function handleTelegramUpdate(update: TelegramUpdate) {
   const message = update.message;
-  if (!message?.text) return;
+  if (!message) return;
 
   const chatId = message.chat.id;
-  const text = message.text.trim();
 
-  // ── /start (works even without linking) ──
-  if (text === "/start") {
+  // ── /start — before auth ─────────────────────────────────────────
+  if (message.text?.trim() === "/start") {
     const user = await getBotUser(String(chatId)).catch(() => null);
     return handleStart(chatId, user);
   }
@@ -594,6 +638,21 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       `⚠️ حسابك غير مرتبط بالنظام.\n\n🔑 <b>معرّفك:</b> <code>${chatId}</code>\n\nأرسل هذا الرقم لمدير النظام.`,
     );
   }
+
+  // ── Voice / Audio message ──────────────────────────────────────────
+  if (message.voice) {
+    return handleVoiceMessage(chatId, user, message.voice);
+  }
+  if (message.audio) {
+    return handleVoiceMessage(chatId, user, {
+      file_id: message.audio.file_id,
+      duration: message.audio.duration,
+      mime_type: message.audio.mime_type,
+    });
+  }
+
+  if (!message.text) return;
+  const text = message.text.trim();
 
   // ── Cancel always works ──
   if (text === BTN.CANCEL) {

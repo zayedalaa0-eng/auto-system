@@ -20,6 +20,7 @@ function ReminderButton({
   title,
   message,
   variant = "sky",
+  redirectTo = "/dashboard/agenda",
 }: {
   userId: string | null;
   branchId: string | null;
@@ -27,6 +28,7 @@ function ReminderButton({
   title: string;
   message: string;
   variant?: "sky" | "warning";
+  redirectTo?: string;
 }) {
   const className =
     variant === "warning"
@@ -40,6 +42,7 @@ function ReminderButton({
       <input type="hidden" name="recipient_label" value={label ?? ""} />
       <input type="hidden" name="title" value={title} />
       <input type="hidden" name="message" value={message} />
+      <input type="hidden" name="redirect_to" value={redirectTo} />
       <button type="submit" className={className}>
         <Send className="h-4 w-4" />
         تذكير الموظف
@@ -64,8 +67,8 @@ export default async function AgendaPage() {
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="مستحقة اليوم" value={agenda.dueToday} hint="المهام والمتابعات التي يجب فتحها اليوم." tone="amber" icon={<CalendarClock className="h-5 w-5" />} />
         <MetricCard label="متأخرة" value={agenda.overdue} hint="العناصر التي تجاوزت وقتها وتحتاج إجراء سريع." tone="rose" icon={<Bell className="h-5 w-5" />} />
+        <MetricCard label="ملفات غير مكتملة" value={agenda.incompleteCustomers.length} hint="ملفات عملاء تم حفظها بدون نوع عملية وتحتاج إكمال البيانات." tone="amber" icon={<ClipboardCheck className="h-5 w-5" />} />
         <MetricCard label="نواقص الاستبدال" value={operational.incompleteTrades.length} hint="ملفات تم الاتفاق على استبدالها وتحتاج استكمال بيانات السيارة." tone="sky" icon={<TriangleAlert className="h-5 w-5" />} />
-        <MetricCard label="تنبيهات الرخص" value={operational.licenseDue.length} hint="سيارات عميل تحتاج تحديث الرخصة أو مراجعتها قريبًا." tone="emerald" icon={<IdCard className="h-5 w-5" />} />
       </section>
 
       <section className="legacy-card">
@@ -75,6 +78,39 @@ export default async function AgendaPage() {
           licenseDue={operational.licenseDue}
         />
       </section>
+
+      {/* ── ملفات غير مكتملة ── */}
+      {agenda.incompleteCustomers.length > 0 && (
+        <section className="legacy-card">
+          <div className="legacy-card-header">
+            <h3 className="legacy-title">⚠️ ملفات عملاء غير مكتملة ({agenda.incompleteCustomers.length})</h3>
+            <ClipboardCheck className="h-5 w-5 text-amber-500" />
+          </div>
+          <p className="text-sm text-slate-500 mb-4">هذه الملفات تم حفظها بدون تحديد نوع العملية — يرجى فتحها وإكمال البيانات.</p>
+          <div className="space-y-2">
+            {agenda.incompleteCustomers.map((item) => (
+              <Link
+                key={item.id}
+                href={`/dashboard/customers?customer=${item.id}&mode=view`}
+                className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm transition hover:bg-amber-100"
+              >
+                <div className="space-y-0.5">
+                  <div className="font-semibold text-amber-900">{item.full_name}</div>
+                  <div className="text-xs text-amber-700 flex gap-3">
+                    <span>📱 {item.phone}</span>
+                    {item.staff_name && <span>👤 {item.staff_name}</span>}
+                    {item.branch_name && <span>🏢 {item.branch_name}</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-amber-600">
+                  <Eye className="h-4 w-4" />
+                  فتح وإكمال
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="legacy-grid legacy-grid-2">
         <div className="legacy-card">
@@ -176,9 +212,19 @@ export default async function AgendaPage() {
                         الرخصة: {item.trade_in_license_expiry ?? "-"} | الموظف: {item.staff_name ?? "بدون موظف"} | المعرض: {item.branch_name ?? "بدون فرع"}
                       </div>
                     </div>
-                    <Link href={`/dashboard/customers?customer=${item.customer_id}&mode=edit`} className="legacy-btn legacy-btn-danger">
-                      فتح وتحديث
-                    </Link>
+                    <div className="d-flex gap-2 flex-wrap">
+                      <ReminderButton
+                        userId={item.staff_id ?? null}
+                        branchId={item.branch_id ?? null}
+                        label={item.staff_name ?? null}
+                        title={`تحديث رخصة: ${item.customer_name}`}
+                        message={`يرجى تحديث رخصة سيارة العميل ${item.customer_name} (${item.trade_in_model}) — الرخصة تنتهي: ${item.trade_in_license_expiry ?? "غير محدد"}`}
+                        variant="warning"
+                      />
+                      <Link href={`/dashboard/customers?customer=${item.customer_id}&mode=edit`} className="legacy-btn legacy-btn-danger">
+                        فتح وتحديث
+                      </Link>
+                    </div>
                   </div>
                 </div>
               ))
@@ -214,6 +260,7 @@ export default async function AgendaPage() {
                       />
                       <form action={markNotificationReadAction}>
                         <input type="hidden" name="notification_id" value={item.id} />
+                        <input type="hidden" name="redirect_to" value="/dashboard/agenda" />
                         <button type="submit" className="legacy-btn legacy-btn-info">
                           تمّت القراءة
                         </button>
@@ -267,6 +314,7 @@ export default async function AgendaPage() {
                     />
                     <form action={completeReminderAction}>
                       <input type="hidden" name="reminder_id" value={item.id} />
+                      <input type="hidden" name="redirect_to" value="/dashboard/agenda" />
                       <button type="submit" className="legacy-btn legacy-btn-success">
                         تم التنفيذ
                       </button>

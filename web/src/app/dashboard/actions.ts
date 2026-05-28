@@ -7,7 +7,7 @@ import { hasSupabaseEnv } from "@/lib/env";
 import { getRoleCapabilities } from "@/lib/roles";
 import { createAdminClient, hasSupabaseServiceRoleEnv } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { pushTelegramToManagers } from "@/lib/telegram/push";
+import { pushTelegramToManagers, pushTelegramPhotosToManagers, pushTelegramToEmployee } from "@/lib/telegram/push";
 
 async function getCurrentProfile() {
   if (!hasSupabaseEnv()) return null;
@@ -84,15 +84,226 @@ function normalizeRequestedCarsText(value: string | null | undefined) {
   return unique.join(" | ");
 }
 
+/**
+ * يُعيد التاريخ والوقت بالعربية بتوقيت غرينيتش+3 (توقيت السعودية/فلسطين)
+ */
+function arabicDateTime(date: Date = new Date()): string {
+  return date.toLocaleString("ar-SA", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Riyadh",
+  });
+}
+
+/**
+ * يجلب بيانات العميل الكاملة لبناء رسالة إشعار احترافية
+ */
+async function fetchCustomerContext(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  customerId: string,
+): Promise<{
+  fullName: string;
+  nickname: string | null;
+  phone: string;
+  requestedCar: string | null;
+  operationType: string | null;
+  assignedUserName: string | null;
+  branchName: string | null;
+}> {
+  const { data } = await supabase
+    .from("customers")
+    .select(
+      "full_name, nickname, phone, requested_car, metadata, branch_id, assigned_user_id, " +
+      "branches(name), app_users(full_name)",
+    )
+    .eq("id", customerId)
+    .maybeSingle<{
+      full_name: string | null;
+      nickname: string | null;
+      phone: string | null;
+      requested_car: string | null;
+      metadata: Record<string, unknown> | null;
+      branches: { name?: string } | { name?: string }[] | null;
+      app_users: { full_name?: string } | { full_name?: string }[] | null;
+    }>();
+
+  const meta = (data?.metadata as Record<string, unknown> | null) ?? {};
+  const operationType =
+    typeof meta.operation_type === "string" ? meta.operation_type : null;
+
+  // branches و app_users قد يعودان كمصفوفة أو كائن واحد
+  const branchesRaw = data?.branches;
+  const usersRaw = data?.app_users;
+  const branchName =
+    (Array.isArray(branchesRaw) ? branchesRaw[0]?.name : (branchesRaw as { name?: string } | null)?.name) ?? null;
+  const assignedUserName =
+    (Array.isArray(usersRaw) ? usersRaw[0]?.full_name : (usersRaw as { full_name?: string } | null)?.full_name) ?? null;
+
+  return {
+    fullName: data?.full_name ?? "—",
+    nickname: data?.nickname ?? null,
+    phone: data?.phone ?? "—",
+    requestedCar: data?.requested_car ?? null,
+    operationType,
+    assignedUserName,
+    branchName,
+  };
+}
+
+/**
+ * يبني رسالة إشعار احترافية كاملة التفاصيل
+ *
+ * النتيجة: { title, message } — تُمرَّر مباشرة لـ sendManagementActivityNotification
+ */
+function buildStatusNotification({
+  status,
+  ctx,
+  actorName,
+  note,
+  nextFollowUpAt,
+  dealValue,
+}: {
+  status: string;
+  ctx: Awaited<ReturnType<typeof fetchCustomerContext>>;
+  actorName: string;
+  note: string | null;
+  nextFollowUpAt: string | null;
+  dealValue?: number | null;
+}): { title: string; message: string } {
+  const now = arabicDateTime();
+  const followUpStr = nextFollowUpAt ? arabicDateTime(new Date(nextFollowUpAt)) : null;
+
+  const customerBlock =
+    `<b>الاسم الكامل:</b> ${ctx.fullName}\n` +
+    (ctx.nickname ? `<b>الكنية:</b> ${ctx.nickname}\n` : "") +
+    `<b>الهاتف:</b> <code>${ctx.phone}</code>\n` +
+    (ctx.operationType ? `<b>نوع العملية:</b> ${ctx.operationType}\n` : "") +
+    (ctx.requestedCar ? `<b>السيارة المطلوبة:</b> ${ctx.requestedCar}\n` : "");
+
+  const footerBlock =
+    (ctx.assignedUserName ? `<b>الموظف المسؤول:</b> ${ctx.assignedUserName}\n` : "") +
+    (ctx.branchName ? `<b>المعرض:</b> ${ctx.branchName}\n` : "") +
+    (note ? `<b>الملاحظات:</b> ${note}\n` : "") +
+    `<i>🕐 ${now}</i>`;
+
+  const dealValueStr = dealValue && dealValue > 0
+    ? `<b>💰 قيمة الصفقة:</b> ${dealValue.toLocaleString("ar-SA")} ريال\n`
+    : "";
+
+  // ── تمت عملية البيع + استبدال ───────────────────────────────────────────
+  if (status === "تمت عملية البيع + استبدال" || status === "تمت عملية البيع (للعميل)" || status === "شراء من قبل المعرض") {
+    const isTradein = status === "تمت عملية البيع + استبدال";
+    const isShowroom = status === "شراء من قبل المعرض";
+    const emoji = isTradein ? "🔄" : isShowroom ? "🏢" : "🎉";
+    const titleText = isTradein ? "تمّت صفقة البيع + الاستبدال بنجاح" : isShowroom ? "شراء سيارة من قبل المعرض" : "تمّت عملية بيع السيارة للعميل";
+    return {
+      title: `${emoji} ${titleText}`,
+      message:
+        `${emoji} <b>${titleText}</b>\n` +
+        `أتمّ الموظف <b>${actorName}</b> الصفقة بنجاح.\n\n` +
+        `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
+        customerBlock +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `<b>الحالة المُسجَّلة:</b> ${status}\n` +
+        dealValueStr +
+        footerBlock,
+    };
+  }
+
+  // ── تمت عملية البيع (مشتري عادي) ────────────────────────────────────────
+  if (status === "تمت عملية البيع") {
+    return {
+      title: "🎉 تمّت عملية بيع بنجاح",
+      message:
+        `🎉 <b>تمّت عملية بيع بنجاح</b>\n` +
+        `أتمّ الموظف <b>${actorName}</b> صفقة بيع ناجحة.\n\n` +
+        `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
+        customerBlock +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `<b>الحالة المُسجَّلة:</b> ${status}\n` +
+        dealValueStr +
+        footerBlock,
+    };
+  }
+
+  // ── حجز ─────────────────────────────────────────────────────────────────
+  if (status === "حجز" || status === "حجز (استبدال)" || status === "حجز (سيارة العميل)") {
+    return {
+      title: "🔒 تسجيل حجز سيارة",
+      message:
+        `🔒 <b>تسجيل حجز سيارة جديد</b>\n` +
+        `سجّل الموظف <b>${actorName}</b> حجزاً جديداً.\n\n` +
+        `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
+        customerBlock +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `<b>الحالة المُسجَّلة:</b> ${status}\n` +
+        (followUpStr ? `<b>موعد المتابعة:</b> ${followUpStr}\n` : "") +
+        footerBlock,
+    };
+  }
+
+  // ── تراجع / سحب ──────────────────────────────────────────────────────────
+  if (status === "تراجع العميل عن الاستبدال" || status === "سحب السيارة من البيع") {
+    return {
+      title: "↩️ تراجع العميل عن الصفقة",
+      message:
+        `↩️ <b>تراجع العميل عن الصفقة</b>\n` +
+        `سجّل الموظف <b>${actorName}</b> تراجع العميل.\n\n` +
+        `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
+        customerBlock +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `<b>الحالة المُسجَّلة:</b> ${status}\n` +
+        (note ? `<b>السبب:</b> ${note}\n` : "") +
+        footerBlock,
+    };
+  }
+
+  // ── رفض ──────────────────────────────────────────────────────────────────
+  if (status === "رفض من قبل العميل" || status === "رفض من قبل المعرض") {
+    const byClient = status === "رفض من قبل العميل";
+    return {
+      title: byClient ? "⚠️ رفض من قبل العميل" : "⚠️ رفض من قبل المعرض",
+      message:
+        `⚠️ <b>${byClient ? "رفض العميل للعرض" : "رفض المعرض للطلب"} — يحتاج متابعة</b>\n` +
+        `سجّل الموظف <b>${actorName}</b> حالة الرفض.\n\n` +
+        `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
+        customerBlock +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `<b>الحالة المُسجَّلة:</b> ${status}\n` +
+        (note
+          ? `<b>سبب الرفض:</b> ${note}\n`
+          : `<b>سبب الرفض:</b> لم يُذكر — يُنصح بالتواصل مع الموظف.\n`) +
+        footerBlock,
+    };
+  }
+
+  // ── حالة عامة ───────────────────────────────────────────────────────────
+  return {
+    title: "📋 تحديث ملف عميل",
+    message:
+      `📋 <b>تحديث ملف عميل</b>\n` +
+      `قام الموظف <b>${actorName}</b> بتحديث الملف.\n\n` +
+      `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
+      customerBlock +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `<b>الحالة الجديدة:</b> ${status}\n` +
+      footerBlock,
+  };
+}
+
 function isClosedStatus(status: string) {
   return (
-    status.includes("العميل غير فعال") ||
-    status.includes("تم البيع") ||
-    status.includes("تمت صفقة استبدال") ||
+    status.includes("تمت عملية البيع") ||
     status.includes("شراء من قبل المعرض") ||
-    status.includes("رفض من قبل المعرض") ||
     status.includes("رفض من قبل العميل") ||
-    status.includes("رفض")
+    status.includes("رفض من قبل المعرض") ||
+    status.includes("تراجع العميل عن الاستبدال") ||
+    status.includes("سحب السيارة من البيع") ||
+    status === "إغلاق الملف"
   );
 }
 
@@ -124,14 +335,115 @@ function normalizeRole(value: string | null | undefined) {
   return (value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function isGeneralManagerRole(role: string | null | undefined) {
-  const value = normalizeRole(role);
-  return value.includes("المدير العام") || (value.includes("مدير") && value.includes("عام")) || value.includes("admin") || value.includes("owner");
-}
+/**
+ * يرسل إشعار تقييم سيارة احترافي شامل:
+ * 1) رسالة نصية بكل بيانات السيارة والعميل
+ * 2) صور السيارة كألبوم (إن وُجدت)
+ */
+async function pushTradeAssessmentNotification({
+  supabase,
+  actorProfile,
+  branchId,
+  customerId,
+  customerName,
+  customerNickname,
+  customerPhone,
+  tradeModel,
+  tradeStatus,
+  tradeChassis,
+  tradeColor,
+  tradeYear,
+  tradeMileage,
+  tradePrice,
+  tradeSpecs,
+  tradeInspection,
+  signedPhotoUrls,
+}: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  actorProfile: Awaited<ReturnType<typeof getCurrentProfile>>;
+  branchId: string | null;
+  customerId: string;
+  customerName: string;
+  customerNickname: string | null;
+  customerPhone: string;
+  tradeModel: string | null;
+  tradeStatus: string | null;
+  tradeChassis: string | null;
+  tradeColor: string | null;
+  tradeYear: number | null;
+  tradeMileage: number | null;
+  tradePrice: number | null;
+  tradeSpecs: string | null;
+  tradeInspection: string | null;
+  signedPhotoUrls: string[];
+}) {
+  const model = (tradeModel ?? "").trim();
+  if (!model) return;
 
-function isBranchManagerRole(role: string | null | undefined) {
-  const value = normalizeRole(role);
-  return value.includes("مدير معرض") || (value.includes("manager") && value.includes("branch"));
+  const actorName = actorProfile?.full_name ?? "موظف";
+  const isAwaitingAssessment = (tradeStatus ?? "").includes("بانتظار التقييم") || (tradeStatus ?? "").includes("تقييم");
+  const customerDisplay = customerNickname ? `${customerName} (${customerNickname})` : customerName;
+
+  // ── الرسالة النصية الشاملة ─────────────────────────────────────────────
+  const emoji = isAwaitingAssessment ? "🔍" : "🚗";
+  const titleLine = isAwaitingAssessment
+    ? `🔍 <b>طلب تقييم سيارة — يحتاج مراجعتك الفورية</b>`
+    : `🚗 <b>سيارة مرتبطة بعملية استبدال</b>`;
+
+  let msg = `${titleLine}\n`;
+  msg += `بواسطة الموظف: <b>${actorName}</b>\n\n`;
+
+  msg += `━━━━━━━ تفاصيل العميل ━━━━━━━\n`;
+  msg += `<b>الاسم الكامل:</b> ${customerDisplay}\n`;
+  msg += `<b>الهاتف:</b> <code>${customerPhone}</code>\n`;
+
+  msg += `━━━━━━━ تفاصيل السيارة ━━━━━━━\n`;
+  msg += `<b>الطراز:</b> ${model}\n`;
+  if (tradeYear) msg += `<b>سنة الصنع:</b> ${tradeYear}\n`;
+  if (tradeColor) msg += `<b>اللون:</b> ${tradeColor}\n`;
+  if (tradeChassis) msg += `<b>رقم الشاصي:</b> <code>${tradeChassis}</code>\n`;
+  if (tradeMileage) msg += `<b>عداد المسافة:</b> ${tradeMileage.toLocaleString("ar-SA")} كم\n`;
+  if (tradePrice) msg += `<b>السعر المقترح:</b> ${tradePrice.toLocaleString("ar-SA")} ريال\n`;
+  if (tradeStatus) msg += `<b>حالة السيارة:</b> ${tradeStatus}\n`;
+
+  if (tradeSpecs && tradeSpecs.trim()) {
+    msg += `\n<b>📋 المواصفات:</b>\n<i>${tradeSpecs.trim()}</i>\n`;
+  }
+  if (tradeInspection && tradeInspection.trim()) {
+    msg += `\n<b>🔧 الفحص / الملاحظات الفنية:</b>\n<i>${tradeInspection.trim()}</i>\n`;
+  }
+
+  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  if (signedPhotoUrls.length > 0) {
+    msg += `📸 <b>الصور:</b> ${signedPhotoUrls.length} صورة مرفقة أدناه\n`;
+  } else {
+    msg += `📸 <i>لا توجد صور مرفقة حتى الآن</i>\n`;
+  }
+  msg += `<i>🕐 ${arabicDateTime()}</i>`;
+
+  // ── إرسال الرسالة النصية ──────────────────────────────────────────────
+  await sendManagementActivityNotification({
+    supabase,
+    actorProfile,
+    branchId,
+    title: isAwaitingAssessment ? `${emoji} طلب تقييم سيارة` : `${emoji} سيارة استبدال جديدة`,
+    message: msg,
+    notificationType: "trade_assessment",
+    payload: {
+      source: "trade_assessment",
+      customer_id: customerId,
+      trade_model: model,
+      chassis_no: tradeChassis,
+    },
+  });
+
+  // ── إرسال الصور كألبوم (بعد الرسالة النصية مباشرة) ───────────────────
+  if (signedPhotoUrls.length > 0) {
+    const photoCaption =
+      `📸 <b>صور السيارة — ${model}</b>\n` +
+      `👤 ${customerDisplay} | 📱 <code>${customerPhone}</code>`;
+    void pushTelegramPhotosToManagers({ branchId, caption: photoCaption, photoUrls: signedPhotoUrls });
+  }
 }
 
 async function sendManagementActivityNotification({
@@ -140,6 +452,7 @@ async function sendManagementActivityNotification({
   branchId,
   title,
   message,
+  notificationType,
   payload,
 }: {
   supabase: Awaited<ReturnType<typeof createClient>>;
@@ -147,6 +460,7 @@ async function sendManagementActivityNotification({
   branchId: string | null;
   title: string;
   message: string;
+  notificationType?: string;
   payload?: Record<string, unknown>;
 }) {
   const writer = hasSupabaseServiceRoleEnv() ? createAdminClient() : supabase;
@@ -170,7 +484,7 @@ async function sendManagementActivityNotification({
     recipient_user_id: recipient.id,
     recipient_branch_id: recipient.branch_id ?? null,
     recipient_label: recipient.full_name ?? null,
-    notification_type: "customer_activity",
+    notification_type: notificationType ?? "customer_activity",
     title,
     message,
     status: "unread",
@@ -238,19 +552,45 @@ async function notifyOpportunityForModelAvailability({
 
   if (!interestedCustomers || interestedCustomers.length === 0) return;
 
-  const leadsText = interestedCustomers
-    .map((c, idx) => `${idx + 1}) ${c.full_name} - ${c.phone}`)
-    .join(" | ");
+  // ── بناء قائمة العملاء المهتمين بتفاصيل كاملة ──────────────────────────
+  const topLeads = interestedCustomers.slice(0, 10);
+  const remainingCount = interestedCustomers.length - topLeads.length;
 
-  const carText = `${cleanModel}${chassisNo ? ` - شاصي:${chassisNo}` : ""}`;
-  const message = `فرصة بيع سيارة متاحة الآن: ${carText}. الجهة العارضة: ${ownerName ?? "غير محدد"}. العملاء المهتمون: ${leadsText}`;
+  let leadsSection = "";
+  topLeads.forEach((c, idx) => {
+    leadsSection += `${idx + 1}. <b>${c.full_name}</b>\n`;
+    leadsSection += `   📱 <code>${c.phone}</code>\n`;
+    if (c.requested_car) {
+      leadsSection += `   🚗 يبحث عن: ${c.requested_car}\n`;
+    }
+  });
+  if (remainingCount > 0) {
+    leadsSection += `\n   <i>... و${remainingCount} عميلاً آخر مهتماً بنفس الطراز</i>\n`;
+  }
+
+  const carText = `${cleanModel}${chassisNo ? ` — شاصي: <code>${chassisNo}</code>` : ""}`;
+  const actorLabel = actorProfile?.full_name ?? "موظف";
+
+  const message =
+    `🚨 <b>فرصة بيع فورية — سيارة متاحة الآن!</b>\n` +
+    `أضاف الموظف <b>${actorLabel}</b> سيارة يطلبها عملاؤك.\n\n` +
+    `━━━━━━━ تفاصيل السيارة ━━━━━━━\n` +
+    `<b>الطراز:</b> ${carText}\n` +
+    (ownerName ? `<b>مصدر السيارة / المالك:</b> ${ownerName}\n` : "") +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `🎯 <b>العملاء المهتمون (${interestedCustomers.length})</b>\n\n` +
+    leadsSection +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `⚡️ <i>تواصل مع هؤلاء العملاء فوراً قبل أن تُحجز السيارة!</i>\n` +
+    `<i>🕐 ${arabicDateTime()}</i>`;
 
   await sendManagementActivityNotification({
     supabase,
     actorProfile,
     branchId,
-    title: "فرصة بيع سيارة متاحة",
+    title: "🚨 فرصة بيع سيارة متاحة",
     message,
+    notificationType: "inventory_opportunity",
     payload: {
       source: "inventory_opportunity",
       model: cleanModel,
@@ -273,10 +613,25 @@ export async function clearNotificationsCenterAction() {
   const userId = profile?.id ?? null;
   if (capabilities.isGeneralManager) {
     await writer.from("notifications").delete().neq("id", "");
-  } else if (capabilities.isManager && branchId) {
-    await writer.from("notifications").delete().eq("recipient_branch_id", branchId);
-  } else if (userId) {
-    await writer.from("notifications").delete().eq("recipient_user_id", userId);
+  } else {
+    const scopedQuery = writer
+      .from("notifications")
+      .select("id, recipient_user_id, recipient_branch_id");
+
+    let filteredQuery = scopedQuery;
+    if (capabilities.isManager && branchId) {
+      const conditions = [`recipient_branch_id.eq.${branchId}`];
+      if (userId) conditions.push(`recipient_user_id.eq.${userId}`);
+      filteredQuery = filteredQuery.or(conditions.join(","));
+    } else if (userId) {
+      filteredQuery = filteredQuery.eq("recipient_user_id", userId);
+    }
+
+    const { data: scopedRows } = await filteredQuery.limit(5000);
+    const ids = (scopedRows ?? []).map((row) => row.id).filter(Boolean);
+    if (ids.length > 0) {
+      await writer.from("notifications").delete().in("id", ids);
+    }
   }
 
   revalidatePath("/dashboard");
@@ -290,6 +645,7 @@ function toSafeFileName(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
+/** يرفع ملفات مرفقات العميل ويُرجع مسارات التخزين لكل ملف تم رفعه بنجاح */
 async function uploadCustomerAttachmentFiles({
   supabase,
   customerId,
@@ -302,16 +658,73 @@ async function uploadCustomerAttachmentFiles({
   uploadedByUserId: string | null;
   files: File[];
   category: string;
-}) {
+}): Promise<string[]> {
+  const uploadedPaths: string[] = [];
+
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+
   for (const file of files) {
     if (!file || file.size <= 0) continue;
+    if (file.size > MAX_FILE_SIZE) {
+      throw new Error(`حجم الملف "${file.name}" (${(file.size / 1024 / 1024).toFixed(1)} MB) يتجاوز الحد المسموح (50 MB).`);
+    }
 
     const ext = (file.name.split(".").pop() ?? "bin").toLowerCase();
     const baseName = toSafeFileName(file.name.replace(/\.[^.]+$/, ""));
     const path = `${customerId}/${Date.now()}-${baseName}-${crypto.randomUUID()}.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
-    const upload = await supabase.storage.from("customer-attachments").upload(path, buffer, {
-      contentType: file.type || "application/octet-stream",
+    const cleanMime = (file.type || "application/octet-stream").split(";")[0].trim();
+
+    // ── الصوتيات تذهب لـ bucket مستقل عام (voice-notes) ──────────
+    const VOICE_BUCKET = "voice-notes";
+    let storageBucket = "customer-attachments";
+    let uploadPath = path;
+    let uploadMime = cleanMime || "application/octet-stream";
+
+    if (category === "voice_note" && hasSupabaseServiceRoleEnv()) {
+      const adminClient = createAdminClient();
+      // ضمان وجود الـ bucket العام للصوتيات
+      try {
+        const { data: bkt } = await adminClient.storage.getBucket(VOICE_BUCKET);
+        if (!bkt) {
+          await adminClient.storage.createBucket(VOICE_BUCKET, { public: true, fileSizeLimit: 52428800 });
+        } else if (!bkt.public) {
+          await adminClient.storage.updateBucket(VOICE_BUCKET, { public: true });
+        }
+      } catch { /* ignored */ }
+
+      const uploadToVoice = await adminClient.storage
+        .from(VOICE_BUCKET)
+        .upload(path, buffer, { contentType: cleanMime || "audio/webm", upsert: false });
+
+      if (uploadToVoice.error) throw new Error(uploadToVoice.error.message);
+
+      storageBucket = VOICE_BUCKET;
+      uploadPath = path;
+      uploadMime = cleanMime || "audio/webm";
+
+      const { data: { publicUrl: voicePublicUrl } } = adminClient.storage
+        .from(VOICE_BUCKET)
+        .getPublicUrl(path);
+
+      const insertVoice = await supabase.from("customer_attachments").insert({
+        customer_id: customerId,
+        file_name: file.name,
+        file_category: "voice_note",
+        storage_path: `${VOICE_BUCKET}/${path}`,
+        public_url: voicePublicUrl,
+        mime_type: uploadMime,
+        file_size_bytes: file.size,
+        uploaded_by_user_id: uploadedByUserId,
+        metadata: { source: "voice_recorder", bucket: VOICE_BUCKET },
+      });
+      if (insertVoice.error) throw new Error(insertVoice.error.message);
+      uploadedPaths.push(path);
+      continue; // تخطّ الـ insert العادي أدناه
+    }
+
+    const upload = await supabase.storage.from(storageBucket).upload(uploadPath, buffer, {
+      contentType: uploadMime,
       upsert: false,
     });
 
@@ -319,24 +732,30 @@ async function uploadCustomerAttachmentFiles({
       throw new Error(upload.error.message);
     }
 
+    const publicUrl: string | null = null;
+
     const insertAttachment = await supabase.from("customer_attachments").insert({
       customer_id: customerId,
       file_name: file.name,
       file_category: category,
       storage_path: path,
-      public_url: null,
-      mime_type: file.type || null,
+      public_url: publicUrl,
+      mime_type: cleanMime || null,
       file_size_bytes: file.size,
       uploaded_by_user_id: uploadedByUserId,
       metadata: {
-        source: "profile_modal",
+        source: category === "voice_note" ? "voice_recorder" : "profile_modal",
       },
     });
 
     if (insertAttachment.error) {
       throw new Error(insertAttachment.error.message);
     }
+
+    uploadedPaths.push(path);
   }
+
+  return uploadedPaths;
 }
 
 async function insertCustomerLog({
@@ -427,31 +846,45 @@ async function syncTradeInventoryFromCustomer({
   if (!model) return;
 
   const statusLabel = (tradeStatus ?? "").trim();
-  const isCompletedSwap = statusLabel.includes("تم الاتفاق والاستبدال");
-  const isShowroomPurchase = statusLabel.includes("شراء السيارة للمعرض");
-  const isExternalSold = statusLabel.includes("تم بيع السيارة لعميل خارجي");
-  const isWithdrawn = statusLabel.includes("تراجع العميل عن البيع") || statusLabel.includes("رفض من قبل المعرض");
-  const shouldBeSaleOnBehalf =
-    statusLabel.includes("عرض سيارة") ||
-    statusLabel.includes("برسم البيع") ||
-    statusLabel.includes("دراسة") ||
-    statusLabel.includes("تقييم") ||
-    statusLabel.includes("تم التقييم");
 
-  let ownerName = customerName;
-  let dealType = shouldBeSaleOnBehalf ? "برسم البيع" : "استبدال";
+  // ── الحالات المُغلقة التي تنقل ملكية السيارة للمعرض ──────────────────────
+  const isCompletedTradein  = statusLabel === "تمت عملية البيع + استبدال";
+  const isShowroomPurchase  = statusLabel === "شراء من قبل المعرض";
+  // ── بيع سيارة العميل لمشترٍ خارجي (عرض للبيع) ───────────────────────────
+  const isExternalSold      = statusLabel === "تمت عملية البيع (للعميل)";
+  // ── حجز سيارة العميل بواسطة مشترٍ محتمل، أو حجز صفقة الاستبدال ──────────
+  const isReserved =
+    statusLabel === "حجز (سيارة العميل)" ||
+    statusLabel === "حجز (استبدال)"; // سيارة المستبدِل تُصبح محجوزة أيضاً
+  // ── حالات السحب / الرفض / الإغلاق ────────────────────────────────────────
+  const isWithdrawn =
+    statusLabel === "تراجع العميل عن الاستبدال" ||
+    statusLabel === "رفض من قبل العميل"          ||
+    statusLabel === "رفض من قبل المعرض"           ||
+    statusLabel === "سحب السيارة من البيع"        ||
+    statusLabel === "إغلاق الملف";
+
+  // كل الحالات النشطة → برسم البيع
+  let ownerName         = customerName;
+  let dealType          = "برسم البيع";
   let availabilityStatus = "متوفرة";
 
-  if (isCompletedSwap || isShowroomPurchase) {
-    dealType = isShowroomPurchase ? "حيازة" : "استبدال";
+  if (isCompletedTradein) {
+    dealType = "استبدال";
     if (branchId) {
       const { data: branch } = await supabase.from("branches").select("name").eq("id", branchId).maybeSingle();
       ownerName = branch?.name ?? customerName;
     }
-  }
-
-  if (isExternalSold) {
+  } else if (isShowroomPurchase) {
+    dealType = "حيازة";
+    if (branchId) {
+      const { data: branch } = await supabase.from("branches").select("name").eq("id", branchId).maybeSingle();
+      ownerName = branch?.name ?? customerName;
+    }
+  } else if (isExternalSold) {
     availabilityStatus = "مباعة";
+  } else if (isReserved) {
+    availabilityStatus = "محجوزة";
   } else if (isWithdrawn) {
     availabilityStatus = "مسحوبة من المعرض";
   }
@@ -463,9 +896,17 @@ async function syncTradeInventoryFromCustomer({
     .order("updated_at", { ascending: false })
     .limit(1);
 
-  const { data: existing } = tradeChassis
-    ? await existingQuery.eq("chassis_no", tradeChassis).maybeSingle()
-    : await existingQuery.maybeSingle();
+  // أولاً: نبحث بالشاصي (إن وُجد) — ثم نعود للبحث بمعرّف العميل عند عدم الإيجاد
+  // هذا يمنع إنشاء سجل مكرر عند تغيير رقم الشاصي بين عمليات الحفظ
+  let existing: { id: string } | null = null;
+  if (tradeChassis) {
+    const { data } = await existingQuery.eq("chassis_no", tradeChassis).maybeSingle();
+    existing = data;
+  }
+  if (!existing) {
+    const { data } = await existingQuery.maybeSingle();
+    existing = data;
+  }
 
   const payload = {
     branch_id: branchId,
@@ -607,8 +1048,24 @@ export async function markNotificationReadAction(formData: FormData) {
   const notificationId = getText(formData, "notification_id");
   if (!notificationId) return;
 
-  const supabase = await createClient();
+  // التحقق من المصادقة قبل التحديث
   const profile = await getCurrentProfile();
+  if (!profile) redirect("/login");
+
+  const supabase = await createClient();
+  const capabilities = getRoleCapabilities(profile.role);
+
+  // التحقق من الملكية — الموظف يقرأ إشعاراته فقط، المدير يقرأ إشعارات فرعه
+  const { data: notif } = await supabase
+    .from("notifications")
+    .select("recipient_user_id")
+    .eq("id", notificationId)
+    .maybeSingle();
+
+  if (notif && !capabilities.isManager && notif.recipient_user_id !== profile.id) {
+    return; // غير مصرح بقراءة إشعارات الآخرين
+  }
+
   await supabase
     .from("notifications")
     .update({ status: "read", read_at: new Date().toISOString() })
@@ -616,6 +1073,11 @@ export async function markNotificationReadAction(formData: FormData) {
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/agenda");
+  revalidatePath("/dashboard/notifications");
+
+  // الرجوع للصفحة المُرسَل منها إن وُجدت
+  const redirectTo = getNullableText(formData, "redirect_to") ?? "/dashboard/notifications";
+  redirect(redirectTo);
 }
 
 export async function completeReminderAction(formData: FormData) {
@@ -624,7 +1086,24 @@ export async function completeReminderAction(formData: FormData) {
   const reminderId = getText(formData, "reminder_id");
   if (!reminderId) return;
 
+  // التحقق من المصادقة قبل التحديث
+  const profile = await getCurrentProfile();
+  if (!profile) redirect("/login");
+
   const supabase = await createClient();
+  const capabilities = getRoleCapabilities(profile.role);
+
+  // التحقق من الملكية — الموظف يُكمل مهامه فقط، المدير يُكمل مهام فرعه
+  const { data: reminder } = await supabase
+    .from("reminders")
+    .select("assigned_user_id")
+    .eq("id", reminderId)
+    .maybeSingle();
+
+  if (reminder && !capabilities.isManager && reminder.assigned_user_id !== profile.id) {
+    return; // غير مصرح بإكمال مهام الآخرين
+  }
+
   await supabase
     .from("reminders")
     .update({ status: "completed", completed_at: new Date().toISOString() })
@@ -632,6 +1111,10 @@ export async function completeReminderAction(formData: FormData) {
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/agenda");
+
+  // الرجوع للصفحة مع رسالة نجاح
+  const redirectTo = getNullableText(formData, "redirect_to") ?? "/dashboard/agenda";
+  redirect(appendNoticeParam(redirectTo, "تم تنفيذ المهمة وإغلاقها بنجاح"));
 }
 
 export async function sendQuickReminderAction(formData: FormData) {
@@ -642,12 +1125,20 @@ export async function sendQuickReminderAction(formData: FormData) {
   const recipientLabel = getNullableText(formData, "recipient_label");
   const title = getNullableText(formData, "title") ?? "تذكير";
   const message = getText(formData, "message");
+  // الصفحة التي يُعاد إليها بعد الإرسال (يُمرَّر كـ hidden input)
+  const redirectTo = getNullableText(formData, "redirect_to") ?? "/dashboard/management";
 
   if (!message) return;
 
   const profile = await getCurrentProfile();
+
+  // يُسمح بإرسال التذكيرات للمديرين فقط
+  const capabilities = getRoleCapabilities(profile?.role);
+  if (!profile || !capabilities.isManager) return;
+
   const supabase = await createClient();
 
+  // ── 1. حفظ الإشعار في قاعدة البيانات ───────────────────────────
   await supabase.from("notifications").insert({
     recipient_user_id: recipientUserId,
     recipient_branch_id: recipientBranchId,
@@ -664,9 +1155,20 @@ export async function sendQuickReminderAction(formData: FormData) {
     },
   });
 
+  // ── 2. إرسال تيليغرام مباشر للموظف المعني ──────────────────────
+  void pushTelegramToEmployee({
+    userId: recipientUserId,
+    senderName: profile?.full_name ?? "المدير",
+    title,
+    message,
+  });
+
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/agenda");
   revalidatePath("/dashboard/staff");
+  revalidatePath("/dashboard/management");
+  revalidatePath("/dashboard/customers");
+  redirect(appendNoticeParam(redirectTo, "تم إرسال التذكير للموظف بنجاح"));
 }
 
 export async function dispatchStaffInstructionAction(formData: FormData) {
@@ -727,11 +1229,11 @@ export async function dispatchStaffInstructionAction(formData: FormData) {
   if (isBranchManagerOnly) {
     const currentBranchId = profile?.branch_id ?? null;
     if (!currentBranchId) return;
-    recipients = recipients.filter((item) => item.branch_id === currentBranchId && !isGeneralManagerRole(item.role));
+    recipients = recipients.filter((item) => item.branch_id === currentBranchId && !getRoleCapabilities(item.role).isGeneralManager);
   }
 
   if (recipients.length === 0) return;
-  const recipientIds = recipients.filter((item) => !isGeneralManagerRole(item.role)).map((item) => item.id);
+  const recipientIds = recipients.filter((item) => !getRoleCapabilities(item.role).isGeneralManager).map((item) => item.id);
   if (recipientIds.length === 0) return;
 
   if (instructionType === "changeRole" && targetRole) {
@@ -749,6 +1251,14 @@ export async function dispatchStaffInstructionAction(formData: FormData) {
     if (Object.keys(patch).length > 0) {
       await supabase.from("app_users").update(patch).in("id", recipientIds);
     }
+  }
+
+  // ── تعليق الحساب: تعطيل المستخدم في قاعدة البيانات ──────────────────────
+  if (instructionType === "suspend") {
+    await supabase
+      .from("app_users")
+      .update({ is_active: false, status: "inactive" })
+      .in("id", recipientIds);
   }
 
   const titleMap: Record<string, string> = {
@@ -995,9 +1505,10 @@ export async function upsertCustomerAction(formData: FormData) {
   const assignedUserId = !capabilities.isManager
     ? profile?.id ?? null
     : requestedAssignedUserId ?? profile?.id ?? null;
+  const incompleteSave = formData.get("incomplete_save") === "1";
   const requestedCarInput = getNullableText(formData, "requested_car");
   const paymentPlan = getNullableText(formData, "payment_plan");
-  const status = getText(formData, "status") || "قيد المتابعة";
+  const status = incompleteSave ? "غير مكتمل" : (getText(formData, "status") || "قيد المتابعة");
   const nickname = getNullableText(formData, "nickname");
   const address = getNullableText(formData, "address");
   const whatsappPrefix = getNullableText(formData, "whatsapp_prefix") ?? "+970";
@@ -1012,6 +1523,7 @@ export async function upsertCustomerAction(formData: FormData) {
   const hasOperationTypeInput = formData.has("operation_type");
   const hasTradeIn = getBoolean(formData, "has_trade_in");
   const tradeInId = getNullableText(formData, "trade_in_id");
+  const parentCustomerId = getNullableText(formData, "parent_customer_id");
 
   const inventoryIdForStatus = getNullableText(formData, "inventory_id_for_status");
   const isActive = isClosedStatus(status) ? false : requestedActive;
@@ -1033,7 +1545,7 @@ export async function upsertCustomerAction(formData: FormData) {
         : operationType === "buyer_tradein_evaluated"
           ? "استبدال (تمت عملية التقييم)"
           : operationType === "sell_on_behalf"
-            ? "عرض سيارة للبيع"
+            ? "بيع بالوكالة"
             : null;
 
   let existingMetadata: Record<string, unknown> = {};
@@ -1046,7 +1558,7 @@ export async function upsertCustomerAction(formData: FormData) {
     existingMetadata = ((existingCustomerRow?.metadata as Record<string, unknown> | null) ?? {});
   }
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     branch_id: branchId,
     assigned_user_id: assignedUserId,
     full_name: fullName,
@@ -1063,6 +1575,9 @@ export async function upsertCustomerAction(formData: FormData) {
     attachment_notes: attachmentNotes,
     source,
     is_active: isActive,
+    operation_type: hasOperationTypeInput
+      ? operationType
+      : ((existingMetadata.operation_type_code as string | null | undefined) ?? null),
     metadata: {
       ...existingMetadata,
       operation_type: hasOperationTypeInput ? operationTypeLabel : ((existingMetadata.operation_type as string | null | undefined) ?? null),
@@ -1075,7 +1590,9 @@ export async function upsertCustomerAction(formData: FormData) {
   if (customerId) {
     const { error } = await supabase.from("customers").update(payload).eq("id", customerId);
     if (error) {
-      redirect(`/dashboard/customers/new?error=${encodeRedirectError(`تعذر تحديث الملف: ${error.message}`)}`);
+      // الرجوع لصفحة التعديل وليس لصفحة الإضافة
+      const editPath = returnTo ?? `/dashboard/customers?customer=${customerId}&mode=edit`;
+      redirect(appendNoticeParam(editPath, `تعذر تحديث الملف: ${error.message}`));
     }
 
     await insertCustomerLog({
@@ -1089,34 +1606,64 @@ export async function upsertCustomerAction(formData: FormData) {
       supabase,
       actorProfile: profile,
       branchId,
-      title: "تعديل بيانات عميل",
-      message: `تم تعديل بيانات العميل: ${fullName}. الحالة الحالية: ${status}.`,
+      title: "✏️ تحديث ملف عميل",
+      notificationType: "customer_update",
+      message:
+        `✏️ <b>تحديث بيانات ملف عميل</b>\n` +
+        `قام الموظف <b>${profile?.full_name ?? "موظف"}</b> بتعديل الملف.\n\n` +
+        `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
+        `<b>الاسم الكامل:</b> ${fullName}\n` +
+        (nickname ? `<b>الكنية:</b> ${nickname}\n` : "") +
+        `<b>الهاتف:</b> <code>${phone}</code>\n` +
+        (operationTypeLabel ? `<b>نوع العملية:</b> ${operationTypeLabel}\n` : "") +
+        (normalizedRequestedCarResolved ? `<b>السيارة المطلوبة:</b> ${normalizedRequestedCarResolved}\n` : "") +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `<b>الحالة بعد التعديل:</b> ${status}\n` +
+        `<i>🕐 ${arabicDateTime()}</i>`,
       payload: { source: "customer_update", customer_id: customerId },
     });
   } else {
-    const existingCustomerQuery = supabase
-      .from("customers")
-      .select("id, is_active, status")
-      .eq("phone", phone)
-      .limit(1);
+    // ── عميل عائد: تجاوز فحص التكرار وإضافة بيانات الدورة ──────────────
+    if (parentCustomerId) {
+      const { data: parentRow } = await supabase
+        .from("customers")
+        .select("id, cycle_number")
+        .eq("id", parentCustomerId)
+        .maybeSingle();
 
-    const { data: existingCustomerBeforeInsert } = await (
-      branchId
-        ? existingCustomerQuery.eq("branch_id", branchId)
-        : existingCustomerQuery.is("branch_id", null)
-    ).maybeSingle();
-
-    if (existingCustomerBeforeInsert?.id) {
-      const cycleStillActive = existingCustomerBeforeInsert.is_active !== false && !isClosedStatus(existingCustomerBeforeInsert.status ?? "");
-      if (cycleStillActive) {
-        redirect(
-          `/dashboard/customers/new?error=${encodeRedirectError("يوجد دورة نشطة لهذا العميل. يرجى إنهاؤها أولًا قبل بدء دورة جديدة.")}`,
-        );
+      if (parentRow) {
+        payload.parent_customer_id = parentCustomerId;
+        payload.cycle_number = (parentRow.cycle_number ?? 1) + 1;
+        (payload.metadata as Record<string, unknown>).parent_customer_id = parentCustomerId;
       }
+    } else {
+      // ── عميل جديد: فحص التكرار ────────────────────────────────────────
+      const existingCustomerQuery = supabase
+        .from("customers")
+        .select("id, is_active, status")
+        .eq("phone", phone)
+        .limit(1);
 
-      redirect(
-        `/dashboard/management?customer=${existingCustomerBeforeInsert.id}&mode=view&notice=${encodeURIComponent("هذا العميل موجود مسبقًا. يمكنك تفعيل دورة جديدة من ملفه بعد الإغلاق.")}`,
-      );
+      const { data: existingCustomerBeforeInsert } = await (
+        branchId
+          ? existingCustomerQuery.eq("branch_id", branchId)
+          : existingCustomerQuery.is("branch_id", null)
+      ).maybeSingle();
+
+      if (existingCustomerBeforeInsert?.id) {
+        const cycleStillActive = existingCustomerBeforeInsert.is_active !== false && !isClosedStatus(existingCustomerBeforeInsert.status ?? "");
+        if (cycleStillActive) {
+          redirect(
+            `/dashboard/customers/new?error=${encodeRedirectError("يوجد دورة نشطة لهذا العميل. يرجى إنهاؤها أولًا قبل بدء دورة جديدة.")}`,
+          );
+        }
+
+        // توجيه حسب الصلاحية — الموظف لا يملك وصولاً لصفحة management
+        const existingCustomerPath = capabilities.isManager
+          ? `/dashboard/management?customer=${existingCustomerBeforeInsert.id}&mode=view&notice=${encodeURIComponent("هذا العميل موجود مسبقًا. يمكنك تفعيل دورة جديدة من ملفه بعد الإغلاق.")}`
+          : `/dashboard/customers?customer=${existingCustomerBeforeInsert.id}&mode=view&notice=${encodeURIComponent("هذا العميل موجود مسبقًا. يمكنك تفعيل دورة جديدة من ملفه بعد الإغلاق.")}`;
+        redirect(existingCustomerPath);
+      }
     }
 
     const { data, error } = await supabase.from("customers").insert(payload).select("id").maybeSingle();
@@ -1135,7 +1682,10 @@ export async function upsertCustomerAction(formData: FormData) {
       ).maybeSingle();
 
       if (existingCustomer?.id) {
-        redirect(`/dashboard/management?customer=${existingCustomer.id}&mode=view`);
+        const fallbackPath = capabilities.isManager
+          ? `/dashboard/management?customer=${existingCustomer.id}&mode=view`
+          : `/dashboard/customers?customer=${existingCustomer.id}&mode=view`;
+        redirect(fallbackPath);
       }
 
       redirect(`/dashboard/customers/new?error=${encodeRedirectError("هذا العميل موجود مسبقًا في نفس المعرض.")}`);
@@ -1176,19 +1726,43 @@ export async function upsertCustomerAction(formData: FormData) {
         details: `تم إنشاء ملف العميل ${fullName}.`,
         nextFollowUpAt: resolvedNextFollowup,
       });
+
+      // إذا كانت هناك ملاحظات/تفاوض عند الإنشاء → نُضيفها كإدخال منفصل في السجل التاريخي
+      if (notes && notes.trim()) {
+        await insertCustomerLog({
+          customerId: savedId,
+          action: "general",
+          details: notes.trim(),
+        });
+      }
       await sendManagementActivityNotification({
         supabase,
         actorProfile: profile,
         branchId,
-        title: "إضافة عميل جديد",
-        message: `تم إدخال عميل جديد: ${fullName} (${phone}).`,
+        title: "➕ إضافة عميل جديد",
+        notificationType: "customer_create",
+        message:
+          `➕ <b>تسجيل عميل جديد في النظام</b>\n` +
+          `أضاف الموظف <b>${profile?.full_name ?? "موظف"}</b> ملف عميل جديد.\n\n` +
+          `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
+          `<b>الاسم الكامل:</b> ${fullName}\n` +
+          (nickname ? `<b>الكنية:</b> ${nickname}\n` : "") +
+          `<b>الهاتف:</b> <code>${phone}</code>\n` +
+          (operationTypeLabel ? `<b>نوع العملية:</b> ${operationTypeLabel}\n` : "") +
+          (normalizedRequestedCarResolved ? `<b>السيارة المطلوبة:</b> ${normalizedRequestedCarResolved}\n` : "") +
+          (paymentPlan ? `<b>خطة الدفع:</b> ${paymentPlan}\n` : "") +
+          (source ? `<b>مصدر العميل:</b> ${source}\n` : "") +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `<b>الحالة الأولية:</b> ${status}\n` +
+          (nextFollowUpAt ? `<b>موعد المتابعة:</b> ${arabicDateTime(new Date(nextFollowUpAt))}\n` : "") +
+          `<i>🕐 ${arabicDateTime()}</i>`,
         payload: { source: "customer_create", customer_id: savedId },
       });
     }
   }
 
-  if (savedId && inventoryIdForStatus && (status.includes("تم البيع") || status.includes("حجز"))) {
-    const inventoryStatus = status.includes("تم البيع") ? "مباعة" : "محجوزة";
+  if (savedId && inventoryIdForStatus && (status.includes("تمت عملية البيع") || status.includes("حجز"))) {
+    const inventoryStatus = status.includes("تمت عملية البيع") ? "مباعة" : "محجوزة";
     const { data: inventoryItem } = await supabase
       .from("inventory")
       .select("id, model, chassis_no")
@@ -1240,7 +1814,7 @@ export async function upsertCustomerAction(formData: FormData) {
       await insertCustomerLog({
         customerId: savedId,
         action: "sell_inventory_created",
-        details: `تم إنشاء سيارة للمخزون من مسار عرض سيارة للبيع: ${inventoryModel}.`,
+        details: `تم إنشاء سيارة للمخزون من مسار بيع بالوكالة: ${inventoryModel}.`,
       });
     }
   }
@@ -1330,7 +1904,7 @@ export async function upsertCustomerAction(formData: FormData) {
       branchId,
       customerName: fullName,
       tradeModel: tradeModelInput,
-      tradeStatus: getNullableText(formData, "trade_in_status"),
+      tradeStatus: status, // ← حالة العميل (لا حالة سيارة الاستبدال) لتحديث المخزون صحيحاً
       tradeChassis: getNullableText(formData, "trade_in_chassis"),
       tradePrice: parseNumber(getNullableText(formData, "trade_in_price")),
       tradeColor: getNullableText(formData, "trade_in_color"),
@@ -1339,6 +1913,68 @@ export async function upsertCustomerAction(formData: FormData) {
       tradeSpecs: getNullableText(formData, "trade_in_specs"),
       tradeInspection: getNullableText(formData, "trade_in_inspection"),
     });
+  }
+
+  // ── ربط سيارة المخزون للمشتري (حجز / بيع) ──────────────────────────────────
+  // upsertCustomerAction لم يكن يعالج هذا سابقاً — تم إضافته الآن
+  if (savedId && inventoryIdForStatus) {
+    const resolvedOpType = operationType ?? (existingMetadata.operation_type_code as string | undefined) ?? "buyer";
+    const isBuyerType = resolvedOpType !== "sell_on_behalf";
+    const requiresInv = isBuyerType && (status.includes("تمت عملية البيع") || status.includes("حجز"));
+
+    if (requiresInv) {
+      // جلب بيانات السيارة المختارة
+      const { data: invItem } = await supabase
+        .from("inventory")
+        .select("id, model, chassis_no, source_customer_id")
+        .eq("id", inventoryIdForStatus)
+        .maybeSingle();
+
+      if (invItem) {
+        const newInvStatus = status.includes("تمت عملية البيع") ? "مباعة" : "محجوزة";
+
+        // تحديث حالة السيارة في المخزون
+        await supabase
+          .from("inventory")
+          .update({ availability_status: newInvStatus })
+          .eq("id", invItem.id);
+
+        // حفظ الربط في metadata العميل
+        const updatedMeta = {
+          ...(existingMetadata as Record<string, unknown>),
+          selected_inventory_id: invItem.id,
+          selected_inventory_chassis: invItem.chassis_no ?? null,
+        };
+        await supabase
+          .from("customers")
+          .update({ metadata: updatedMeta })
+          .eq("id", savedId);
+
+        await insertCustomerLog({
+          customerId: savedId,
+          action: "status_updated",
+          details: `تم ربط الملف بسيارة المخزون: ${invItem.model ?? ""}${invItem.chassis_no ? ` — شاصي: ${invItem.chassis_no}` : ""}. حالة المخزون: ${newInvStatus}.`,
+        });
+
+        // الانعكاس العكسي: إذا كانت السيارة لعميل بيع بالوكالة → تحديث حالته
+        if (invItem.source_customer_id && invItem.source_customer_id !== savedId) {
+          const sellOnBehalfNewStatus =
+            newInvStatus === "مباعة"  ? "تمت عملية البيع (للعميل)" :
+            newInvStatus === "محجوزة" ? "حجز (سيارة العميل)"       : null;
+          if (sellOnBehalfNewStatus) {
+            await supabase
+              .from("customers")
+              .update({ status: sellOnBehalfNewStatus, last_contact_at: new Date().toISOString() })
+              .eq("id", invItem.source_customer_id);
+            await insertCustomerLog({
+              customerId: invItem.source_customer_id,
+              action: "status_updated",
+              details: `تم تحديث الحالة تلقائياً إلى "${sellOnBehalfNewStatus}" بسبب ${newInvStatus === "مباعة" ? "بيع" : "حجز"} السيارة من عميل جديد (معرف: ${savedId}).`,
+            });
+          }
+        }
+      }
+    }
   }
 
   if (savedId) {
@@ -1356,7 +1992,7 @@ export async function upsertCustomerAction(formData: FormData) {
       .filter((item): item is File => item instanceof File && item.size > 0);
 
     try {
-      await uploadCustomerAttachmentFiles({
+      const photoPaths = await uploadCustomerAttachmentFiles({
         supabase,
         customerId: savedId,
         uploadedByUserId: profile?.id ?? null,
@@ -1384,9 +2020,75 @@ export async function upsertCustomerAction(formData: FormData) {
         files: insuranceFiles,
         category: "trade_insurance",
       });
+
+      // ── إشعار تقييم السيارة الشامل (نص + صور) ─────────────────────────
+      if (hasSupabaseServiceRoleEnv()) {
+        let signedPhotoUrls: string[] = [];
+        if (photoPaths.length > 0) {
+          const admin = createAdminClient();
+          const { data: signedData } = await admin.storage
+            .from("customer-attachments")
+            .createSignedUrls(photoPaths, 3600);
+          signedPhotoUrls = (signedData ?? []).map((d) => d.signedUrl).filter(Boolean) as string[];
+        }
+        const tradeStatusVal = getNullableText(formData, "trade_in_status");
+        const hasTradeData = Boolean(tradeModelInput?.trim());
+        if (hasTradeData) {
+          void pushTradeAssessmentNotification({
+            supabase,
+            actorProfile: profile,
+            branchId,
+            customerId: savedId,
+            customerName: fullName || "غير محدد",
+            customerNickname: nickname || null,
+            customerPhone: phone,
+            tradeModel: tradeModelInput,
+            tradeStatus: tradeStatusVal,
+            tradeChassis: getNullableText(formData, "trade_in_chassis"),
+            tradeColor: getNullableText(formData, "trade_in_color"),
+            tradeYear: tradeYearInput,
+            tradeMileage: parseNumber(getNullableText(formData, "trade_in_mileage")),
+            tradePrice: parseNumber(getNullableText(formData, "trade_in_price")),
+            tradeSpecs: getNullableText(formData, "trade_in_specs"),
+            tradeInspection: getNullableText(formData, "trade_in_inspection"),
+            signedPhotoUrls,
+          });
+        } else if (signedPhotoUrls.length > 0) {
+          // صور فقط بدون بيانات استبدال — إرسال مباشر
+          const caption =
+            `📸 <b>صور مرفقة من الموظف ${profile?.full_name ?? "موظف"}</b>\n` +
+            `👤 ${fullName || "غير محدد"} | 📱 <code>${phone}</code>`;
+          void pushTelegramPhotosToManagers({ branchId, caption, photoUrls: signedPhotoUrls });
+        }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "تعذر رفع أحد الملفات";
       redirect(`/dashboard/customers/new?error=${encodeRedirectError(message)}`);
+    }
+  }
+
+  // ── رفع التسجيلات الصوتية (تفاوض + ملاحظات) ──────────────────────────
+  if (savedId) {
+    const voiceFiles = formData.getAll("voice_general_notes")
+      .concat(
+        ...[...formData.keys()]
+          .filter((k) => k.startsWith("voice_negotiation_"))
+          .map((k) => formData.getAll(k)),
+      )
+      .filter((f): f is File => f instanceof File && f.size > 0);
+
+    if (voiceFiles.length > 0) {
+      try {
+        await uploadCustomerAttachmentFiles({
+          supabase,
+          customerId: savedId,
+          uploadedByUserId: profile?.id ?? null,
+          files: voiceFiles,
+          category: "voice_note",
+        });
+      } catch {
+        // لا نوقف الحفظ بسبب فشل رفع الصوت
+      }
     }
   }
 
@@ -1412,8 +2114,7 @@ export async function upsertCustomerAction(formData: FormData) {
     if (returnTo) {
       redirect(appendNoticeParam(returnTo, "تم الحفظ بنجاح"));
     }
-    const success = encodeURIComponent("تم حفظ الملف بنجاح.");
-    redirect(`/dashboard/customers/new?success=${success}&saved_id=${savedId}`);
+    redirect(`/dashboard/customers/new?notice=${encodeURIComponent("تم الحفظ بنجاح")}&saved_id=${savedId}`);
   }
 
   redirect("/dashboard/customers");
@@ -1458,12 +2159,32 @@ export async function createCustomerReminderAction(formData: FormData) {
     details: title ? `${title}: ${message}` : message,
     nextFollowUpAt: dueAt,
   });
+  const reminderCtx = await fetchCustomerContext(supabase, customerId);
+  const reminderActorName = profile?.full_name ?? "موظف";
+  const reminderCustomerDisplay = reminderCtx.nickname
+    ? `${reminderCtx.fullName} (${reminderCtx.nickname})`
+    : reminderCtx.fullName;
+
   await sendManagementActivityNotification({
     supabase,
     actorProfile: profile,
     branchId,
-    title: "تذكير جديد",
-    message: `تم إنشاء تذكير جديد للعميل (ID: ${customerId}).`,
+    title: "🔔 تذكير عميل جديد",
+    notificationType: "manual_reminder",
+    message:
+      `🔔 <b>تم جدولة تذكير جديد</b>\n` +
+      `بواسطة الموظف: <b>${reminderActorName}</b>\n\n` +
+      `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
+      `<b>الاسم الكامل:</b> ${reminderCtx.fullName}\n` +
+      (reminderCtx.nickname ? `<b>الكنية:</b> ${reminderCtx.nickname}\n` : "") +
+      `<b>الهاتف:</b> <code>${reminderCtx.phone}</code>\n` +
+      (reminderCtx.branchName ? `<b>المعرض:</b> ${reminderCtx.branchName}\n` : "") +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      (title ? `<b>عنوان التذكير:</b> ${title}\n` : "") +
+      `<b>نص التذكير:</b> ${message}\n` +
+      (dueAt ? `<b>موعد التذكير:</b> ${arabicDateTime(new Date(dueAt))}\n` : "") +
+      (reminderCtx.requestedCar ? `<b>السيارة المطلوبة:</b> ${reminderCtx.requestedCar}\n` : "") +
+      `<i>🕐 ${arabicDateTime()}</i>`,
     payload: { source: "reminder_create", customer_id: customerId },
   });
 
@@ -1513,13 +2234,26 @@ export async function updateCustomerStatusAction(formData: FormData) {
   });
   await incrementCustomerInteractions(supabase, customerId);
   await completeCustomerPendingReminders(supabase, customerId);
+
+  // ── إشعار احترافي شامل التفاصيل ─────────────────────────────────────────
+  const actorName = profile?.full_name ?? "موظف";
+  const ctx = await fetchCustomerContext(supabase, customerId);
+  const { title: notifTitle, message: notifMessage } = buildStatusNotification({
+    status,
+    ctx,
+    actorName,
+    note,
+    nextFollowUpAt,
+  });
+
   await sendManagementActivityNotification({
     supabase,
     actorProfile: profile,
     branchId,
-    title: "تحديث ملف عميل",
-    message: `تم تحديث ملف العميل: ${fullName || "غير محدد"} (الحالة: ${status}).`,
-    payload: { source: "customer_profile_update", customer_id: customerId },
+    title: notifTitle,
+    notificationType: "customer_status_update",
+    message: notifMessage,
+    payload: { source: "customer_status_update", customer_id: customerId, status },
   });
 
   await syncCustomerFollowupReminder({
@@ -1541,6 +2275,174 @@ export async function updateCustomerStatusAction(formData: FormData) {
   if (returnTo) {
     redirect(appendNoticeParam(returnTo, "تم تحديث الحالة بنجاح"));
   }
+}
+
+/**
+ * يفتح دورة جديدة للعميل العائد أو المغلق:
+ * - يُنشئ سجلاً جديداً (لا يُعدّل القديم)
+ * - يرث بيانات الاتصال الأساسية
+ * - يربط السجل الجديد بالسابق عبر parent_customer_id
+ */
+export async function openNewCycleAction(formData: FormData) {
+  if (!hasSupabaseEnv()) return;
+
+  const parentId = getText(formData, "parent_customer_id");
+  const operationType = getText(formData, "operation_type") || "buyer";
+  const returnPath = getNullableText(formData, "return_to");
+  const formBranchId = getNullableText(formData, "branch_id");
+
+  if (!parentId) return;
+
+  const supabase = await createClient();
+  const profile = await getCurrentProfile();
+  const capabilities = getRoleCapabilities(profile?.role, profile?.full_name);
+
+  // جلب بيانات الدورة الأم
+  const { data: parent } = await supabase
+    .from("customers")
+    .select("id, full_name, phone, nickname, address, whatsapp_prefix, branch_id, assigned_user_id, cycle_number, is_active, status")
+    .eq("id", parentId)
+    .maybeSingle();
+
+  if (!parent) return;
+
+  // تحقق من أن الدورة الأم مغلقة فعلاً قبل فتح دورة جديدة
+  // (يطابق نفس المنطق في الواجهة: is_active=false أو حالة إغلاق نصية)
+  const CLOSED_HINTS = [
+    "تمت عملية البيع",
+    "شراء من قبل المعرض",
+    "رفض من قبل العميل",
+    "رفض من قبل المعرض",
+    "تراجع العميل عن الاستبدال",
+    "سحب السيارة من البيع",
+    "إغلاق الملف",
+  ];
+  const isClosed =
+    parent.is_active === false ||
+    CLOSED_HINTS.some((hint) => (parent.status ?? "").includes(hint));
+  if (!isClosed) {
+    redirect(
+      `/dashboard/customers?customer=${parentId}&mode=view&error=${encodeRedirectError("لا يمكن فتح دورة جديدة إلا للملفات المغلقة.")}`,
+    );
+  }
+
+  const newCycleNumber = (parent.cycle_number ?? 1) + 1;
+  // الحالة الافتتاحية تتبع نوع العملية
+  const firstStatus =
+    operationType === "sell_on_behalf"        ? "عرض سيارة للبيع" :
+    operationType === "buyer_tradein_pending" ? "استبدال — تحت التقييم" :
+    /* buyer */                                 "جديد";
+
+  const { data: newCustomer, error } = await supabase
+    .from("customers")
+    .insert({
+      full_name: parent.full_name,
+      phone: parent.phone,
+      nickname: parent.nickname ?? null,
+      address: parent.address ?? null,
+      whatsapp_prefix: parent.whatsapp_prefix ?? null,
+      branch_id: (capabilities.isGeneralManager && formBranchId) ? formBranchId : (parent.branch_id ?? null),
+      assigned_user_id: profile?.id ?? parent.assigned_user_id ?? null,
+      status: firstStatus,
+      is_active: true,
+      source: "دورة جديدة",
+      operation_type: operationType,
+      parent_customer_id: parentId,
+      cycle_number: newCycleNumber,
+      metadata: { operation_type: operationType, operation_type_code: operationType, parent_customer_id: parentId },
+      next_follow_up_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    })
+    .select("id")
+    .maybeSingle();
+
+  if (error || !newCustomer) {
+    redirect(`/dashboard/customers?customer=${parentId}&mode=view&error=${encodeRedirectError(`تعذر إنشاء الدورة الجديدة: ${error?.message ?? "خطأ غير معروف"}`)}`);
+  }
+
+  // سجل النشاط (critical — لكن لا يجب أن يعطّل التوجيه إذا فشل)
+  try {
+    await insertCustomerLog({
+      customerId: newCustomer.id,
+      action: "customer_created",
+      details: `تم فتح دورة جديدة (رقم ${newCycleNumber}) للعميل ${parent.full_name}. مرتبطة بالدورة السابقة #${parent.cycle_number ?? 1}.`,
+      nextFollowUpAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+  } catch (e) {
+    console.error("[openNewCycle] insertCustomerLog failed:", e);
+  }
+
+  // الإشعارات والتذكيرات — لا يجب أن تعطّل التوجيه إذا فشلت
+  try {
+    const newCycleCtx = await fetchCustomerContext(supabase, newCustomer.id);
+    const actorName = profile?.full_name ?? "موظف";
+
+    await sendManagementActivityNotification({
+      supabase,
+      actorProfile: profile,
+      branchId: parent.branch_id,
+      title: "🔄 دورة جديدة لعميل عائد",
+      notificationType: "customer_reactivate",
+      message:
+        `♻️ <b>عميل عائد — دورة جديدة رقم ${newCycleNumber}</b>\n` +
+        `بواسطة: <b>${actorName}</b>\n\n` +
+        `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
+        `<b>الاسم:</b> ${parent.full_name}\n` +
+        `<b>الهاتف:</b> <code>${parent.phone}</code>\n` +
+        (newCycleCtx.branchName ? `<b>المعرض:</b> ${newCycleCtx.branchName}\n` : "") +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `<b>نوع العملية الجديدة:</b> ${operationType === "buyer" ? "مشتري" : operationType === "buyer_tradein_pending" ? "مشتري + استبدال" : "بيع بالوكالة"}\n` +
+        `<b>الحالة الابتدائية:</b> ${firstStatus}\n` +
+        `<i>🕐 ${arabicDateTime()}</i>`,
+      payload: { source: "customer_new_cycle", customer_id: newCustomer.id, parent_customer_id: parentId },
+    });
+  } catch (e) {
+    console.error("[openNewCycle] notification failed:", e);
+  }
+
+  try {
+    await syncCustomerFollowupReminder({
+      customerId: newCustomer.id,
+      branchId: parent.branch_id,
+      assignedUserId: profile?.id ?? parent.assigned_user_id ?? null,
+      nextFollowUpAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      status: firstStatus,
+      fullName: parent.full_name,
+    });
+  } catch (e) {
+    console.error("[openNewCycle] reminder sync failed:", e);
+  }
+
+  // ── رفع التسجيلات الصوتية من الويزارد ──────────────────────────────
+  const voiceFiles = formData.getAll("voice_general_notes")
+    .concat(
+      ...[...formData.keys()]
+        .filter((k) => k.startsWith("voice_negotiation_"))
+        .map((k) => formData.getAll(k)),
+    )
+    .filter((f): f is File => f instanceof File && f.size > 0);
+
+  if (voiceFiles.length > 0) {
+    try {
+      await uploadCustomerAttachmentFiles({
+        supabase,
+        customerId: newCustomer.id,
+        uploadedByUserId: profile?.id ?? null,
+        files: voiceFiles,
+        category: "voice_note",
+      });
+    } catch {
+      // لا نوقف الحفظ بسبب فشل رفع الصوت
+    }
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/customers");
+  revalidatePath("/dashboard/agenda");
+  revalidatePath("/dashboard/management");
+
+  // نوجّه المستخدم لملف العميل الجديد — نستخدم customers لأنها تعمل لجميع الأدوار
+  const destination = returnPath ?? `/dashboard/customers?customer=${newCustomer.id}&mode=view&notice=${encodeURIComponent("✅ تم فتح الدورة الجديدة بنجاح")}`;
+  redirect(destination);
 }
 
 export async function reactivateCustomerAction(formData: FormData) {
@@ -1572,12 +2474,29 @@ export async function reactivateCustomerAction(formData: FormData) {
     nextFollowUpAt: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
   });
   await incrementCustomerInteractions(supabase, customerId);
+  const reactivateCtx = await fetchCustomerContext(supabase, customerId);
+  const reactivateActorName = profile?.full_name ?? "موظف";
+
   await sendManagementActivityNotification({
     supabase,
     actorProfile: profile,
     branchId,
-    title: "إعادة تفعيل عميل",
-    message: `تمت إعادة تفعيل ملف العميل: ${fullName || customerId}.`,
+    title: "🔄 إعادة تفعيل ملف عميل",
+    notificationType: "customer_reactivate",
+    message:
+      `🔄 <b>إعادة تفعيل دورة متابعة جديدة</b>\n` +
+      `بواسطة الموظف: <b>${reactivateActorName}</b>\n\n` +
+      `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
+      `<b>الاسم الكامل:</b> ${reactivateCtx.fullName || fullName}\n` +
+      (reactivateCtx.nickname ? `<b>الكنية:</b> ${reactivateCtx.nickname}\n` : "") +
+      `<b>الهاتف:</b> <code>${reactivateCtx.phone}</code>\n` +
+      (reactivateCtx.branchName ? `<b>المعرض:</b> ${reactivateCtx.branchName}\n` : "") +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `<b>الحالة الجديدة:</b> قيد المتابعة\n` +
+      (reactivateCtx.requestedCar ? `<b>السيارة المطلوبة:</b> ${reactivateCtx.requestedCar}\n` : "") +
+      (reactivateCtx.operationType ? `<b>نوع العملية:</b> ${reactivateCtx.operationType}\n` : "") +
+      `<b>موعد المتابعة الأول:</b> ${arabicDateTime(new Date(Date.now() + 1000 * 60 * 60 * 24))}\n` +
+      `<i>🕐 ${arabicDateTime()}</i>`,
     payload: { source: "customer_reactivate", customer_id: customerId },
   });
 
@@ -1624,16 +2543,45 @@ export async function saveCustomerProfileAction(formData: FormData) {
   const hasTradeIn = getBoolean(formData, "has_trade_in");
 
   const inventoryIdForStatus = getNullableText(formData, "inventory_id_for_status");
+  const dealValue = parseNumber(getNullableText(formData, "deal_value"));
   const { data: existingCustomer } = await supabase
     .from("customers")
     .select("notes, requested_car, metadata, last_contact_at")
     .eq("id", customerId)
     .maybeSingle();
 
-  const requiresInventory = status.includes("تم البيع") || status.includes("حجز");
+  const operationType = getNullableText(formData, "operation_type") ?? "buyer";
+  const allowExceptionalEdit = formData.get("allow_exceptional_edit") === "true";
+
+  // ── حماية سيرفر: ملفات البيع المكتملة محمية من التعديل بدون إذن صريح ─────
+  const isSoldComplete =
+    !(existingCustomer as unknown as { is_active?: boolean } | null)?.is_active &&
+    ((existingCustomer as unknown as { status?: string } | null)?.status ?? "").includes("تمت عملية البيع");
+
+  // نجلب is_active و status مباشرة من DB (existingCustomer لا يحملهما بعد)
+  const { data: customerLockCheck } = await supabase
+    .from("customers")
+    .select("is_active, status")
+    .eq("id", customerId)
+    .maybeSingle();
+
+  const isFileSoldLocked =
+    customerLockCheck &&
+    !customerLockCheck.is_active &&
+    (customerLockCheck.status ?? "").includes("تمت عملية البيع");
+
+  if (isFileSoldLocked && !allowExceptionalEdit) {
+    redirect(
+      `/dashboard/customers?customer=${customerId}&mode=view&error=${encodeRedirectError("هذا الملف مغلق نهائياً (تمت عملية البيع). لا يمكن التعديل إلا عبر زر التعديل الاستثنائي.")}`,
+    );
+  }
+
+  const requiresInventory =
+    operationType !== "sell_on_behalf" &&
+    (status.includes("تمت عملية البيع") || status.includes("حجز"));
   if (requiresInventory && !inventoryIdForStatus) {
     redirect(
-      `/dashboard/customers?customer=${customerId}&mode=view&error=${encodeRedirectError("يرجى اختيار الشاصي عند حالة تم البيع أو الحجز.")}`,
+      `/dashboard/customers?customer=${customerId}&mode=view&error=${encodeRedirectError("يرجى اختيار السيارة / الشاصي عند حالة البيع أو الحجز.")}`,
     );
   }
 
@@ -1670,16 +2618,33 @@ export async function saveCustomerProfileAction(formData: FormData) {
       ? `${existingNotes ? `${existingNotes}\n\n` : ""}[تحديث ${new Date().toLocaleString("ar-EG")}]\n${closureAutoNote}`
       : existingNotes;
 
+  // حفظ قيمة الصفقة في metadata إذا كانت موجودة وإذا كانت الحالة إغلاق
+  const isClosingStatus = isClosedStatus(status);
+  const dealValueToSave =
+    dealValue && dealValue > 0 && isClosingStatus
+      ? dealValue
+      : (typeof currentMetadata.deal_value === "number" ? currentMetadata.deal_value : null);
+
+  // تحويل كود نوع العملية إلى النص العربي
+  const operationTypeLabel =
+    operationType === "buyer" ? "مشتري" :
+    operationType === "buyer_tradein_pending" ? "مشتري + استبدال" :
+    operationType === "sell_on_behalf" ? "بيع بالوكالة" :
+    (existingCustomer as unknown as { operation_type?: string } | null)?.operation_type ?? "مشتري";
+
   const customerPayload: Record<string, unknown> = {
     requested_car: requestedCar,
     status,
     notes: mergedNotes,
     next_follow_up_at: isActive ? nextFollowUpAt : null,
     is_active: isActive,
+    operation_type: operationTypeLabel,
     metadata: {
       ...currentMetadata,
+      operation_type_code: operationType,
       selected_inventory_id: selectedInventoryMeta.id,
       selected_inventory_chassis: selectedInventoryMeta.chassis,
+      ...(dealValueToSave !== null ? { deal_value: dealValueToSave } : {}),
     },
   };
 
@@ -1694,8 +2659,10 @@ export async function saveCustomerProfileAction(formData: FormData) {
     redirect(`/dashboard/customers?customer=${customerId}&mode=view&error=${encodeRedirectError(customerUpdate.error.message)}`);
   }
 
-  const newInventoryStatus = status.includes("تم البيع") ? "مباعة" : status.includes("حجز") ? "محجوزة" : null;
+  const newInventoryStatus = status.includes("تمت عملية البيع") ? "مباعة" : status.includes("حجز") ? "محجوزة" : null;
   const selectedInventoryId = selectedInventoryMeta.id;
+
+  // ── تحديث حالة السيارة في المخزون + الانعكاس العكسي على عميل البيع بالوكالة ──
   if (newInventoryStatus && selectedInventoryId) {
     const markSelectedInventory = await supabase
       .from("inventory")
@@ -1704,8 +2671,34 @@ export async function saveCustomerProfileAction(formData: FormData) {
     if (markSelectedInventory.error) {
       redirect(`/dashboard/customers?customer=${customerId}&mode=view&error=${encodeRedirectError(markSelectedInventory.error.message)}`);
     }
+
+    // إذا كانت السيارة تخص عميل بيع بالوكالة → تحديث حالته تلقائياً
+    const { data: invCarOwner } = await supabase
+      .from("inventory")
+      .select("source_customer_id")
+      .eq("id", selectedInventoryId)
+      .maybeSingle();
+
+    if (invCarOwner?.source_customer_id && invCarOwner.source_customer_id !== customerId) {
+      const sellOnBehalfNewStatus =
+        newInventoryStatus === "مباعة"  ? "تمت عملية البيع (للعميل)" :
+        newInventoryStatus === "محجوزة" ? "حجز (سيارة العميل)"       : null;
+      if (sellOnBehalfNewStatus) {
+        await supabase
+          .from("customers")
+          .update({ status: sellOnBehalfNewStatus, last_contact_at: new Date().toISOString() })
+          .eq("id", invCarOwner.source_customer_id);
+        // سجل تدقيق: التحديث التلقائي لعميل الوكالة
+        await insertCustomerLog({
+          customerId: invCarOwner.source_customer_id,
+          action: "status_updated",
+          details: `تم تحديث الحالة تلقائياً إلى "${sellOnBehalfNewStatus}" بسبب ${newInventoryStatus === "مباعة" ? "بيع" : "حجز"} السيارة من قبل عميل آخر (معرف العميل: ${customerId}).`,
+        });
+      }
+    }
   }
 
+  // ── الإفراج عن السيارة السابقة إذا تغيّر الاختيار ─────────────────────────
   if (previousSelectedInventoryId && previousSelectedInventoryId !== selectedInventoryId) {
     const releasePreviousInventory = await supabase
       .from("inventory")
@@ -1713,6 +2706,30 @@ export async function saveCustomerProfileAction(formData: FormData) {
       .eq("id", previousSelectedInventoryId);
     if (releasePreviousInventory.error) {
       redirect(`/dashboard/customers?customer=${customerId}&mode=view&error=${encodeRedirectError(releasePreviousInventory.error.message)}`);
+    }
+
+    // إذا كانت السيارة المُفرَج عنها تخص عميل بيع بالوكالة → إعادة حالته لـ "برسم البيع"
+    const { data: prevInvOwner } = await supabase
+      .from("inventory")
+      .select("source_customer_id")
+      .eq("id", previousSelectedInventoryId)
+      .maybeSingle();
+
+    if (prevInvOwner?.source_customer_id && prevInvOwner.source_customer_id !== customerId) {
+      const releaseResult = await supabase
+        .from("customers")
+        .update({ status: "برسم البيع", last_contact_at: new Date().toISOString() })
+        .eq("id", prevInvOwner.source_customer_id)
+        // نُعيد الحالة فقط إذا كانت في حجز أو بيع (لا نتجاوز حالة مغلقة)
+        .in("status", ["حجز (سيارة العميل)", "تمت عملية البيع (للعميل)"]);
+      if (!releaseResult.error) {
+        // سجل تدقيق: الإفراج عن سيارة عميل الوكالة
+        await insertCustomerLog({
+          customerId: prevInvOwner.source_customer_id,
+          action: "status_updated",
+          details: `تم إعادة الحالة تلقائياً إلى "برسم البيع" بعد تراجع/تغيير العميل (معرف العميل: ${customerId}) عن حجز السيارة.`,
+        });
+      }
     }
   }
 
@@ -1772,22 +2789,86 @@ export async function saveCustomerProfileAction(formData: FormData) {
     }
   }
 
+  // ── مزامنة مخزون سيارة العميل ────────────────────────────────────────────
+  // الخلل: has_trade_in مرتبط بزر "تعديل" لا بوجود السيارة؛
+  // نُعالج مسارَين: (1) المستخدم فتح التعديل وأرسل البيانات،
+  //                 (2) المستخدم غيّر الحالة فقط دون فتح التعديل
+  const selectedSellTradeId = getNullableText(formData, "selected_trade_in_id");
+  const AUTO_SYNC_OP_TYPES = ["sell_on_behalf", "buyer_tradein_pending", "buyer_tradein_evaluated"];
+
   if (hasTradeIn) {
+    // المسار 1: بيانات السيارة مُرسَلة من الفورم
+    let syncModel = tradeModelInput;
+    let syncChassis = getNullableText(formData, "trade_in_chassis");
+    let syncPrice = parseNumber(getNullableText(formData, "trade_in_price"));
+    let syncColor = getNullableText(formData, "trade_in_color");
+    let syncYear = tradeYearInput;
+    let syncMileage = parseNumber(getNullableText(formData, "trade_in_mileage"));
+    let syncSpecs = getNullableText(formData, "trade_in_specs");
+    let syncInspection = getNullableText(formData, "trade_in_inspection");
+
+    // sell_on_behalf متعدد: إذا اختار المستخدم سيارة محددة نجلب بياناتها من DB
+    if (selectedSellTradeId && operationType === "sell_on_behalf") {
+      const { data: selTrade } = await supabase
+        .from("trade_ins")
+        .select("model, chassis_no, price, color, production_year, mileage, specs, inspection")
+        .eq("id", selectedSellTradeId)
+        .maybeSingle();
+      if (selTrade) {
+        syncModel = selTrade.model ?? syncModel;
+        syncChassis = selTrade.chassis_no ?? null;
+        syncPrice = selTrade.price ?? null;
+        syncColor = selTrade.color ?? null;
+        syncYear = selTrade.production_year ?? null;
+        syncMileage = selTrade.mileage ?? null;
+        syncSpecs = selTrade.specs ?? null;
+        syncInspection = selTrade.inspection ?? null;
+      }
+    }
+
     await syncTradeInventoryFromCustomer({
       supabase,
       customerId,
       branchId,
       customerName: fullName || phone || "مالك",
-      tradeModel: tradeModelInput,
-      tradeStatus: getNullableText(formData, "trade_in_status"),
-      tradeChassis: getNullableText(formData, "trade_in_chassis"),
-      tradePrice: parseNumber(getNullableText(formData, "trade_in_price")),
-      tradeColor: getNullableText(formData, "trade_in_color"),
-      tradeYear: tradeYearInput,
-      tradeMileage: parseNumber(getNullableText(formData, "trade_in_mileage")),
-      tradeSpecs: getNullableText(formData, "trade_in_specs"),
-      tradeInspection: getNullableText(formData, "trade_in_inspection"),
+      tradeModel: syncModel,
+      tradeStatus: status,
+      tradeChassis: syncChassis,
+      tradePrice: syncPrice,
+      tradeColor: syncColor,
+      tradeYear: syncYear,
+      tradeMileage: syncMileage,
+      tradeSpecs: syncSpecs,
+      tradeInspection: syncInspection,
     });
+  } else if (AUTO_SYNC_OP_TYPES.includes(operationType)) {
+    // المسار 2: المستخدم لم يفتح التعديل → نجلب بيانات السيارة من قاعدة البيانات مباشرةً
+    // (has_trade_in = false لأن الـ checkbox "تعديل" غير مُفعَّل، لا لأن السيارة غير موجودة)
+    const syncSourceId = selectedSellTradeId || tradeInId;
+    if (syncSourceId) {
+      const { data: existingTrade } = await supabase
+        .from("trade_ins")
+        .select("model, chassis_no, price, color, production_year, mileage, specs, inspection")
+        .eq("id", syncSourceId)
+        .maybeSingle();
+      if (existingTrade?.model) {
+        await syncTradeInventoryFromCustomer({
+          supabase,
+          customerId,
+          branchId,
+          customerName: fullName || phone || "مالك",
+          tradeModel: existingTrade.model,
+          tradeStatus: status,
+          tradeChassis: existingTrade.chassis_no ?? null,
+          tradePrice: existingTrade.price ?? null,
+          tradeColor: existingTrade.color ?? null,
+          tradeYear: existingTrade.production_year ?? null,
+          tradeMileage: existingTrade.mileage ?? null,
+          tradeSpecs: existingTrade.specs ?? null,
+          tradeInspection: existingTrade.inspection ?? null,
+        });
+      }
+    }
   }
 
   const photoFiles = formData
@@ -1804,7 +2885,7 @@ export async function saveCustomerProfileAction(formData: FormData) {
     .filter((item): item is File => item instanceof File && item.size > 0);
 
   try {
-    await uploadCustomerAttachmentFiles({
+    const photoPaths = await uploadCustomerAttachmentFiles({
       supabase,
       customerId,
       uploadedByUserId: profile?.id ?? null,
@@ -1832,9 +2913,74 @@ export async function saveCustomerProfileAction(formData: FormData) {
       files: insuranceFiles,
       category: "trade_insurance",
     });
+
+    // ── إشعار تقييم السيارة الشامل (نص + صور) ───────────────────────────
+    if (hasSupabaseServiceRoleEnv()) {
+      let signedPhotoUrls: string[] = [];
+      if (photoPaths.length > 0) {
+        const admin = createAdminClient();
+        const { data: signedData } = await admin.storage
+          .from("customer-attachments")
+          .createSignedUrls(photoPaths, 3600);
+        signedPhotoUrls = (signedData ?? []).map((d) => d.signedUrl).filter(Boolean) as string[];
+      }
+      const tradeModelVal = getNullableText(formData, "trade_in_model");
+      const tradeStatusVal = getNullableText(formData, "trade_in_status");
+      const hasTradeData = Boolean(tradeModelVal?.trim()) && hasTradeIn;
+      const profileNickname = getNullableText(formData, "nickname");
+      if (hasTradeData) {
+        void pushTradeAssessmentNotification({
+          supabase,
+          actorProfile: profile,
+          branchId,
+          customerId,
+          customerName: fullName || "غير محدد",
+          customerNickname: profileNickname,
+          customerPhone: phone,
+          tradeModel: tradeModelVal,
+          tradeStatus: tradeStatusVal,
+          tradeChassis: getNullableText(formData, "trade_in_chassis"),
+          tradeColor: getNullableText(formData, "trade_in_color"),
+          tradeYear: parseNumber(getNullableText(formData, "trade_in_year")),
+          tradeMileage: parseNumber(getNullableText(formData, "trade_in_mileage")),
+          tradePrice: parseNumber(getNullableText(formData, "trade_in_price")),
+          tradeSpecs: getNullableText(formData, "trade_in_specs"),
+          tradeInspection: getNullableText(formData, "trade_in_inspection"),
+          signedPhotoUrls,
+        });
+      } else if (signedPhotoUrls.length > 0) {
+        const caption =
+          `📸 <b>صور مرفقة من الموظف ${profile?.full_name ?? "موظف"}</b>\n` +
+          `👤 ${fullName || "غير محدد"} | 📱 <code>${phone}</code>`;
+        void pushTelegramPhotosToManagers({ branchId, caption, photoUrls: signedPhotoUrls });
+      }
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "تعذر رفع أحد الملفات";
     redirect(`/dashboard/customers?customer=${customerId}&mode=view&error=${encodeRedirectError(message)}`);
+  }
+
+  // ── رفع التسجيلات الصوتية من صفحة التفاصيل ──────────────────────────
+  const voiceFilesProfile = formData.getAll("voice_general_notes")
+    .concat(
+      ...[...formData.keys()]
+        .filter((k) => k.startsWith("voice_negotiation_"))
+        .map((k) => formData.getAll(k)),
+    )
+    .filter((f): f is File => f instanceof File && f.size > 0);
+
+  if (voiceFilesProfile.length > 0) {
+    try {
+      await uploadCustomerAttachmentFiles({
+        supabase,
+        customerId,
+        uploadedByUserId: profile?.id ?? null,
+        files: voiceFilesProfile,
+        category: "voice_note",
+      });
+    } catch {
+      // لا نوقف الحفظ بسبب فشل رفع الصوت
+    }
   }
 
   await insertCustomerLog({
@@ -1845,6 +2991,35 @@ export async function saveCustomerProfileAction(formData: FormData) {
   });
   await incrementCustomerInteractions(supabase, customerId);
   await completeCustomerPendingReminders(supabase, customerId);
+
+  // ── إشعار احترافي شامل لتحديث ملف العميل ───────────────────────────────
+  const profileActorName = profile?.full_name ?? "موظف";
+  const profileCtx = await fetchCustomerContext(supabase, customerId);
+  const { title: profileNotifTitle, message: profileNotifMessage } = buildStatusNotification({
+    status,
+    ctx: {
+      fullName: profileCtx.fullName || fullName,
+      nickname: profileCtx.nickname,
+      phone: profileCtx.phone || phone,
+      requestedCar: profileCtx.requestedCar || requestedCar,
+      operationType: profileCtx.operationType,
+      assignedUserName: profileCtx.assignedUserName,
+      branchName: profileCtx.branchName,
+    },
+    actorName: profileActorName,
+    note,
+    nextFollowUpAt: isActive ? nextFollowUpAt : null,
+    dealValue: dealValueToSave,
+  });
+  await sendManagementActivityNotification({
+    supabase,
+    actorProfile: profile,
+    branchId,
+    title: profileNotifTitle,
+    notificationType: "customer_profile_update",
+    message: profileNotifMessage,
+    payload: { source: "customer_profile_update", customer_id: customerId, status },
+  });
 
   await syncCustomerFollowupReminder({
     customerId,
@@ -1865,4 +3040,324 @@ export async function saveCustomerProfileAction(formData: FormData) {
   if (returnTo) {
     redirect(appendNoticeParam(returnTo, "تم التعديل بنجاح"));
   }
+}
+
+// ─── حذف عميل — المدير العام ومدير المعرض فقط ───────────────────────────────
+export async function deleteCustomerAction(formData: FormData) {
+  if (!hasSupabaseEnv()) return;
+
+  const supabase = await createClient();
+  const profile = await getCurrentProfile();
+  if (!profile) redirect("/login");
+
+  const capabilities = getRoleCapabilities(profile.role);
+  if (!capabilities.isManager) {
+    redirect("/dashboard/customers");
+  }
+
+  const customerId = getText(formData, "customer_id");
+  const returnTo = getNullableText(formData, "return_to") ?? "/dashboard/customers";
+  if (!customerId) return;
+
+  // سجّل الحذف قبل التنفيذ
+  try {
+    await supabase.from("customer_logs").insert({
+      customer_id: customerId,
+      action: "customer_deleted",
+      notes: `تم حذف العميل بواسطة ${profile.full_name} (${profile.role})`,
+      performed_by: profile.id,
+    });
+  } catch {
+    // تجاهل خطأ السجل — الحذف يكمل بغض النظر
+  }
+
+  const { error } = await supabase.from("customers").delete().eq("id", customerId);
+
+  if (error) {
+    redirect(appendNoticeParam(returnTo, `تعذّر الحذف: ${error.message}`));
+  }
+
+  revalidatePath("/dashboard/customers");
+  revalidatePath("/dashboard/management");
+  revalidatePath("/dashboard");
+
+  redirect(appendNoticeParam("/dashboard/customers", "تم حذف ملف العميل نهائياً"));
+}
+
+// ─── تحويل بيع بالوكالة → مشتري + استبدال ──────────────────────────────────
+export async function convertToTradeInAction(formData: FormData) {
+  if (!hasSupabaseEnv()) return;
+
+  const supabase = await createClient();
+  const profile = await getCurrentProfile();
+  if (!profile) redirect("/login");
+
+  const customerId = getText(formData, "customer_id");
+  if (!customerId) return;
+
+  // جلب بيانات العميل الحالية
+  const { data: customer, error: fetchError } = await supabase
+    .from("customers")
+    .select("id, full_name, operation_type, metadata, branch_id, assigned_user_id")
+    .eq("id", customerId)
+    .maybeSingle();
+
+  if (fetchError || !customer) redirect("/dashboard/customers");
+
+  // التحقق أن العميل فعلاً بيع بالوكالة
+  const currentMeta = (customer.metadata ?? {}) as Record<string, unknown>;
+  const currentCode = typeof currentMeta.operation_type_code === "string" ? currentMeta.operation_type_code : "";
+  if (currentCode !== "sell_on_behalf") redirect(`/dashboard/customers?customer=${customerId}&mode=view`);
+
+  // تحديث نوع العملية والـ metadata
+  const updatedMeta = {
+    ...currentMeta,
+    operation_type_code: "buyer_tradein_pending",
+    converted_from: "sell_on_behalf",
+    converted_at: new Date().toISOString(),
+    converted_by: profile.id,
+  };
+
+  const { error } = await supabase
+    .from("customers")
+    .update({
+      operation_type: "مشتري + استبدال",
+      status: "قيد المتابعة — بانتظار التقييم",
+      metadata: updatedMeta,
+    })
+    .eq("id", customerId);
+
+  if (error) redirect(appendNoticeParam(`/dashboard/customers?customer=${customerId}&mode=view`, `تعذّر التحويل: ${error.message}`));
+
+  // سجّل الحدث في customer_logs
+  try {
+    await supabase.from("customer_logs").insert({
+      customer_id: customerId,
+      action: "operation_type_converted",
+      notes: `تم تحويل نوع العملية من "بيع بالوكالة" إلى "مشتري + استبدال" بواسطة ${profile.full_name}`,
+      performed_by: profile.id,
+    });
+  } catch { /* تجاهل */ }
+
+  revalidatePath(`/dashboard/customers`);
+  revalidatePath(`/dashboard/management`);
+  redirect(appendNoticeParam(`/dashboard/customers?customer=${customerId}&mode=view`, `تم تحويل ملف العميل إلى "مشتري + استبدال" بنجاح ✓`));
+}
+
+// ─── تحويل مشتري + استبدال → بيع بالوكالة ──────────────────────────────────
+export async function convertToSellOnBehalfAction(formData: FormData) {
+  if (!hasSupabaseEnv()) return;
+
+  const supabase = await createClient();
+  const profile = await getCurrentProfile();
+  if (!profile) redirect("/login");
+
+  const customerId = getText(formData, "customer_id");
+  if (!customerId) return;
+
+  // جلب بيانات العميل الحالية بما فيها requested_car
+  const { data: customer, error: fetchError } = await supabase
+    .from("customers")
+    .select("id, full_name, operation_type, metadata, requested_car")
+    .eq("id", customerId)
+    .maybeSingle();
+
+  if (fetchError || !customer) redirect("/dashboard/customers");
+
+  // التحقق أن العميل فعلاً مشتري + استبدال
+  const currentMeta = (customer.metadata ?? {}) as Record<string, unknown>;
+  const currentCode = typeof currentMeta.operation_type_code === "string" ? currentMeta.operation_type_code : "";
+  if (currentCode !== "buyer_tradein_pending") redirect(`/dashboard/customers?customer=${customerId}&mode=view`);
+
+  // حفظ السيارات المطلوبة في metadata للتاريخ قبل إفراغها
+  const updatedMeta = {
+    ...currentMeta,
+    operation_type_code: "sell_on_behalf",
+    converted_from: "buyer_tradein_pending",
+    converted_at: new Date().toISOString(),
+    converted_by: profile.id,
+    // حفظ السيارات المطلوبة للتاريخ
+    archived_requested_car: customer.requested_car ?? null,
+  };
+
+  const { error } = await supabase
+    .from("customers")
+    .update({
+      operation_type: "بيع بالوكالة",
+      status: "عرض سيارة للبيع",
+      requested_car: null,   // إفراغ السيارات المطلوبة
+      metadata: updatedMeta,
+    })
+    .eq("id", customerId);
+
+  if (error) redirect(appendNoticeParam(`/dashboard/customers?customer=${customerId}&mode=view`, `تعذّر التحويل: ${error.message}`));
+
+  // سجّل الحدث في customer_logs مع حفظ السيارات المطلوبة
+  try {
+    const archivedCars = customer.requested_car ? ` (السيارات المطلوبة المؤرشفة: ${customer.requested_car})` : "";
+    await supabase.from("customer_logs").insert({
+      customer_id: customerId,
+      action: "operation_type_converted",
+      notes: `تم تحويل نوع العملية من "مشتري + استبدال" إلى "بيع بالوكالة" بواسطة ${profile.full_name}${archivedCars}`,
+      performed_by: profile.id,
+    });
+  } catch { /* تجاهل */ }
+
+  revalidatePath(`/dashboard/customers`);
+  revalidatePath(`/dashboard/management`);
+  redirect(appendNoticeParam(`/dashboard/customers?customer=${customerId}&mode=view`, `تم تحويل ملف العميل إلى "بيع بالوكالة" بنجاح ✓`));
+}
+
+// ─── Branch Management Actions (GM only) ─────────────────────────────────────
+
+function revalidateBranchPaths() {
+  revalidatePath("/dashboard/branches");
+  revalidatePath("/dashboard/staff");
+  revalidatePath("/dashboard/management");
+  revalidatePath("/dashboard");
+}
+
+/** إنشاء معرض جديد — المدير العام فقط */
+export async function createBranchAction(formData: FormData) {
+  if (!hasSupabaseEnv()) return;
+
+  const profile = await getCurrentProfile();
+  if (!getRoleCapabilities(profile?.role).isGeneralManager) {
+    redirect("/dashboard/unauthorized");
+  }
+
+  const name = getText(formData, "branch_name").trim();
+  const city = getNullableText(formData, "branch_city");
+  const address = getNullableText(formData, "branch_address");
+  const whatsappRaw = getText(formData, "branch_whatsapp").replace(/[\s\-\(\)]/g, "");
+  const whatsappPrefix = getNullableText(formData, "branch_whatsapp_prefix") ?? "+966";
+  const whatsappNumber = whatsappRaw || null;
+
+  if (!name) {
+    redirect("/dashboard/branches?branch_error=" + encodeURIComponent("اسم المعرض مطلوب."));
+  }
+
+  if (!hasSupabaseServiceRoleEnv()) {
+    redirect("/dashboard/branches?branch_error=" + encodeURIComponent("SUPABASE_SERVICE_ROLE_KEY غير مضبوط."));
+  }
+
+  const admin = createAdminClient();
+
+  // فحص التكرار
+  const { data: existing } = await admin
+    .from("branches")
+    .select("id")
+    .ilike("name", name)
+    .maybeSingle();
+
+  if (existing?.id) {
+    redirect("/dashboard/branches?branch_error=" + encodeURIComponent(`معرض باسم "${name}" موجود مسبقاً.`));
+  }
+
+  const { error } = await admin.from("branches").insert({
+    name,
+    city,
+    address,
+    whatsapp_number: whatsappNumber,
+    whatsapp_prefix: whatsappPrefix,
+    is_active: true,
+  });
+
+  if (error) {
+    redirect("/dashboard/branches?branch_error=" + encodeURIComponent(`تعذر إنشاء المعرض: ${error.message}`));
+  }
+
+  revalidateBranchPaths();
+  redirect("/dashboard/branches?branch_notice=" + encodeURIComponent(`تم إنشاء معرض "${name}" بنجاح. ✅`));
+}
+
+/** تعديل بيانات معرض (اسم، واتساب، مدينة) — المدير العام فقط */
+export async function updateBranchAction(formData: FormData) {
+  if (!hasSupabaseEnv()) return;
+
+  const profile = await getCurrentProfile();
+  if (!getRoleCapabilities(profile?.role).isGeneralManager) {
+    redirect("/dashboard/unauthorized");
+  }
+
+  const branchId = getText(formData, "branch_id");
+  if (!branchId) return;
+
+  const name = getText(formData, "branch_name").trim();
+  const city = getNullableText(formData, "branch_city");
+  const address = getNullableText(formData, "branch_address");
+  const whatsappRaw = getText(formData, "branch_whatsapp").replace(/[\s\-\(\)]/g, "");
+  const whatsappPrefix = getNullableText(formData, "branch_whatsapp_prefix") ?? "+966";
+  const whatsappNumber = whatsappRaw || null;
+
+  if (!name) {
+    redirect("/dashboard/branches?branch_error=" + encodeURIComponent("اسم المعرض لا يمكن أن يكون فارغاً."));
+  }
+
+  if (!hasSupabaseServiceRoleEnv()) {
+    redirect("/dashboard/branches?branch_error=" + encodeURIComponent("SUPABASE_SERVICE_ROLE_KEY غير مضبوط."));
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("branches")
+    .update({ name, city, address, whatsapp_number: whatsappNumber, whatsapp_prefix: whatsappPrefix })
+    .eq("id", branchId);
+
+  if (error) {
+    redirect("/dashboard/branches?branch_error=" + encodeURIComponent(`تعذر التحديث: ${error.message}`));
+  }
+
+  revalidateBranchPaths();
+  redirect("/dashboard/branches?branch_notice=" + encodeURIComponent("تم تحديث بيانات المعرض بنجاح. ✅"));
+}
+
+/** فتح أو إغلاق معرض — المدير العام فقط */
+export async function toggleBranchStatusAction(formData: FormData) {
+  if (!hasSupabaseEnv()) return;
+
+  const profile = await getCurrentProfile();
+  if (!getRoleCapabilities(profile?.role).isGeneralManager) {
+    redirect("/dashboard/unauthorized");
+  }
+
+  const branchId = getText(formData, "branch_id");
+  const newStatus = getText(formData, "new_status") === "true";
+
+  if (!branchId) return;
+
+  if (!hasSupabaseServiceRoleEnv()) {
+    redirect("/dashboard/branches?branch_error=" + encodeURIComponent("SUPABASE_SERVICE_ROLE_KEY غير مضبوط."));
+  }
+
+  const admin = createAdminClient();
+
+  // حماية: لا تُغلق معرضاً فيه موظفون نشطون
+  if (!newStatus) {
+    const { data: activeStaff } = await admin
+      .from("app_users")
+      .select("id")
+      .eq("branch_id", branchId)
+      .eq("is_active", true)
+      .limit(1);
+
+    if ((activeStaff ?? []).length > 0) {
+      redirect("/dashboard/branches?branch_error=" + encodeURIComponent(
+        "لا يمكن إغلاق المعرض وفيه موظفون نشطون. انقل الموظفين أو عطّل حساباتهم أولاً."
+      ));
+    }
+  }
+
+  const { error } = await admin
+    .from("branches")
+    .update({ is_active: newStatus })
+    .eq("id", branchId);
+
+  if (error) {
+    redirect("/dashboard/branches?branch_error=" + encodeURIComponent(`تعذر تغيير حالة المعرض: ${error.message}`));
+  }
+
+  revalidateBranchPaths();
+  const msg = newStatus ? "تم فتح المعرض وتفعيله. ✅" : "تم إغلاق المعرض. المعرض لم يُحذف ويمكن فتحه مجدداً.";
+  redirect("/dashboard/branches?branch_notice=" + encodeURIComponent(msg));
 }

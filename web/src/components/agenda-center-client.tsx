@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { ClipboardCheck, ClipboardList, Eye, IdCard, ListChecks, Send, Siren, X, Zap } from "lucide-react";
 
 import { sendQuickReminderAction } from "@/app/dashboard/actions";
@@ -10,18 +11,38 @@ import { formatDate } from "@/lib/format";
 
 type ModalKind = "tasks" | "trades" | "licenses" | "evaluation" | null;
 
+function SubmitBtn() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="legacy-btn legacy-btn-info"
+    >
+      {pending ? (
+        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+      ) : (
+        <Send className="h-4 w-4" />
+      )}
+      تذكير
+    </button>
+  );
+}
+
 function ReminderButton({
   userId,
   branchId,
   label,
   title,
   message,
+  redirectTo = "/dashboard/agenda",
 }: {
   userId: string | null;
   branchId: string | null;
   label: string | null;
   title: string;
   message: string;
+  redirectTo?: string;
 }) {
   return (
     <form action={sendQuickReminderAction}>
@@ -30,10 +51,8 @@ function ReminderButton({
       <input type="hidden" name="recipient_label" value={label ?? ""} />
       <input type="hidden" name="title" value={title} />
       <input type="hidden" name="message" value={message} />
-      <button type="submit" className="legacy-btn legacy-btn-info">
-        <Send className="h-4 w-4" />
-        تذكير
-      </button>
+      <input type="hidden" name="redirect_to" value={redirectTo} />
+      <SubmitBtn />
     </form>
   );
 }
@@ -151,6 +170,7 @@ export function AgendaCenterClient({
                             label={item.recipient_label}
                             title={`تذكير متابعة ${item.customer_name ?? "عميل"}`}
                             message={`تذكير متابعة: ${item.message}`}
+                            redirectTo={detailBasePath}
                           />
                         </div>
                       </div>
@@ -165,6 +185,14 @@ export function AgendaCenterClient({
                         <div className="text-sm text-slate-700">الموظف: {item.staff_name ?? "—"} | المعرض: {item.branch_name ?? "—"}</div>
                         <div className="mt-2 text-sm font-bold text-rose-700">النواقص: {item.trade_in_missing_fields.join("، ")}</div>
                         <div className="mt-3 flex flex-wrap gap-2">
+                          <ReminderButton
+                            userId={item.staff_id ?? null}
+                            branchId={item.branch_id ?? null}
+                            label={item.staff_name ?? null}
+                            title={`نواقص استبدال: ${item.customer_name}`}
+                            message={`يرجى إكمال بيانات الاستبدال للسيارة ${item.trade_in_model}. النواقص: ${item.trade_in_missing_fields.join("، ")}`}
+                            redirectTo={detailBasePath}
+                          />
                           <Link href={`${detailBasePath}?customer=${item.customer_id}&mode=view&focus=trade`} className="legacy-btn legacy-btn-danger">
                             <ClipboardList className="h-4 w-4" />
                             إكمال البيانات
@@ -180,7 +208,15 @@ export function AgendaCenterClient({
                         <div className="text-lg font-bold text-rose-700">{item.customer_name} | {item.trade_in_model}</div>
                         <div className="text-sm text-slate-700">الرخصة: {item.trade_in_license_expiry ?? "-"}</div>
                         <div className="text-sm text-slate-700">الموظف: {item.staff_name ?? "—"} | المعرض: {item.branch_name ?? "—"}</div>
-                        <div className="mt-3">
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <ReminderButton
+                            userId={item.staff_id ?? null}
+                            branchId={item.branch_id ?? null}
+                            label={item.staff_name ?? null}
+                            title={`تحديث رخصة: ${item.customer_name}`}
+                            message={`يرجى تحديث رخصة سيارة العميل ${item.customer_name} (${item.trade_in_model}) — الرخصة: ${item.trade_in_license_expiry ?? "غير محدد"}`}
+                            redirectTo={detailBasePath}
+                          />
                           <Link href={`${detailBasePath}?customer=${item.customer_id}&mode=view&focus=trade`} className="legacy-btn legacy-btn-danger">
                             <IdCard className="h-4 w-4" />
                             فتح وتحديث

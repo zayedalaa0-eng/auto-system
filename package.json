@@ -5,5 +5,8 @@
     "build": "npm --prefix web run build",
     "dev": "npm --prefix web run dev",
     "start": "npm --prefix web run start"
+  },
+  "devDependencies": {
+    "docx": "^9.7.1"
   }
 }

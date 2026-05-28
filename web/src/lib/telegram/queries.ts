@@ -185,11 +185,19 @@ export async function searchCustomers(user: BotUser, searchQuery: string) {
   }));
 }
 
+const CLOSED_BOT_STATUSES = [
+  "تمت عملية البيع",
+  "رفض من قبل العميل",
+  "رفض من قبل المعرض",
+  "إغلاق الملف",
+];
+
 export async function createCustomer(
   user: BotUser,
   data: { full_name: string; phone: string; status: string; requested_car: string | null },
 ) {
   const admin = createAdminClient();
+  const isClosed = CLOSED_BOT_STATUSES.some((s) => data.status.includes(s));
   const { error } = await admin.from("customers").insert({
     full_name: data.full_name,
     phone: data.phone,
@@ -197,7 +205,9 @@ export async function createCustomer(
     requested_car: data.requested_car ?? null,
     branch_id: user.branch_id ?? null,
     assigned_user_id: user.id,
-    is_active: true,
+    is_active: !isClosed,
+    operation_type: "buyer",
+    metadata: { operation_type: "buyer", source: "telegram_bot" },
   });
 
   if (!error) {

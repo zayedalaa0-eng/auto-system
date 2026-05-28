@@ -3,30 +3,53 @@ export type RoleCapabilities = {
   isManager: boolean;
 };
 
+/**
+ * قيم enum الأدوار المعتمدة في قاعدة البيانات.
+ * الأولوية الأولى دائماً: المطابقة الحرفية للـ enum قبل أي منطق نصي.
+ */
+export const ROLE_ENUM = {
+  GENERAL_MANAGER: "general_manager",
+  MANAGER:         "manager",
+  BRANCH_MANAGER:  "branch_manager",
+  EMPLOYEE:        "employee",
+} as const;
+
+export type RoleEnum = typeof ROLE_ENUM[keyof typeof ROLE_ENUM];
+
 function normalizeRoleText(value: string | null | undefined) {
   return (value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-export function getRoleCapabilities(role: string | null | undefined, fullName?: string | null): RoleCapabilities {
+/**
+ * يحدّد صلاحيات المستخدم بناءً على حقل role فقط.
+ * الأولوية:
+ *   1. مطابقة enum صارمة (general_manager / manager / branch_manager / employee)
+ *   2. مطابقة نصية عربية كـ fallback للقيم القديمة
+ *
+ * المعامل _fullName محفوظ للتوافق مع الاستدعاءات القديمة ولا يُستخدم.
+ */
+export function getRoleCapabilities(role: string | null | undefined, _fullName?: string | null): RoleCapabilities {
   const value = normalizeRoleText(role);
-  const name = normalizeRoleText(fullName);
 
-  const arManager = "\u0645\u062f\u064a\u0631";
-  const arGeneral = "\u0639\u0627\u0645";
-  const arBranch = "\u0645\u0639\u0631\u0636";
-  const arGeneralManager = "\u0627\u0644\u0645\u062f\u064a\u0631 \u0627\u0644\u0639\u0627\u0645";
+  // ── 1. مطابقة enum صارمة (الأسرع والأكثر أماناً) ────────────────────────
+  if (value === ROLE_ENUM.GENERAL_MANAGER || value === "super_admin" || value === "owner") {
+    return { isGeneralManager: true, isManager: true };
+  }
+  if (value === ROLE_ENUM.MANAGER || value === ROLE_ENUM.BRANCH_MANAGER || value === "branch manager") {
+    return { isGeneralManager: false, isManager: true };
+  }
+  if (value === ROLE_ENUM.EMPLOYEE || value === "staff") {
+    return { isGeneralManager: false, isManager: false };
+  }
 
+  // ── 2. Fallback: مطابقة نصية عربية للقيم القديمة ────────────────────────
   const hasAdminKeyword = value.includes("admin") || value.includes("owner") || value.includes("super");
-  const hasManagerWord = value.includes(arManager);
-  const hasGeneralWord = value.includes(arGeneral);
-  const hasBranchWord = value.includes(arBranch);
-  const nameMarksGeneralManager = name.includes(arGeneralManager);
+  const hasManagerWord  = value.includes("مدير");
+  const hasGeneralWord  = value.includes("عام");
+  const hasBranchWord   = value.includes("معرض");
 
-  const isGeneralManager = hasAdminKeyword || (hasManagerWord && hasGeneralWord) || nameMarksGeneralManager;
+  const isGeneralManager = hasAdminKeyword || (hasManagerWord && hasGeneralWord);
   const isManager = isGeneralManager || (hasManagerWord && hasBranchWord) || value.includes("manager");
 
-  return {
-    isGeneralManager,
-    isManager,
-  };
+  return { isGeneralManager, isManager };
 }

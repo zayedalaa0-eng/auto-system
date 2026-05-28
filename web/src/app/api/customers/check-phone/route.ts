@@ -31,16 +31,60 @@ export async function GET(request: Request) {
     .maybeSingle();
 
   const capabilities = getRoleCapabilities(profile?.role, profile?.full_name);
-  let query = supabase.from("customers").select("id, full_name, phone, branch_id").eq("phone", phone).limit(1);
+
+  // ── 1. بحث عن دورة نشطة ────────────────────────────────────
+  let activeQuery = supabase
+    .from("customers")
+    .select("id, full_name, phone, branch_id, status, operation_type, cycle_number")
+    .eq("phone", phone)
+    .eq("is_active", true)
+    .limit(1);
 
   if (!capabilities.isGeneralManager && profile?.branch_id) {
-    query = query.eq("branch_id", profile.branch_id);
+    activeQuery = activeQuery.eq("branch_id", profile.branch_id);
   }
 
-  const { data: customer } = await query.maybeSingle();
+  const { data: activeCustomer } = await activeQuery.maybeSingle();
 
-  return NextResponse.json({
-    exists: Boolean(customer?.id),
-    customer: customer ? { id: customer.id, full_name: customer.full_name } : null,
-  });
+  if (activeCustomer?.id) {
+    return NextResponse.json({
+      exists: true,
+      customer: { id: activeCustomer.id, full_name: activeCustomer.full_name },
+      returning: false,
+      previousCycle: null,
+    });
+  }
+
+  // ── 2. بحث عن دورات مغلقة (عميل عائد) ────────────────────
+  let closedQuery = supabase
+    .from("customers")
+    .select("id, full_name, phone, branch_id, status, operation_type, cycle_number, created_at")
+    .eq("phone", phone)
+    .eq("is_active", false)
+    .order("cycle_number", { ascending: false })
+    .limit(1);
+
+  if (!capabilities.isGeneralManager && profile?.branch_id) {
+    closedQuery = closedQuery.eq("branch_id", profile.branch_id);
+  }
+
+  const { data: latestClosed } = await closedQuery.maybeSingle();
+
+  if (latestClosed?.id) {
+    return NextResponse.json({
+      exists: false,
+      customer: null,
+      returning: true,
+      previousCycle: {
+        id: latestClosed.id,
+        full_name: latestClosed.full_name,
+        status: latestClosed.status ?? "مغلق",
+        cycle_number: latestClosed.cycle_number ?? 1,
+        operation_type: latestClosed.operation_type ?? "buyer",
+      },
+    });
+  }
+
+  // ── 3. عميل جديد تماماً ─────────────────────────────────────
+  return NextResponse.json({ exists: false, customer: null, returning: false, previousCycle: null });
 }

@@ -1,11 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, LogIn } from "lucide-react";
 
-import { hasSupabaseEnv } from "@/lib/env";
-import { createClient } from "@/lib/supabase/client";
+import { loginWithPasswordAction, sendPasswordResetAction } from "@/app/login/actions";
 
 export function LoginForm() {
   const router = useRouter();
@@ -14,27 +13,19 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [resetSent, setResetSent] = useState(false);
-  const canUseSupabase = useMemo(() => hasSupabaseEnv(), []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    if (!canUseSupabase) {
-      setError("أضف مفاتيح Supabase في .env.local أولًا.");
-      return;
-    }
-
     setError(null);
 
     startTransition(async () => {
-      const supabase = createClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
+      const result = await loginWithPasswordAction({
+        email: email.trim(),
         password,
       });
 
-      if (signInError) {
-        setError(signInError.message);
+      if (!result.ok) {
+        setError(result.message ?? "تعذر تسجيل الدخول.");
         return;
       }
 
@@ -44,10 +35,6 @@ export function LoginForm() {
   }
 
   async function handleForgotPassword() {
-    if (!canUseSupabase) {
-      setError("أضف مفاتيح Supabase في .env.local أولًا.");
-      return;
-    }
     if (!email.trim()) {
       setError("أدخل البريد الإلكتروني أولًا لإرسال رابط تغيير كلمة المرور.");
       return;
@@ -55,16 +42,17 @@ export function LoginForm() {
 
     setError(null);
     setResetSent(false);
-    const supabase = createClient();
-    const redirectTo = `${window.location.origin}/reset-password`;
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo,
+
+    const result = await sendPasswordResetAction({
+      email: email.trim(),
+      origin: window.location.origin,
     });
 
-    if (resetError) {
-      setError(resetError.message);
+    if (!result.ok) {
+      setError(result.message ?? "تعذر إرسال رابط تغيير كلمة المرور.");
       return;
     }
+
     setResetSent(true);
   }
 
@@ -128,3 +116,4 @@ export function LoginForm() {
     </form>
   );
 }
+
