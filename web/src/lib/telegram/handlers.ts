@@ -59,6 +59,39 @@ function menuKeyboard(user: BotUser) {
   return mainMenuKeyboard(user.capabilities.isManager, user.capabilities.isGeneralManager);
 }
 
+// ─── مساعدات التاريخ ────────────────────────────────────────────────────────
+
+function addDays(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function dateButtonLabel(label: string, n: number): string {
+  return `${label} (${addDays(n)})`;
+}
+
+/** مطابقة تاريخ من زر الأيام السريعة أو نص YYYY-MM-DD */
+function parseDateInput(input: string): string | null {
+  // استخراج من صيغة "اسم (2026-06-04)"
+  const match = input.match(/\((\d{4}-\d{2}-\d{2})\)/);
+  if (match) return match[1];
+  // تاريخ مكتوب يدوياً
+  if (/^\d{4}-\d{2}-\d{2}$/.test(input.trim())) return input.trim();
+  return null;
+}
+
+function quickDateKeyboard() {
+  return selectionKeyboard([
+    dateButtonLabel("📅 اليوم",       0),
+    dateButtonLabel("📅 غداً",        1),
+    dateButtonLabel("📅 +3 أيام",     3),
+    dateButtonLabel("📅 +7 أيام ✓",  7),
+    dateButtonLabel("📅 +14 يوم",    14),
+    dateButtonLabel("📅 +30 يوم",    30),
+  ]);
+}
+
 // ─── حالات العميل حسب نوع العملية ──────────────────────────────────────────
 
 const STATUS_LISTS: Record<string, string[]> = {
@@ -442,9 +475,20 @@ async function handleAddCustPhone(chatId: number, user: BotUser, phone: string) 
   }
 
   await setSession(String(chatId), "add_cust_name", { cust_phone: normalized });
+
+  // ── رابط الويب لتعبئة البيانات مباشرة ──
+  const appUrl = getAppUrl();
+  if (appUrl) {
+    await sendMessageWithWebApp(
+      chatId,
+      `✅ الرقم <b>${escapeHtml(normalized)}</b> غير مسجل.\n\n💡 يمكنك فتح الويب لتعبئة البيانات كاملة دفعة واحدة:`,
+      [{ text: "🌐 تعبئة البيانات في الويب", url: `${appUrl}/dashboard/customers/new?phone=${encodeURIComponent(normalized)}` }],
+    );
+  }
+
   return sendMessage(
     chatId,
-    `✅ الرقم: <b>${escapeHtml(normalized)}</b>\n\n<b>الخطوة 2</b> — أدخل <b>اسم العميل</b> (3 أحرف على الأقل):`,
+    `أو تابع هنا خطوة بخطوة 👇\n\n<b>الخطوة 2</b> — أدخل <b>اسم العميل</b> (3 أحرف على الأقل):`,
     { replyMarkup: cancelKeyboard() },
   );
 }
@@ -541,8 +585,29 @@ async function proceedToCarStep(chatId: number, user: BotUser, sessionData: Reco
     );
   }
 
-  // مشتري / مشتري+استبدال
+  // مشتري / مشتري+استبدال — جلب السيارات المتوفرة
+  await sendChatAction(chatId);
+  const allCars = await getInventory(user);
+  const available = allCars
+    .filter((c) => c.availability_status === "متوفرة")
+    .slice(0, 8);
+
   await setSession(String(chatId), "add_cust_car", sessionData);
+
+  if (available.length > 0) {
+    const carOptions = available.map(
+      (c) => `🚗 ${c.model}${c.production_year ? ` ${c.production_year}` : ""}${c.color ? ` — ${c.color}` : ""}`,
+    );
+    carOptions.push("✏️ إدخال يدوي");
+    carOptions.push("⏭ تخطي");
+    return sendMessage(
+      chatId,
+      `<b>الخطوة ${stepNum}</b> — اختر <b>السيارة المطلوبة</b> من المخزون أو أدخل يدوياً:`,
+      { replyMarkup: selectionKeyboard(carOptions) },
+    );
+  }
+
+  // لا توجد سيارات متوفرة — إدخال يدوي
   return sendMessage(
     chatId,
     `<b>الخطوة ${stepNum}</b> — أدخل <b>السيارة المطلوبة</b>:\n<i>مثال: كيا سيراتو 2022</i>\n\nأو أرسل <code>-</code> للتخطي:`,
@@ -552,7 +617,25 @@ async function proceedToCarStep(chatId: number, user: BotUser, sessionData: Reco
 
 // خطوة السيارة المطلوبة (مشتري/استبدال)
 async function handleAddCustCar(chatId: number, user: BotUser, car: string, sessionData: Record<string, string>) {
-  const carVal = car.trim() === "-" ? "" : car.trim();
+  const trimmed = car.trim();
+
+  // "✏️ إدخال يدوي" → اطلب نصاً
+  if (trimmed === "✏️ إدخال يدوي") {
+    return sendMessage(
+      chatId,
+      "أدخل اسم السيارة المطلوبة:\n<i>مثال: كيا سيراتو 2022</i>",
+      { replyMarkup: cancelKeyboard() },
+    );
+  }
+
+  // تخطي
+  const carVal =
+    trimmed === "⏭ تخطي" || trimmed === "-"
+      ? ""
+      : trimmed.startsWith("🚗 ")
+        ? trimmed.slice("🚗 ".length)  // تنظيف emoji من زر القائمة
+        : trimmed;
+
   const isGM = user.capabilities.isGeneralManager;
   await setSession(String(chatId), "add_cust_status", { ...sessionData, cust_car: carVal });
   return askForStatus(chatId, sessionData.cust_optype, isGM ? 7 : 6);
@@ -596,29 +679,31 @@ async function handleAddCustStatus(chatId: number, user: BotUser, status: string
 async function handleAddCustNotes(chatId: number, user: BotUser, notes: string, sessionData: Record<string, string>) {
   const notesVal = notes.trim() === "-" ? "" : notes.trim();
   const isGM = user.capabilities.isGeneralManager;
-  const defaultDate = defaultFollowupDate();
   await setSession(String(chatId), "add_cust_followup", { ...sessionData, cust_notes: notesVal });
   return sendMessage(
     chatId,
-    `<b>الخطوة ${isGM ? 9 : 8}</b> — أدخل <b>تاريخ المتابعة القادمة</b>:\n<i>الصيغة: YYYY-MM-DD (مثال: ${defaultDate})</i>\n\nأو أرسل <code>-</code> للتعيين تلقائياً (+7 أيام):`,
-    { replyMarkup: cancelKeyboard() },
+    `<b>الخطوة ${isGM ? 9 : 8}</b> — اختر <b>تاريخ المتابعة القادمة</b>:\n<i>أو اكتب التاريخ يدوياً: YYYY-MM-DD</i>`,
+    { replyMarkup: quickDateKeyboard() },
   );
 }
 
 // خطوة تاريخ المتابعة
 async function handleAddCustFollowup(chatId: number, user: BotUser, dateStr: string, sessionData: Record<string, string>) {
-  let followup = defaultFollowupDate();
   const trimmed = dateStr.trim();
+  let followup: string | null = null;
+
+  // محاولة تحليل التاريخ (من زر أو نص)
   if (trimmed !== "-" && trimmed) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    followup = parseDateInput(trimmed);
+    if (!followup) {
       return sendMessage(
         chatId,
-        `⚠️ صيغة التاريخ غير صحيحة. استخدم <code>YYYY-MM-DD</code> أو أرسل <code>-</code>:`,
-        { replyMarkup: cancelKeyboard() },
+        `⚠️ صيغة غير صحيحة. اختر من الأزرار أو اكتب <code>YYYY-MM-DD</code>:`,
+        { replyMarkup: quickDateKeyboard() },
       );
     }
-    followup = trimmed;
   }
+  if (!followup) followup = defaultFollowupDate();
   const finalData = { ...sessionData, cust_followup: followup };
   await setSession(String(chatId), "add_cust_confirm", finalData);
   return showWizardSummary(chatId, finalData);
