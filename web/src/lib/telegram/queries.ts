@@ -192,29 +192,85 @@ const CLOSED_BOT_STATUSES = [
   "إغلاق الملف",
 ];
 
+// ─── Phone check ────────────────────────────────────────────────────────────
+
+export async function checkPhoneExists(phone: string) {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("customers")
+    .select("id, full_name, status, requested_car")
+    .eq("phone", phone)
+    .eq("is_active", true)
+    .maybeSingle();
+  return data ?? null;
+}
+
+// ─── Branches ────────────────────────────────────────────────────────────────
+
+export async function getBranches() {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("branches")
+    .select("id, name")
+    .eq("is_active", true)
+    .order("name");
+  return (data ?? []).map((b) => ({ id: b.id, name: b.name }));
+}
+
 export async function createCustomer(
   user: BotUser,
-  data: { full_name: string; phone: string; status: string; requested_car: string | null },
+  data: {
+    full_name: string;
+    phone: string;
+    nickname?: string | null;
+    operation_type: string;
+    status: string;
+    requested_car?: string | null;
+    trade_in_model?: string | null;
+    notes?: string | null;
+    next_follow_up_at?: string | null;
+    branch_id?: string | null;
+  },
 ) {
   const admin = createAdminClient();
   const isClosed = CLOSED_BOT_STATUSES.some((s) => data.status.includes(s));
+  const branchId = data.branch_id ?? user.branch_id ?? null;
+
+  const opLabel =
+    data.operation_type === "buyer" ? "مشتري" :
+    data.operation_type === "buyer_tradein_pending" ? "مشتري + استبدال" :
+    data.operation_type === "sell_on_behalf" ? "بيع بالوكالة" :
+    data.operation_type;
+
   const { error } = await admin.from("customers").insert({
     full_name: data.full_name,
     phone: data.phone,
+    nickname: data.nickname ?? null,
     status: data.status,
     requested_car: data.requested_car ?? null,
-    branch_id: user.branch_id ?? null,
+    notes: data.notes ?? null,
+    next_follow_up_at: data.next_follow_up_at ?? null,
+    branch_id: branchId,
     assigned_user_id: user.id,
     is_active: !isClosed,
-    operation_type: "buyer",
-    metadata: { operation_type: "buyer", source: "telegram_bot" },
+    operation_type: opLabel,
+    metadata: {
+      operation_type_code: data.operation_type,
+      trade_in_model: data.trade_in_model ?? null,
+      source: "telegram_bot",
+    },
   });
 
   if (!error) {
     void pushTelegramToManagers({
-      branchId: user.branch_id,
+      branchId,
       title: "إضافة عميل جديد (بوت)",
-      message: `أضاف <b>${user.full_name}</b> عميلاً جديداً:\n👤 ${data.full_name}\n📱 ${data.phone}\n📌 ${data.status}${data.requested_car ? `\n🚗 ${data.requested_car}` : ""}`,
+      message:
+        `أضاف <b>${user.full_name}</b> عميلاً جديداً:\n` +
+        `👤 ${data.full_name}\n📱 ${data.phone}\n` +
+        `🔖 ${opLabel}\n📌 ${data.status}` +
+        (data.requested_car ? `\n🚗 ${data.requested_car}` : "") +
+        (data.trade_in_model ? `\n🚗 سيارة العميل: ${data.trade_in_model}` : ""),
     });
   }
 

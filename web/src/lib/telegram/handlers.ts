@@ -11,8 +11,10 @@ import {
   sendMessageWithWebApp,
 } from "./api";
 import {
+  checkPhoneExists,
   createCustomer,
   getBotUser,
+  getBranches,
   getBranchReport,
   getGeneralManagerReport,
   getInventory,
@@ -57,17 +59,49 @@ function menuKeyboard(user: BotUser) {
   return mainMenuKeyboard(user.capabilities.isManager, user.capabilities.isGeneralManager);
 }
 
-// ─── Customer statuses available in bot wizard (subset for quick entry) ─────
+// ─── حالات العميل حسب نوع العملية ──────────────────────────────────────────
 
-const CUSTOMER_STATUSES = [
-  "جديد",
-  "قيد المتابعة",
-  "حجز",
-  "تمت عملية البيع",
-  "رفض من قبل العميل",
-  "رفض من قبل المعرض",
-  "إغلاق الملف",
+const STATUS_LISTS: Record<string, string[]> = {
+  buyer: [
+    "جديد", "قيد المتابعة", "حجز",
+    "تمت عملية البيع", "رفض من قبل العميل",
+    "رفض من قبل المعرض", "إغلاق الملف",
+  ],
+  buyer_tradein_pending: [
+    "قيد المتابعة — بانتظار التقييم",
+    "قيد المتابعة — تمت عملية التقييم",
+    "حجز (استبدال)", "تمت عملية البيع + استبدال",
+    "تراجع العميل عن الاستبدال",
+    "رفض من قبل العميل", "رفض من قبل المعرض", "إغلاق الملف",
+  ],
+  sell_on_behalf: [
+    "عرض سيارة للبيع", "حجز (سيارة العميل)",
+    "تمت عملية البيع (للعميل)", "شراء من قبل المعرض",
+    "رفض من قبل العميل", "رفض من قبل المعرض",
+    "سحب السيارة من البيع",
+  ],
+};
+
+const OP_TYPES = [
+  { label: "🛒 مشتري",            value: "buyer" },
+  { label: "🔄 مشتري + استبدال", value: "buyer_tradein_pending" },
+  { label: "🚗 بيع بالوكالة",    value: "sell_on_behalf" },
 ];
+const OP_LABELS = OP_TYPES.map((o) => o.label);
+
+function getOpTypeValue(label: string) {
+  return OP_TYPES.find((o) => o.label === label)?.value ?? null;
+}
+
+function getOpTypeLabel(value: string) {
+  return OP_TYPES.find((o) => o.value === value)?.label ?? value;
+}
+
+function defaultFollowupDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().slice(0, 10);
+}
 
 // ─── /start & welcome ───────────────────────────────────────────────────────
 
@@ -365,89 +399,250 @@ async function handleStaff(chatId: number, user: BotUser) {
 
 async function handleAddCustomerStart(chatId: number, user: BotUser) {
   const appUrl = getAppUrl();
-
-  // If app URL is configured, offer Mini App + wizard choice
   if (appUrl) {
-    const miniAppUrl = `${appUrl}/bot-app/add-customer`;
     await sendMessageWithWebApp(
       chatId,
-      "➕ <b>إضافة عميل جديد</b>\n\nاضغط الزر أدناه لفتح الفورم الكامل، أو اكتب <b>ويزارد</b> للإدخال خطوة خطوة:",
-      [{ text: "📋 فتح الفورم الكامل", url: miniAppUrl }],
+      "➕ <b>إضافة عميل جديد</b>\n\nاضغط لفتح الفورم الكامل، أو تابع هنا خطوة بخطوة:",
+      [{ text: "📋 فتح الفورم الكامل", url: `${appUrl}/bot-app/add-customer` }],
     );
-    // Still start the wizard so the user can type "ويزارد" or just proceed
-    await setSession(String(chatId), "add_cust_name", {});
-    return;
   }
-
-  // Fallback: wizard only
-  await setSession(String(chatId), "add_cust_name", {});
+  await setSession(String(chatId), "add_cust_phone", {});
   return sendMessage(
     chatId,
-    "➕ <b>إضافة عميل جديد</b>\n\nالخطوة 1/4 — أدخل <b>اسم العميل:</b>",
+    "➕ <b>إضافة عميل — الخطوة 1</b>\n\nأدخل <b>رقم الهاتف</b> (10 أرقام بالضبط):",
     { replyMarkup: cancelKeyboard() },
   );
 }
 
-async function handleAddCustName(chatId: number, user: BotUser, name: string) {
-  if (!name.trim()) {
-    return sendMessage(chatId, "⚠️ الاسم لا يمكن أن يكون فارغاً. أدخل الاسم:", {
+// الخطوة 1 — رقم الهاتف مع فحص 10 أرقام والتحقق من الوجود
+async function handleAddCustPhone(chatId: number, user: BotUser, phone: string) {
+  const normalized = phone.replace(/\D/g, "");
+  if (normalized.length !== 10) {
+    return sendMessage(
+      chatId,
+      "⚠️ رقم الهاتف يجب أن يكون <b>10 أرقام</b> بالضبط.\n\nأعد إدخال الرقم:",
+      { replyMarkup: cancelKeyboard() },
+    );
+  }
+
+  await sendChatAction(chatId);
+  const existing = await checkPhoneExists(normalized);
+
+  if (existing) {
+    await setSession(String(chatId), "add_cust_phone_exists", { checked_phone: normalized });
+    const carInfo = existing.requested_car ? `\n🚗 ${escapeHtml(existing.requested_car)}` : "";
+    return sendMessage(
+      chatId,
+      `⚠️ <b>هذا الرقم مسجل مسبقاً في النظام</b>\n\n` +
+      `👤 <b>${escapeHtml(existing.full_name)}</b>\n` +
+      `📌 ${escapeHtml(existing.status)}${carInfo}\n\n` +
+      `هل تريد إدخال رقم آخر أم إلغاء؟`,
+      { replyMarkup: selectionKeyboard(["📱 رقم آخر", "❌ إلغاء"], false) },
+    );
+  }
+
+  await setSession(String(chatId), "add_cust_name", { cust_phone: normalized });
+  return sendMessage(
+    chatId,
+    `✅ الرقم: <b>${escapeHtml(normalized)}</b>\n\n<b>الخطوة 2</b> — أدخل <b>اسم العميل</b> (3 أحرف على الأقل):`,
+    { replyMarkup: cancelKeyboard() },
+  );
+}
+
+// معالجة حالة الرقم الموجود مسبقاً
+async function handleAddCustPhoneExists(chatId: number, user: BotUser, answer: string) {
+  if (answer === "📱 رقم آخر") {
+    await setSession(String(chatId), "add_cust_phone", {});
+    return sendMessage(chatId, "أدخل <b>رقم الهاتف</b> الجديد (10 أرقام):", { replyMarkup: cancelKeyboard() });
+  }
+  await clearSession(String(chatId));
+  return sendMessage(chatId, "✅ تم الإلغاء.", { replyMarkup: menuKeyboard(user) });
+}
+
+// الخطوة 2 — الاسم
+async function handleAddCustName(chatId: number, user: BotUser, name: string, sessionData: Record<string, string>) {
+  if (name.trim().length < 3) {
+    return sendMessage(chatId, "⚠️ الاسم يجب أن يكون <b>3 أحرف على الأقل</b>. أعد الإدخال:", {
       replyMarkup: cancelKeyboard(),
     });
   }
-  await setSession(String(chatId), "add_cust_phone", { cust_name: name.trim() });
+  await setSession(String(chatId), "add_cust_nickname", { ...sessionData, cust_name: name.trim() });
   return sendMessage(
     chatId,
-    `✅ الاسم: <b>${escapeHtml(name.trim())}</b>\n\nالخطوة 2/4 — أدخل <b>رقم الهاتف:</b>`,
+    `✅ الاسم: <b>${escapeHtml(name.trim())}</b>\n\n<b>الخطوة 3</b> — أدخل <b>الكنية / المدينة</b>\n(أو أرسل <code>-</code> للتخطي):`,
     { replyMarkup: cancelKeyboard() },
   );
 }
 
-async function handleAddCustPhone(chatId: number, user: BotUser, phone: string, sessionData: object) {
-  if (!phone.trim()) {
-    return sendMessage(chatId, "⚠️ رقم الهاتف لا يمكن أن يكون فارغاً. أدخل الرقم:", {
-      replyMarkup: cancelKeyboard(),
-    });
-  }
-  await setSession(String(chatId), "add_cust_status", { ...sessionData, cust_phone: phone.trim() });
+// الخطوة 3 — الكنية
+async function handleAddCustNickname(chatId: number, user: BotUser, nickname: string, sessionData: Record<string, string>) {
+  const val = nickname.trim() === "-" ? "" : nickname.trim();
+  await setSession(String(chatId), "add_cust_optype", { ...sessionData, cust_nickname: val });
   return sendMessage(
     chatId,
-    `✅ الهاتف: <b>${escapeHtml(phone.trim())}</b>\n\nالخطوة 3/4 — اختر <b>حالة العميل:</b>`,
-    { replyMarkup: selectionKeyboard(CUSTOMER_STATUSES) },
+    `<b>الخطوة 4</b> — اختر <b>نوع العملية</b>:`,
+    { replyMarkup: selectionKeyboard(OP_LABELS) },
   );
 }
 
-async function handleAddCustStatus(chatId: number, user: BotUser, status: string, sessionData: object) {
-  if (!CUSTOMER_STATUSES.includes(status)) {
-    return sendMessage(chatId, "⚠️ اختر حالة من القائمة:", {
-      replyMarkup: selectionKeyboard(CUSTOMER_STATUSES),
+// الخطوة 4 — نوع العملية
+async function handleAddCustOpType(chatId: number, user: BotUser, answer: string, sessionData: Record<string, string>) {
+  const opType = getOpTypeValue(answer);
+  if (!opType) {
+    return sendMessage(chatId, "⚠️ اختر نوع العملية من القائمة:", {
+      replyMarkup: selectionKeyboard(OP_LABELS),
     });
   }
-  await setSession(String(chatId), "add_cust_car", { ...sessionData, cust_status: status });
+  const nextData = { ...sessionData, cust_optype: opType };
+
+  // المدير العام يختار المعرض
+  if (user.capabilities.isGeneralManager) {
+    await sendChatAction(chatId);
+    const branches = await getBranches();
+    const branchNames = branches.map((b) => b.name);
+    await setSession(String(chatId), "add_cust_branch", {
+      ...nextData,
+      _branches: JSON.stringify(branches),
+    });
+    return sendMessage(
+      chatId,
+      `<b>الخطوة 5</b> — اختر <b>المعرض</b>:`,
+      { replyMarkup: selectionKeyboard(branchNames) },
+    );
+  }
+
+  return proceedToCarStep(chatId, user, { ...nextData, cust_branch_id: user.branch_id ?? "" }, 5);
+}
+
+// الخطوة 5 (للمدير العام) — المعرض
+async function handleAddCustBranch(chatId: number, user: BotUser, branchName: string, sessionData: Record<string, string>) {
+  const branches: Array<{ id: string; name: string }> = sessionData._branches
+    ? (JSON.parse(sessionData._branches) as Array<{ id: string; name: string }>)
+    : [];
+  const branch = branches.find((b) => b.name === branchName);
+  if (!branch) {
+    return sendMessage(chatId, "⚠️ اختر المعرض من القائمة:", {
+      replyMarkup: selectionKeyboard(branches.map((b) => b.name)),
+    });
+  }
+  return proceedToCarStep(chatId, user, { ...sessionData, cust_branch_id: branch.id, _branches: "" }, 6);
+}
+
+// الانتقال لخطوة السيارة حسب نوع العملية
+async function proceedToCarStep(chatId: number, user: BotUser, sessionData: Record<string, string>, stepNum: number) {
+  const opType = sessionData.cust_optype;
+
+  if (opType === "sell_on_behalf") {
+    await setSession(String(chatId), "add_cust_trade_car", sessionData);
+    return sendMessage(
+      chatId,
+      `<b>الخطوة ${stepNum}</b> — أدخل <b>نوع سيارة العميل</b> (المراد بيعها):\n<i>مثال: تويوتا كامري 2020</i>\n\nأو أرسل <code>-</code> للتخطي:`,
+      { replyMarkup: cancelKeyboard() },
+    );
+  }
+
+  // مشتري / مشتري+استبدال
+  await setSession(String(chatId), "add_cust_car", sessionData);
   return sendMessage(
     chatId,
-    `✅ الحالة: <b>${escapeHtml(status)}</b>\n\nالخطوة 4/4 — أدخل <b>السيارة المطلوبة</b> (أو أرسل "-" للتخطي):`,
+    `<b>الخطوة ${stepNum}</b> — أدخل <b>السيارة المطلوبة</b>:\n<i>مثال: كيا سيراتو 2022</i>\n\nأو أرسل <code>-</code> للتخطي:`,
     { replyMarkup: cancelKeyboard() },
   );
 }
 
+// خطوة السيارة المطلوبة (مشتري/استبدال)
 async function handleAddCustCar(chatId: number, user: BotUser, car: string, sessionData: Record<string, string>) {
-  const carVal = car.trim() === "-" ? null : car.trim() || null;
-  await setSession(String(chatId), "add_cust_confirm", { ...sessionData, cust_car: carVal ?? "" });
+  const carVal = car.trim() === "-" ? "" : car.trim();
+  const isGM = user.capabilities.isGeneralManager;
+  await setSession(String(chatId), "add_cust_status", { ...sessionData, cust_car: carVal });
+  return askForStatus(chatId, sessionData.cust_optype, isGM ? 7 : 6);
+}
 
-  const d = sessionData;
-  let summary =
-    `📋 <b>ملخص العميل الجديد:</b>\n\n` +
-    `👤 الاسم: <b>${escapeHtml(d.cust_name ?? "")}</b>\n` +
-    `📱 الهاتف: <b>${escapeHtml(d.cust_phone ?? "")}</b>\n` +
-    `📌 الحالة: <b>${escapeHtml(d.cust_status ?? "")}</b>\n`;
-  if (carVal) summary += `🚗 السيارة: <b>${escapeHtml(carVal)}</b>\n`;
+// خطوة سيارة العميل (بيع بالوكالة)
+async function handleAddCustTradeCar(chatId: number, user: BotUser, car: string, sessionData: Record<string, string>) {
+  const carVal = car.trim() === "-" ? "" : car.trim();
+  const isGM = user.capabilities.isGeneralManager;
+  await setSession(String(chatId), "add_cust_status", { ...sessionData, cust_trade_car: carVal });
+  return askForStatus(chatId, sessionData.cust_optype, isGM ? 7 : 6);
+}
 
-  summary += "\nهل تريد حفظ العميل؟";
+function askForStatus(chatId: number, opType: string, stepNum: number) {
+  const statuses = STATUS_LISTS[opType] ?? STATUS_LISTS.buyer;
+  return sendMessage(
+    chatId,
+    `<b>الخطوة ${stepNum}</b> — اختر <b>حالة العميل</b>:`,
+    { replyMarkup: selectionKeyboard(statuses) },
+  );
+}
+
+// خطوة الحالة
+async function handleAddCustStatus(chatId: number, user: BotUser, status: string, sessionData: Record<string, string>) {
+  const validStatuses = STATUS_LISTS[sessionData.cust_optype] ?? STATUS_LISTS.buyer;
+  if (!validStatuses.includes(status)) {
+    return sendMessage(chatId, "⚠️ اختر الحالة من القائمة:", {
+      replyMarkup: selectionKeyboard(validStatuses),
+    });
+  }
+  const isGM = user.capabilities.isGeneralManager;
+  await setSession(String(chatId), "add_cust_notes", { ...sessionData, cust_status: status });
+  return sendMessage(
+    chatId,
+    `✅ الحالة: <b>${escapeHtml(status)}</b>\n\n<b>الخطوة ${isGM ? 8 : 7}</b> — أدخل <b>الملاحظات</b>\n(أو أرسل <code>-</code> للتخطي):`,
+    { replyMarkup: cancelKeyboard() },
+  );
+}
+
+// خطوة الملاحظات
+async function handleAddCustNotes(chatId: number, user: BotUser, notes: string, sessionData: Record<string, string>) {
+  const notesVal = notes.trim() === "-" ? "" : notes.trim();
+  const isGM = user.capabilities.isGeneralManager;
+  const defaultDate = defaultFollowupDate();
+  await setSession(String(chatId), "add_cust_followup", { ...sessionData, cust_notes: notesVal });
+  return sendMessage(
+    chatId,
+    `<b>الخطوة ${isGM ? 9 : 8}</b> — أدخل <b>تاريخ المتابعة القادمة</b>:\n<i>الصيغة: YYYY-MM-DD (مثال: ${defaultDate})</i>\n\nأو أرسل <code>-</code> للتعيين تلقائياً (+7 أيام):`,
+    { replyMarkup: cancelKeyboard() },
+  );
+}
+
+// خطوة تاريخ المتابعة
+async function handleAddCustFollowup(chatId: number, user: BotUser, dateStr: string, sessionData: Record<string, string>) {
+  let followup = defaultFollowupDate();
+  const trimmed = dateStr.trim();
+  if (trimmed !== "-" && trimmed) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return sendMessage(
+        chatId,
+        `⚠️ صيغة التاريخ غير صحيحة. استخدم <code>YYYY-MM-DD</code> أو أرسل <code>-</code>:`,
+        { replyMarkup: cancelKeyboard() },
+      );
+    }
+    followup = trimmed;
+  }
+  const finalData = { ...sessionData, cust_followup: followup };
+  await setSession(String(chatId), "add_cust_confirm", finalData);
+  return showWizardSummary(chatId, finalData);
+}
+
+function showWizardSummary(chatId: number, d: Record<string, string>) {
+  let summary = `📋 <b>ملخص العميل الجديد:</b>\n\n`;
+  summary += `📱 الهاتف: <b>${escapeHtml(d.cust_phone ?? "")}</b>\n`;
+  summary += `👤 الاسم: <b>${escapeHtml(d.cust_name ?? "")}</b>\n`;
+  if (d.cust_nickname) summary += `🏷 الكنية: <b>${escapeHtml(d.cust_nickname)}</b>\n`;
+  summary += `🔖 نوع العملية: <b>${getOpTypeLabel(d.cust_optype ?? "")}</b>\n`;
+  summary += `📌 الحالة: <b>${escapeHtml(d.cust_status ?? "")}</b>\n`;
+  if (d.cust_car)       summary += `🚗 السيارة المطلوبة: <b>${escapeHtml(d.cust_car)}</b>\n`;
+  if (d.cust_trade_car) summary += `🚗 سيارة العميل: <b>${escapeHtml(d.cust_trade_car)}</b>\n`;
+  if (d.cust_notes)     summary += `📝 الملاحظات: <b>${escapeHtml(d.cust_notes)}</b>\n`;
+  summary += `📅 المتابعة: <b>${d.cust_followup ?? ""}</b>\n`;
+  summary += "\nهل تريد الحفظ؟";
+
   return sendMessage(chatId, summary, {
     replyMarkup: selectionKeyboard(["✅ حفظ", "❌ إلغاء"], false),
   });
 }
 
+// تأكيد الحفظ
 async function handleAddCustConfirm(chatId: number, user: BotUser, answer: string, sessionData: Record<string, string>) {
   if (answer !== "✅ حفظ") {
     await clearSession(String(chatId));
@@ -455,11 +650,19 @@ async function handleAddCustConfirm(chatId: number, user: BotUser, answer: strin
   }
 
   await sendChatAction(chatId);
+  const branchId = sessionData.cust_branch_id || user.branch_id || null;
+
   const { error } = await createCustomer(user, {
-    full_name: sessionData.cust_name ?? "",
-    phone: sessionData.cust_phone ?? "",
-    status: sessionData.cust_status ?? "عميل جديد",
-    requested_car: sessionData.cust_car || null,
+    full_name:        sessionData.cust_name ?? "",
+    phone:            sessionData.cust_phone ?? "",
+    nickname:         sessionData.cust_nickname || null,
+    operation_type:   sessionData.cust_optype ?? "buyer",
+    status:           sessionData.cust_status ?? "جديد",
+    requested_car:    sessionData.cust_car || null,
+    trade_in_model:   sessionData.cust_trade_car || null,
+    notes:            sessionData.cust_notes || null,
+    next_follow_up_at: sessionData.cust_followup || null,
+    branch_id:        branchId,
   });
 
   await clearSession(String(chatId));
@@ -472,7 +675,10 @@ async function handleAddCustConfirm(chatId: number, user: BotUser, answer: strin
 
   return sendMessage(
     chatId,
-    `✅ <b>تم إضافة العميل بنجاح!</b>\n\n👤 ${escapeHtml(sessionData.cust_name ?? "")}`,
+    `✅ <b>تم إضافة العميل بنجاح!</b>\n\n` +
+    `👤 ${escapeHtml(sessionData.cust_name ?? "")}\n` +
+    `📱 ${escapeHtml(sessionData.cust_phone ?? "")}\n` +
+    `🔖 ${getOpTypeLabel(sessionData.cust_optype ?? "")}`,
     { replyMarkup: menuKeyboard(user) },
   );
 }
@@ -664,21 +870,36 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
 
   // ── Wizard state machine ──
   if (session.state !== "idle") {
+    const d = session.data as Record<string, string>;
     switch (session.state) {
-      case "add_cust_name":
-        return handleAddCustName(chatId, user, text);
       case "add_cust_phone":
-        return handleAddCustPhone(chatId, user, text, session.data);
-      case "add_cust_status":
-        return handleAddCustStatus(chatId, user, text, session.data);
+        return handleAddCustPhone(chatId, user, text);
+      case "add_cust_phone_exists":
+        return handleAddCustPhoneExists(chatId, user, text);
+      case "add_cust_name":
+        return handleAddCustName(chatId, user, text, d);
+      case "add_cust_nickname":
+        return handleAddCustNickname(chatId, user, text, d);
+      case "add_cust_optype":
+        return handleAddCustOpType(chatId, user, text, d);
+      case "add_cust_branch":
+        return handleAddCustBranch(chatId, user, text, d);
       case "add_cust_car":
-        return handleAddCustCar(chatId, user, text, session.data as Record<string, string>);
+        return handleAddCustCar(chatId, user, text, d);
+      case "add_cust_trade_car":
+        return handleAddCustTradeCar(chatId, user, text, d);
+      case "add_cust_status":
+        return handleAddCustStatus(chatId, user, text, d);
+      case "add_cust_notes":
+        return handleAddCustNotes(chatId, user, text, d);
+      case "add_cust_followup":
+        return handleAddCustFollowup(chatId, user, text, d);
       case "add_cust_confirm":
-        return handleAddCustConfirm(chatId, user, text, session.data as Record<string, string>);
+        return handleAddCustConfirm(chatId, user, text, d);
       case "msg_pick_recipient":
         return handleMsgPickRecipient(chatId, user, text);
       case "msg_write":
-        return handleMsgWrite(chatId, user, text, session.data as Record<string, string>);
+        return handleMsgWrite(chatId, user, text, d);
     }
   }
 

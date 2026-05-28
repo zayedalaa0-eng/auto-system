@@ -2,22 +2,22 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export type SessionState =
   | "idle"
-  | "add_cust_name"
   | "add_cust_phone"
-  | "add_cust_status"
+  | "add_cust_phone_exists"
+  | "add_cust_name"
+  | "add_cust_nickname"
+  | "add_cust_optype"
+  | "add_cust_branch"
   | "add_cust_car"
+  | "add_cust_trade_car"
+  | "add_cust_status"
+  | "add_cust_notes"
+  | "add_cust_followup"
   | "add_cust_confirm"
   | "msg_pick_recipient"
   | "msg_write";
 
-export type SessionData = {
-  cust_name?: string;
-  cust_phone?: string;
-  cust_status?: string;
-  cust_car?: string;
-  msg_recipient_id?: string;
-  msg_recipient_name?: string;
-};
+export type SessionData = Record<string, string>;
 
 export type Session = {
   state: SessionState;
