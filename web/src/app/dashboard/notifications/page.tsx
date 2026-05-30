@@ -1,10 +1,8 @@
-import { Bell, Mail, RefreshCcw, Target } from "lucide-react";
+import { Bell, RefreshCcw } from "lucide-react";
 
-import { markNotificationReadAction } from "@/app/dashboard/actions";
 import { ClearNotificationsBtn } from "@/components/clear-notifications-btn";
-import { StatusPill } from "@/components/status-pill";
+import { NotificationsList } from "@/components/notifications-list";
 import { getNotificationsCenter, type NotificationsCenterItem } from "@/lib/data";
-import { formatDate, formatRelativeDate } from "@/lib/format";
 
 type KindFilter = "all" | "new_customer" | "customer_update" | "sales_opportunity" | "followup" | "other";
 
@@ -129,55 +127,7 @@ export default async function NotificationsPage({
           </a>
         </div>
 
-        <div className="space-y-2">
-          {filtered.length > 0 ? (
-            filtered.map((item) => {
-              const isUnread = item.status === "unread";
-              const kindLabel = getKindLabel(getNotificationKind(item));
-              return (
-                <div
-                  key={item.id}
-                  className={`rounded-lg border p-3 ${isUnread ? "border-sky-300 bg-sky-50/50" : "border-slate-200 bg-white"}`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="min-w-[220px] text-sm font-bold text-slate-700">
-                      {formatDate(item.created_at)} · {formatRelativeDate(item.created_at)}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">
-                        {kindLabel}
-                      </span>
-                      <StatusPill value={item.status} />
-                      {isUnread ? (
-                        <form action={markNotificationReadAction}>
-                          <input type="hidden" name="notification_id" value={item.id} />
-                          <button type="submit" className="legacy-btn legacy-btn-info">
-                            تمت القراءة
-                          </button>
-                        </form>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm font-bold text-slate-800">
-                    <Mail className="h-4 w-4 text-red-500" />
-                    {item.title ?? "تنبيه"}
-                    {item.recipient_label ? (
-                      <span className="inline-flex items-center gap-1 text-blue-700">
-                        <Target className="h-4 w-4" />
-                        {item.recipient_label}
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <p className="mt-2 text-sm leading-7 text-slate-700">{item.message}</p>
-                </div>
-              );
-            })
-          ) : (
-            <div className="empty-state">لا توجد تنبيهات مطابقة للفلاتر الحالية.</div>
-          )}
-        </div>
+        <NotificationsList items={filtered} />
       </div>
     </div>
   );

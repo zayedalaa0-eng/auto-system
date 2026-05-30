@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
@@ -14,19 +14,22 @@ import {
   FolderOpen,
   MessageSquareShare,
   Paperclip,
+  Pencil,
   Phone,
   RotateCcw,
   Save,
   Send,
+  Share2,
   X,
 } from "lucide-react";
 
-import { convertToSellOnBehalfAction, convertToTradeInAction, deleteCustomerAction, saveCustomerProfileAction, sendQuickReminderAction } from "@/app/dashboard/actions";
+import { convertToSellOnBehalfAction, convertToTradeInAction, deleteCustomerAction, saveCustomerProfileAction, sendQuickReminderAction, updateCustomerBasicInfoAction } from "@/app/dashboard/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { StatusPill } from "@/components/status-pill";
 import { VoiceRecorder } from "@/components/voice-recorder";
 import type { CustomerAttachmentItem, CustomerDetail, CustomerFormOptions } from "@/lib/data";
 import { formatCurrency, formatDate, toDateTimeLocalValue } from "@/lib/format";
+import { PAYMENT_METHODS, needsPaymentMethod } from "@/lib/payment";
 
 /* ─── Constants ─────────────────────────────────────────────── */
 // الحالات التي تستوجب اختيار سيارة من المخزون (للمشتري فقط)
@@ -99,10 +102,11 @@ function groupAttachments(attachments: CustomerAttachmentItem[]) {
     trade_inspection: [],
     trade_license: [],
     trade_insurance: [],
-    voice_note: [],
     other: [],
   };
   for (const item of attachments) {
+    // التسجيلات الصوتية تظهر في السجل التاريخي — لا تُعرض هنا
+    if (item.file_category === "voice_note" || item.mime_type?.startsWith("audio/")) continue;
     const key = item.file_category ?? "other";
     if (grouped[key]) grouped[key].push(item);
     else grouped.other.push(item);
@@ -372,6 +376,229 @@ function ClosedFileBanner({
   );
 }
 
+/* ─── WhatsApp Share Popup ───────────────────────────────────── */
+function WhatsAppSharePopup({
+  imageAttachments,
+  customerName,
+  tradeInModel,
+  onClose,
+}: {
+  imageAttachments: CustomerAttachmentItem[];
+  customerName?: string;
+  tradeInModel?: string | null;
+  onClose: () => void;
+}) {
+  const [phone, setPhone] = useState("");
+  const [comment, setComment] = useState("");
+
+  function handleSend() {
+    const lines: string[] = [];
+    if (customerName) lines.push(`👤 العميل: ${customerName}`);
+    if (tradeInModel) lines.push(`🚗 السيارة: ${tradeInModel}`);
+    if (comment.trim()) lines.push(`\n💬 ${comment.trim()}`);
+    if (imageAttachments.length > 0) {
+      lines.push(`\n📷 الصور (${imageAttachments.length}):`);
+      imageAttachments.forEach((att, i) => {
+        lines.push(`${i + 1}. ${att.public_url ?? ""}`);
+      });
+    }
+    const text = encodeURIComponent(lines.join("\n"));
+    const cleanPhone = phone.replace(/\D/g, "");
+    const url = cleanPhone
+      ? `https://wa.me/${cleanPhone}?text=${text}`
+      : `https://wa.me/?text=${text}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+    onClose();
+  }
+
+  return (
+    <div className="absolute left-0 top-full z-30 mt-1 w-72 rounded-xl border border-green-200 bg-white p-4 shadow-xl">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="flex items-center gap-1.5 font-bold text-green-700 text-sm">
+          <Share2 className="h-4 w-4" />
+          إرسال عبر واتساب
+        </span>
+        <button type="button" onClick={onClose} className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {imageAttachments.length === 0 ? (
+        <p className="text-xs text-slate-500 mb-3">لا توجد صور في المرفقات.</p>
+      ) : (
+        <p className="text-xs text-slate-500 mb-3">سيتم إرسال روابط {imageAttachments.length} صورة.</p>
+      )}
+
+      <div className="space-y-2">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">رقم الواتساب (اختياري)</label>
+          <input
+            type="tel"
+            placeholder="مثال: 966501234567"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-green-400 focus:outline-none focus:ring-1 focus:ring-green-400"
+            dir="ltr"
+          />
+          <p className="mt-0.5 text-xs text-slate-400">اتركه فارغاً لاختيار جهة الاتصال يدوياً</p>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">التعليق</label>
+          <textarea
+            rows={3}
+            placeholder="أدخل التعليق هنا..."
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            className="w-full resize-none rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-green-400 focus:outline-none focus:ring-1 focus:ring-green-400"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={handleSend}
+          className="w-full rounded-lg bg-green-500 px-3 py-2 text-sm font-bold text-white hover:bg-green-600 active:bg-green-700 flex items-center justify-center gap-2"
+        >
+          <Share2 className="h-4 w-4" />
+          فتح واتساب
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Attachments Panel ──────────────────────────────────────── */
+function AttachmentsPanel({
+  attachmentCount,
+  groupedAttachments,
+  imageAttachments,
+  fileAttachments,
+  showAttachments,
+  onToggle,
+  openAlbumAt,
+  standalone = false,
+  customerName,
+  tradeInModel,
+}: {
+  attachmentCount: number;
+  groupedAttachments: ReturnType<typeof groupAttachments>;
+  imageAttachments: CustomerAttachmentItem[];
+  fileAttachments: CustomerAttachmentItem[];
+  showAttachments: boolean;
+  onToggle: () => void;
+  openAlbumAt: (idx: number) => void;
+  standalone?: boolean;
+  customerName?: string;
+  tradeInModel?: string | null;
+}) {
+  const [showWaPopup, setShowWaPopup] = useState(false);
+  const waRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showWaPopup) return;
+    function handleClick(e: MouseEvent) {
+      if (waRef.current && !waRef.current.contains(e.target as Node)) {
+        setShowWaPopup(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showWaPopup]);
+
+  const inner = (
+    <>
+      <div className="profile-section__toggle-header">
+        <button type="button" className="flex flex-1 items-center gap-2 text-start" onClick={onToggle}>
+          <div className="profile-section__title">
+            <FolderOpen className="h-4 w-4 text-amber-500" />
+            المرفقات
+            <span className="inline-flex items-center justify-center h-5 min-w-5 rounded-full bg-slate-100 text-slate-500 text-xs font-bold px-1.5">
+              {attachmentCount}
+            </span>
+          </div>
+          {showAttachments
+            ? <ChevronUp className="profile-section__chevron h-4 w-4" />
+            : <ChevronDown className="profile-section__chevron h-4 w-4" />
+          }
+        </button>
+        {/* زر واتساب */}
+        <div className="relative shrink-0" ref={waRef}>
+          <button
+            type="button"
+            onClick={() => setShowWaPopup((v) => !v)}
+            className="flex items-center gap-1.5 rounded-lg bg-green-50 px-2.5 py-1 text-xs font-bold text-green-700 hover:bg-green-100 border border-green-200 transition-colors"
+            title="إرسال عبر واتساب"
+          >
+            <Share2 className="h-3.5 w-3.5" />
+            واتساب
+          </button>
+          {showWaPopup ? (
+            <WhatsAppSharePopup
+              imageAttachments={imageAttachments}
+              customerName={customerName}
+              tradeInModel={tradeInModel}
+              onClose={() => setShowWaPopup(false)}
+            />
+          ) : null}
+        </div>
+      </div>
+
+      {showAttachments && attachmentCount > 0 && (
+        <div className="profile-attachments">
+          <div className="attachments-summary">
+            {Object.entries(groupedAttachments).map(([key, items]) =>
+              items.length > 0 ? (
+                <span key={key} className="attachment-category-pill">
+                  {getCategoryLabel(key)}
+                  <span className="attachment-category-pill__count">{items.length}</span>
+                </span>
+              ) : null,
+            )}
+          </div>
+          {imageAttachments.length > 0 && (
+            <>
+              <div className="attachments-thumb-grid">
+                {imageAttachments.map((att, idx) => (
+                  <button key={att.id} type="button" className="attachment-thumb-btn" onClick={() => openAlbumAt(idx)}>
+                    <img src={att.public_url ?? ""} alt={att.file_name ?? "image"} className="attachment-thumb-img" />
+                    <span className="attachment-thumb-name">{att.file_name ?? "صورة"}</span>
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="legacy-mini-btn legacy-mini-btn--primary" style={{ alignSelf: "flex-start" }} onClick={() => openAlbumAt(0)}>
+                عرض الألبوم الكامل
+              </button>
+            </>
+          )}
+          {fileAttachments.length > 0 && (
+            <div className="attachment-files-list">
+              {fileAttachments.map((att) => (
+                <a key={att.id} href={att.public_url ?? "#"} target="_blank" rel="noreferrer"
+                  className={`attachment-file-link${att.public_url ? "" : " legacy-attachment-link--disabled"}`}
+                >
+                  <Paperclip className="h-4 w-4 flex-shrink-0" />
+                  {getCategoryLabel(att.file_category)}: {att.file_name ?? "ملف"}
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {showAttachments && attachmentCount === 0 && (
+        <p className="text-sm text-slate-400 text-center py-4">لا توجد مرفقات.</p>
+      )}
+    </>
+  );
+
+  if (standalone) {
+    return <div className="profile-section">{inner}</div>;
+  }
+  // داخل بطاقة موجودة — نضيف فاصل علوي فقط
+  return (
+    <div style={{ borderTop: "1px solid #f1f5f9" }}>
+      {inner}
+    </div>
+  );
+}
+
 /* ─── Main Component ─────────────────────────────────────────── */
 export function CustomerProfileContent({
   customer,
@@ -430,6 +657,15 @@ export function CustomerProfileContent({
   const [waSending, setWaSending] = useState(false);
   const [waResult, setWaResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const waTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // ── Edit basic info modal ──
+  const [showEditBasic, setShowEditBasic] = useState(false);
+  const [editBasicName, setEditBasicName] = useState(customer.full_name ?? "");
+  const [editBasicNickname, setEditBasicNickname] = useState(customer.nickname ?? "");
+  const [editBasicPhone, setEditBasicPhone] = useState(customer.phone ?? "");
+  const [editBasicAddress, setEditBasicAddress] = useState(customer.address ?? "");
+  const [editBasicError, setEditBasicError] = useState<string | null>(null);
+  const [editBasicPending, startEditBasicTransition] = useTransition();
 
   const initialOperationType = (() => {
     const code = typeof customer.metadata?.operation_type_code === "string" ? customer.metadata.operation_type_code : "";
@@ -629,7 +865,7 @@ export function CustomerProfileContent({
         event.preventDefault();
         const form = event.currentTarget;
         const dealInput = form.querySelector<HTMLInputElement>("[name='deal_value']");
-        const dealVal = dealInput?.value ? `${Number(dealInput.value).toLocaleString("ar")} ريال` : "غير محدد";
+        const dealVal = dealInput?.value ? `${Number(dealInput.value).toLocaleString("ar")} شيقل` : "غير محدد";
         requireConfirm({
           title: "إتمام عملية البيع",
           description: `سيتم تسجيل إتمام عملية البيع للعميل "${customer.full_name}"${dealInput?.value ? ` بقيمة ${dealVal}` : ""}. هذا الإجراء سيُغلق الملف نهائياً.`,
@@ -649,7 +885,7 @@ export function CustomerProfileContent({
       event.preventDefault();
       const form = event.currentTarget;
       const dealInput = form.querySelector<HTMLInputElement>("[name='deal_value']");
-      const dealVal = dealInput?.value ? `${Number(dealInput.value).toLocaleString("ar")} ريال` : "غير محدد";
+      const dealVal = dealInput?.value ? `${Number(dealInput.value).toLocaleString("ar")} شيقل` : "غير محدد";
       requireConfirm({
         title: "إتمام عملية البيع",
         description: `سيتم تسجيل إتمام عملية البيع للعميل "${customer.full_name}"${dealInput?.value ? ` بقيمة ${dealVal}` : ""}. هذا الإجراء سيُغلق الملف نهائياً.`,
@@ -830,11 +1066,30 @@ export function CustomerProfileContent({
           <div className="profile-header-card__body">
             <div className="profile-header-card__top">
               <span className="profile-header-card__name">{customer.full_name}</span>
+              {customer.nickname && (
+                <span className="profile-header-card__nickname">{customer.nickname}</span>
+              )}
               <StatusPill value={customer.status} />
+              <button
+                type="button"
+                title="تعديل البيانات الأساسية"
+                onClick={() => {
+                  setEditBasicName(customer.full_name ?? "");
+                  setEditBasicNickname(customer.nickname ?? "");
+                  setEditBasicPhone(customer.phone ?? "");
+                  setEditBasicAddress(customer.address ?? "");
+                  setEditBasicError(null);
+                  setShowEditBasic(true);
+                }}
+                className="inline-flex items-center justify-center h-7 w-7 rounded-lg border border-slate-700 bg-transparent text-slate-400 transition hover:bg-slate-700 hover:text-white flex-shrink-0"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
             </div>
 
             <div className="profile-header-card__meta">
               <span className="num-val">{customer.phone}</span>
+              {customer.address && <><span className="sep">·</span><span>{customer.address}</span></>}
               {customer.branch_name && <><span className="sep">·</span><span>{customer.branch_name}</span></>}
               {customer.assigned_user_name && <><span className="sep">·</span><span>{customer.assigned_user_name}</span></>}
             </div>
@@ -1267,6 +1522,19 @@ export function CustomerProfileContent({
                 ? <TradeInEditor primaryTrade={primaryTrade} />
                 : <input type="hidden" name="trade_in_id" value={primaryTrade?.id ?? ""} />
               }
+
+              {/* ── مرفقات سيارة العميل — داخل البطاقة ── */}
+              <AttachmentsPanel
+                attachmentCount={attachmentCount}
+                groupedAttachments={groupedAttachments}
+                imageAttachments={imageAttachments}
+                fileAttachments={fileAttachments}
+                showAttachments={showAttachments}
+                onToggle={() => setShowAttachments((a) => !a)}
+                openAlbumAt={openAlbumAt}
+                customerName={customer.full_name}
+                tradeInModel={primaryTrade?.model ?? null}
+              />
             </div>
           ) : (
             <>
@@ -1275,97 +1543,7 @@ export function CustomerProfileContent({
             </>
           )}
 
-          {/* ── المرفقات + إضافة تحديث + موعد المراجعة ── (مخفي أثناء فتح دورة جديدة) */}
-          {!showNewCycleForm && (
-          <>
-          <div className="profile-section">
-            <button
-              type="button"
-              className="profile-section__toggle-header"
-              onClick={() => setShowAttachments((a) => !a)}
-            >
-              <div className="profile-section__title">
-                <FolderOpen className="h-4 w-4 text-amber-500" />
-                المرفقات
-                <span className="inline-flex items-center justify-center h-5 min-w-5 rounded-full bg-slate-100 text-slate-500 text-xs font-bold px-1.5">
-                  {attachmentCount}
-                </span>
-              </div>
-              {showAttachments
-                ? <ChevronUp className="profile-section__chevron h-4 w-4" />
-                : <ChevronDown className="profile-section__chevron h-4 w-4" />
-              }
-            </button>
-
-            {showAttachments && attachmentCount > 0 && (
-              <div className="profile-attachments">
-                {/* Category summary */}
-                <div className="attachments-summary">
-                  {Object.entries(groupedAttachments).map(([key, items]) =>
-                    items.length > 0 ? (
-                      <span key={key} className="attachment-category-pill">
-                        {getCategoryLabel(key)}
-                        <span className="attachment-category-pill__count">{items.length}</span>
-                      </span>
-                    ) : null,
-                  )}
-                </div>
-
-                {/* Image thumbnails */}
-                {imageAttachments.length > 0 && (
-                  <>
-                    <div className="attachments-thumb-grid">
-                      {imageAttachments.map((att, idx) => (
-                        <button key={att.id} type="button" className="attachment-thumb-btn" onClick={() => openAlbumAt(idx)}>
-                          <img src={att.public_url ?? ""} alt={att.file_name ?? "image"} className="attachment-thumb-img" />
-                          <span className="attachment-thumb-name">{att.file_name ?? "صورة"}</span>
-                        </button>
-                      ))}
-                    </div>
-                    <button type="button" className="legacy-mini-btn legacy-mini-btn--primary" style={{ alignSelf: "flex-start" }} onClick={() => openAlbumAt(0)}>
-                      عرض الألبوم الكامل
-                    </button>
-                  </>
-                )}
-
-                {/* Voice notes */}
-                {voiceAttachments.length > 0 && (
-                  <div className="flex flex-col gap-2">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">🎤 التسجيلات الصوتية</p>
-                    {voiceAttachments.map((att) => (
-                      <div key={att.id} className="flex flex-col gap-1 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
-                        <span className="text-xs text-slate-500">{att.file_name ?? "تسجيل صوتي"}</span>
-                        {att.public_url
-                          ? <audio controls src={att.public_url} className="w-full max-w-sm h-8" />
-                          : <span className="text-xs text-slate-400">الرابط غير متاح</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* File links */}
-                {fileAttachments.length > 0 && (
-                  <div className="attachment-files-list">
-                    {fileAttachments.map((att) => (
-                      <a
-                        key={att.id}
-                        href={att.public_url ?? "#"}
-                        target="_blank" rel="noreferrer"
-                        className={`attachment-file-link${att.public_url ? "" : " legacy-attachment-link--disabled"}`}
-                      >
-                        <Paperclip className="h-4 w-4 flex-shrink-0" />
-                        {getCategoryLabel(att.file_category)}: {att.file_name ?? "ملف"}
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {showAttachments && attachmentCount === 0 && (
-              <p className="text-sm text-slate-400 text-center py-4">لا توجد مرفقات.</p>
-            )}
-          </div>
+          {/* مجلد المرفقات لا يظهر للمشتري (buyer) — فقط داخل كرت سيارة العميل */}
 
           {/* ── السيارات المطلوبة ── (مخفي أثناء فتح دورة جديدة) */}
           {!showNewCycleForm && showRequestedCarsCard ? (
@@ -1699,27 +1877,49 @@ export function CustomerProfileContent({
                   );
                 })()}
 
-                {/* قيمة الصفقة — تظهر عند حالات الإغلاق فقط */}
-                {CLOSED_CUSTOMER_STATUS_HINTS.some((h) => currentStatus.includes(h)) && (
-                  <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
-                    <label className="legacy-label text-emerald-800">💰 قيمة الصفقة (ريال)</label>
-                    <input
-                      type="number"
-                      name="deal_value"
-                      min="0"
-                      step="500"
-                      placeholder="أدخل قيمة الصفقة..."
-                      defaultValue={
-                        typeof (customer.metadata as Record<string, unknown> | null)?.deal_value === "number"
-                          ? String((customer.metadata as Record<string, unknown>).deal_value)
-                          : ""
-                      }
-                      onChange={markDirty}
-                      className="legacy-input mt-1"
-                    />
-                    <p className="text-xs text-emerald-600 mt-1">
-                      ستظهر في إشعار المدير وتُستخدم في تقارير المبيعات.
-                    </p>
+                {/* طريقة الدفع + قيمة الصفقة — تظهران عند حالات البيع/الحجز */}
+                {needsPaymentMethod(currentStatus) && (
+                  <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 space-y-3">
+                    {/* طريقة الدفع */}
+                    <div>
+                      <label className="legacy-label text-emerald-800">💳 طريقة الدفع</label>
+                      <select
+                        name="payment_method"
+                        defaultValue={
+                          typeof (customer.metadata as Record<string, unknown> | null)?.payment_method === "string"
+                            ? String((customer.metadata as Record<string, unknown>).payment_method)
+                            : ""
+                        }
+                        onChange={markDirty}
+                        className="legacy-select mt-1"
+                      >
+                        <option value="">— اختر طريقة الدفع —</option>
+                        {PAYMENT_METHODS.map((m) => (
+                          <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {/* قيمة الصفقة */}
+                    <div>
+                      <label className="legacy-label text-emerald-800">💰 قيمة الصفقة (شيقل) — اختياري</label>
+                      <input
+                        type="number"
+                        name="deal_value"
+                        min="0"
+                        step="500"
+                        placeholder="أدخل قيمة الصفقة..."
+                        defaultValue={
+                          typeof (customer.metadata as Record<string, unknown> | null)?.deal_value === "number"
+                            ? String((customer.metadata as Record<string, unknown>).deal_value)
+                            : ""
+                        }
+                        onChange={markDirty}
+                        className="legacy-input"
+                      />
+                      <p className="text-xs text-emerald-600 mt-1">
+                        ستظهر في إشعار المدير وتُستخدم في تقارير المبيعات.
+                      </p>
+                    </div>
                   </div>
                 )}
 
@@ -1733,8 +1933,6 @@ export function CustomerProfileContent({
               </div>
             </div>
           </div>
-          </>
-          )}
 
         </div>{/* end profile-body */}
 
@@ -1956,6 +2154,122 @@ export function CustomerProfileContent({
                   {waSending ? "جاري الإرسال..." : (
                     <><Send className="h-4 w-4" /> إرسال</>
                   )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── مودال تعديل البيانات الأساسية ── */}
+      {showEditBasic && (
+        <div
+          className="legacy-album-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowEditBasic(false); }}
+        >
+          <div className="legacy-album-card" style={{ maxWidth: 440, width: "95%" }}>
+            <div className="legacy-album-head">
+              <span style={{ fontWeight: 700, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
+                <Pencil className="h-4 w-4 text-sky-600" />
+                تعديل بيانات العميل
+              </span>
+              <button
+                type="button"
+                className="legacy-album-close"
+                onClick={() => setShowEditBasic(false)}
+                aria-label="إغلاق"
+                style={{ position: "static", width: 34, height: 34 }}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+              <label className="legacy-field">
+                <span className="legacy-field__label">الاسم الكامل <span style={{ color: "#ef4444" }}>*</span></span>
+                <input
+                  type="text"
+                  value={editBasicName}
+                  onChange={(e) => setEditBasicName(e.target.value)}
+                  className="legacy-input"
+                  placeholder="اسم العميل"
+                  disabled={editBasicPending}
+                />
+              </label>
+
+              <label className="legacy-field">
+                <span className="legacy-field__label">الكنية</span>
+                <input
+                  type="text"
+                  value={editBasicNickname}
+                  onChange={(e) => setEditBasicNickname(e.target.value)}
+                  className="legacy-input"
+                  placeholder="أبو فلان..."
+                  disabled={editBasicPending}
+                />
+              </label>
+
+              <label className="legacy-field">
+                <span className="legacy-field__label">رقم الهاتف <span style={{ color: "#ef4444" }}>*</span></span>
+                <input
+                  type="tel"
+                  value={editBasicPhone}
+                  onChange={(e) => setEditBasicPhone(e.target.value.replace(/\D/g, ""))}
+                  className="legacy-input num-val"
+                  placeholder="05XXXXXXXX"
+                  maxLength={10}
+                  disabled={editBasicPending}
+                />
+              </label>
+
+              <label className="legacy-field">
+                <span className="legacy-field__label">المدينة / العنوان</span>
+                <input
+                  type="text"
+                  value={editBasicAddress}
+                  onChange={(e) => setEditBasicAddress(e.target.value)}
+                  className="legacy-input"
+                  placeholder="المدينة أو الحي..."
+                  disabled={editBasicPending}
+                />
+              </label>
+
+              {editBasicError && (
+                <div style={{ borderRadius: 10, padding: "10px 14px", fontSize: 13, fontWeight: 600, background: "#fff1f2", color: "#9f1239", border: "1px solid #fecdd3" }}>
+                  ⚠️ {editBasicError}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button type="button" className="legacy-btn border" onClick={() => setShowEditBasic(false)} disabled={editBasicPending}>
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  className="legacy-btn legacy-btn-primary"
+                  disabled={editBasicPending || !editBasicName.trim() || editBasicPhone.length !== 10}
+                  onClick={() => {
+                    setEditBasicError(null);
+                    const fd = new FormData();
+                    fd.set("customer_id", customer.id);
+                    fd.set("full_name", editBasicName.trim());
+                    fd.set("nickname", editBasicNickname.trim());
+                    fd.set("phone", editBasicPhone.trim());
+                    fd.set("address", editBasicAddress.trim());
+                    startEditBasicTransition(async () => {
+                      const result = await updateCustomerBasicInfoAction(fd);
+                      if (result?.error) {
+                        setEditBasicError(result.error);
+                      } else {
+                        setShowEditBasic(false);
+                        router.refresh();
+                      }
+                    });
+                  }}
+                >
+                  {editBasicPending ? "جاري الحفظ..." : <><Save className="h-4 w-4" /> حفظ</>}
                 </button>
               </div>
             </div>

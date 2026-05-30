@@ -87,6 +87,9 @@ export function InventoryFilterBar({
     currentFuel !== "all" ? currentFuel : "",
   ].filter(Boolean).length;
 
+  // عدد أصحاب برسم البيع لعرضه في optgroup
+  const ownersCount = consignmentOwners.length;
+
   return (
     <div className="space-y-3">
       {/* ── صف البحث + العداد ── */}
@@ -163,16 +166,14 @@ export function InventoryFilterBar({
           )}
         </select>
 
-        {/* أصحاب السيارات برسم البيع — عملاء فقط */}
+        {/* أصحاب السيارات برسم البيع — فلتر مستقل */}
         <select
           className="legacy-select text-violet-700 flex-1 min-w-[130px]"
           value={currentOwner}
           onChange={(e) => navigate("owner", e.target.value)}
         >
           <option value="all">
-            {consignmentOwners.length > 0
-              ? `أصحاب برسم البيع (${consignmentOwners.length})`
-              : "أصحاب برسم البيع"}
+            {ownersCount > 0 ? `أصحاب برسم البيع (${ownersCount})` : "أصحاب برسم البيع"}
           </option>
           {consignmentOwners.map((o) => (
             <option key={o} value={o}>

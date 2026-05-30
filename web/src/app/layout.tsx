@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "أوتو سيستم",
+  title: "مجموعة المعلم للسيارات",
   description: "منصة تشغيل وإدارة متكاملة للعملاء والمخزون والمتابعات اليومية",
 };
 

@@ -11,11 +11,15 @@ export type SessionState =
   | "add_cust_car"
   | "add_cust_trade_car"
   | "add_cust_status"
+  | "add_cust_payment"
   | "add_cust_notes"
   | "add_cust_followup"
   | "add_cust_confirm"
   | "msg_pick_recipient"
-  | "msg_write";
+  | "msg_write"
+  | "voice_note_for_customer"
+  | "card_search"
+  | "eval_reply_price";
 
 export type SessionData = Record<string, string>;
 

@@ -16,9 +16,17 @@ function inventoryAvailabilityBadge(status: string | null | undefined) {
   return { label: `📦 ${s}`, cls: "text-slate-500" };
 }
 
+// التحقق من نوع العملية بالكود أو التسمية العربية (توافق مع السجلات القديمة)
+function isSellOnBehalf(opType: string | null | undefined) {
+  return opType === "sell_on_behalf" || opType === "بيع بالوكالة";
+}
+function isBuyerTradeIn(opType: string | null | undefined) {
+  return opType === "buyer_tradein_pending" || opType === "buyer_tradein_evaluated" || opType === "مشتري + استبدال";
+}
+
 // يظهر فقط لعملاء بيع بالوكالة — معلومة إضافية عن سيارة العميل
 function tradeInStatusBadge(status: string | null | undefined, opType: string | null | undefined) {
-  if (opType !== "sell_on_behalf") return null;
+  if (!isSellOnBehalf(opType)) return null;
   const s = (status ?? "").trim();
   if (!s) return null;
   if (s.includes("برسم البيع")) return { label: "🚗 برسم البيع",    cls: "text-amber-600" };
@@ -98,9 +106,9 @@ export function CustomersReportTable({
                       <div className="mt-1 text-xs font-semibold text-sky-600">
                         {customer.operation_type === "buyer"
                           ? "مشتري"
-                          : customer.operation_type === "buyer_tradein_pending" || customer.operation_type === "buyer_tradein_evaluated"
+                          : isBuyerTradeIn(customer.operation_type)
                             ? "مشتري + استبدال"
-                            : customer.operation_type === "sell_on_behalf"
+                            : isSellOnBehalf(customer.operation_type)
                               ? "بيع بالوكالة"
                               : customer.operation_type}
                       </div>
@@ -120,6 +128,13 @@ export function CustomersReportTable({
                     {hasSpecialRequest ? (
                       <div className="mt-1 text-xs font-semibold text-rose-600">غير متوفرة بالمعرض</div>
                     ) : null}
+                    {/* سيارة الاستبدال — لعملاء مشتري + استبدال */}
+                    {isBuyerTradeIn(customer.operation_type) && customer.trade_in_model ? (
+                      <div className="mt-1 flex items-center gap-1 text-xs font-semibold text-violet-600">
+                        <Car className="h-3 w-3 flex-shrink-0" />
+                        <span>{customer.trade_in_model} (استبدال)</span>
+                      </div>
+                    ) : null}
                     {(() => {
                       const badge = tradeInStatusBadge(customer.trade_in_status, customer.operation_type);
                       return badge ? (
@@ -137,6 +152,11 @@ export function CustomersReportTable({
                         <div className={`mt-1 text-xs font-semibold ${badge.cls}`}>{badge.label}</div>
                       ) : null;
                     })()}
+                    {customer.payment_method ? (
+                      <div className="mt-1 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                        💳 {customer.payment_method}
+                      </div>
+                    ) : null}
                     {customer.next_follow_up_at ? (
                       <div className="mt-1.5 text-xs text-slate-400">
                         {formatDate(customer.next_follow_up_at)}

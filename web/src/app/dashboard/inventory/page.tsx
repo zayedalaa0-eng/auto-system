@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Car, Fuel, GaugeCircle, Send, Settings2 } from "lucide-react";
+import { Building2, Car, Fuel, GaugeCircle, Send, Settings2 } from "lucide-react";
 
 import { CarGalleryViewer } from "@/components/car-gallery-viewer";
 import { CustomerModalShell } from "@/components/customer-modal-shell";
@@ -367,13 +367,13 @@ export default async function InventoryPage({
         <table className="premium-table">
           <thead className="legacy-standard-head">
             <tr>
-              <th style={{ width: "185px" }}>المالك / الشاصي</th>
-              <th style={{ width: "165px" }}>السيارة</th>
-              <th style={{ width: "115px" }}>السعر</th>
-              <th style={{ width: "145px" }}>الصفقة والحالة</th>
-              <th style={{ width: "115px" }}>اللون والعداد</th>
-              <th style={{ width: "120px" }}>القير / الوقود</th>
-              <th style={{ width: "100px" }}>الإجراءات</th>
+              <th style={{ width: "170px" }}>المالك / الشاصي</th>
+              <th style={{ width: "140px" }}>السيارة</th>
+              <th style={{ width: "100px" }}>السعر</th>
+              <th style={{ width: "130px" }}>الصفقة والحالة</th>
+              <th style={{ width: "110px" }}>اللون والعداد</th>
+              <th style={{ width: "110px" }}>القير / الوقود</th>
+              <th style={{ width: "86px" }}>الإجراءات</th>
             </tr>
           </thead>
           <tbody>
@@ -384,6 +384,9 @@ export default async function InventoryPage({
                 const isUsed = normalize(item.condition_label).includes("مستعمل");
                 const missingColorMileage = isUsed && !item.color && typeof item.mileage !== "number";
                 const missingGearFuel = !item.gearbox && !item.fuel_type;
+                // المالك شخص (وليس معرضاً) → نُظهر اسم المعرض الذي أُدخل العميل من خلاله
+                const ownerIsPerson =
+                  Boolean(item.owner_name) && !branchNamesSet.has(normalize(item.owner_name));
 
                 return (
                   <tr key={item.id}>
@@ -401,6 +404,12 @@ export default async function InventoryPage({
                           <div className="font-bold text-slate-900 leading-tight truncate">
                             {item.owner_name ?? "—"}
                           </div>
+                          {ownerIsPerson && item.branch_name ? (
+                            <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-500 truncate">
+                              <Building2 className="h-3 w-3 flex-shrink-0 text-slate-400" />
+                              {item.branch_name}
+                            </div>
+                          ) : null}
                           {item.chassis_no ? (
                             <div className="mt-0.5 font-mono text-xs text-slate-400 tracking-wide truncate">
                               {item.chassis_no}
@@ -514,24 +523,20 @@ export default async function InventoryPage({
 
                     {/* الإجراءات */}
                     <td>
-                      <div className="flex flex-col gap-1.5 items-stretch">
-                        {/* زر بطاقة السيارة */}
-                        <Link
-                          href={
-                            baseQuery
-                              ? `/dashboard/inventory?${baseQuery}&car=${item.id}`
-                              : `/dashboard/inventory?car=${item.id}`
-                          }
-                          className="legacy-table-btn legacy-table-btn--view text-center"
-                          title="عرض بطاقة السيارة"
-                        >
-                          بطاقة
-                        </Link>
-
+                      <div className="flex items-center gap-1.5">
                         {/* زر تذكير تيليجرام */}
-                        <form action={sendQuickReminderAction}>
-                          <input type="hidden" name="recipient_branch_id" value={item.branch_id ?? ""} />
-                          <input type="hidden" name="recipient_label" value={item.branch_name ?? ""} />
+                        <form action={sendQuickReminderAction} className="flex-shrink-0">
+                          {item.assigned_user_id ? (
+                            <>
+                              <input type="hidden" name="recipient_user_id" value={item.assigned_user_id} />
+                              <input type="hidden" name="recipient_label" value={item.assigned_user_name ?? ""} />
+                            </>
+                          ) : (
+                            <>
+                              <input type="hidden" name="recipient_branch_id" value={item.branch_id ?? ""} />
+                              <input type="hidden" name="recipient_label" value={item.branch_name ?? ""} />
+                            </>
+                          )}
                           <input type="hidden" name="title" value={`تذكير — سيارة ${item.model ?? ""}`} />
                           <input
                             type="hidden"
@@ -541,21 +546,25 @@ export default async function InventoryPage({
                           <input type="hidden" name="redirect_to" value="/dashboard/inventory" />
                           <button
                             type="submit"
-                            className="legacy-table-btn legacy-table-btn--edit w-full justify-center gap-1"
-                            title="إرسال تذكير عبر تيليجرام"
+                            className="inline-flex h-[32px] w-[32px] flex-shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-600"
+                            title={item.assigned_user_name ? `تذكير إلى ${item.assigned_user_name}` : "إرسال تذكير"}
                           >
                             <Send className="h-3.5 w-3.5" />
                           </button>
                         </form>
 
-                        {/* زر المزيد */}
-                        <button
-                          type="button"
-                          className="legacy-table-btn w-full justify-center border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-                          title="المزيد"
+                        {/* بطاقة السيارة */}
+                        <Link
+                          href={
+                            baseQuery
+                              ? `/dashboard/inventory?${baseQuery}&car=${item.id}`
+                              : `/dashboard/inventory?car=${item.id}`
+                          }
+                          className="legacy-table-btn legacy-table-btn--view legacy-table-btn--sm"
+                          title="عرض بطاقة السيارة"
                         >
-                          •••
-                        </button>
+                          بطاقة
+                        </Link>
                       </div>
                     </td>
                   </tr>

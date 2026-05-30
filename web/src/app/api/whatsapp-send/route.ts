@@ -67,11 +67,18 @@ export async function POST(req: NextRequest) {
     });
 
     // ── تسجيل في سجل العميل ──────────────────────────────────────────
+    const { data: actor } = await supabase
+      .from("app_users")
+      .select("id, full_name")
+      .eq("auth_user_id", session.user.id)
+      .maybeSingle();
+
     await supabase.from("customer_logs").insert({
       customer_id,
       action: "whatsapp_sent",
-      notes: `📱 رسالة واتساب أُرسلت من ${branch.name}: "${message.trim().slice(0, 100)}"`,
-      performed_by: session.user.id,
+      details: `📱 رسالة واتساب أُرسلت من ${branch.name}: "${message.trim().slice(0, 100)}"`,
+      actor_user_id: actor?.id ?? null,
+      actor_name: actor?.full_name ?? null,
     });
 
     return NextResponse.json({ success: true, message_id: result.messages?.[0]?.id });

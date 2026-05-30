@@ -1,12 +1,12 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { ClipboardCheck, ClipboardList, Eye, IdCard, ListChecks, Send, Siren, X, Zap } from "lucide-react";
+import { Bell, ChevronDown, ClipboardCheck, ClipboardList, Eye, IdCard, ListChecks, MessageCircle, Send, Siren, X, Zap } from "lucide-react";
 
-import { sendQuickReminderAction } from "@/app/dashboard/actions";
-import type { AgendaOverview, OperationalAlertItem } from "@/lib/data";
+import { sendQuickReminderAction, sendEvaluationReminderAction } from "@/app/dashboard/actions";
+import type { AgendaOverview, OperationalAlertItem, PendingEvaluationItem } from "@/lib/data";
 import { formatDate } from "@/lib/format";
 
 type ModalKind = "tasks" | "trades" | "licenses" | "evaluation" | null;
@@ -26,6 +26,99 @@ function SubmitBtn() {
       )}
       تذكير
     </button>
+  );
+}
+
+function EvalReminderBtn({ label, sublabel }: { label: string; sublabel?: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending} className="w-full px-3 py-2.5 text-right hover:bg-amber-50 flex items-center gap-2 disabled:opacity-50 border-b border-amber-50 last:border-0">
+      {pending
+        ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-amber-500 border-t-transparent shrink-0" />
+        : <Bell className="h-3 w-3 text-amber-500 shrink-0" />}
+      <div>
+        <div className="text-sm font-medium text-slate-800">{label}</div>
+        {sublabel ? <div className="text-xs text-slate-400">{sublabel}</div> : null}
+      </div>
+    </button>
+  );
+}
+
+function EvalReminderDropdown({
+  item,
+  currentUserId,
+  detailBasePath,
+}: {
+  item: PendingEvaluationItem;
+  currentUserId: string | null;
+  detailBasePath: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const photoUrls = item.photos.map((p) => p.public_url).join("||");
+
+  // الموظفون المتاحون للإرسال — يُستثنى المستخدم الحالي
+  const recipients = item.branch_staff.filter((s) => s.id !== currentUserId);
+
+  // لا يوجد أحد آخر لإرساله؟
+  if (recipients.length === 0) return null;
+
+  // تسمية الدور بالعربي
+  function roleLabel(role: string) {
+    if (role === "general_manager") return "مدير عام";
+    if (role === "manager") return "مدير معرض";
+    return "موظف";
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="legacy-btn legacy-btn-warning gap-1"
+      >
+        <Bell className="h-4 w-4" />
+        تذكير
+        <ChevronDown className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open ? (
+        <div className="absolute left-0 top-full z-20 mt-1 w-60 rounded-lg border border-amber-200 bg-white shadow-lg overflow-hidden">
+          <div className="px-3 py-2 bg-amber-50 border-b border-amber-100 text-xs font-bold text-amber-700">
+            اختر من تريد تذكيره
+          </div>
+          {recipients.map((staff) => (
+            <form
+              key={staff.id}
+              action={sendEvaluationReminderAction}
+              onSubmit={() => setOpen(false)}
+            >
+              <input type="hidden" name="customer_id"       value={item.id} />
+              <input type="hidden" name="customer_name"     value={item.full_name} />
+              <input type="hidden" name="trade_in_model"    value={item.trade_in_model ?? ""} />
+              <input type="hidden" name="branch_id"         value={item.branch_id ?? ""} />
+              <input type="hidden" name="recipient_user_id" value={staff.id} />
+              <input type="hidden" name="recipient_name"    value={staff.full_name} />
+              <input type="hidden" name="photo_urls"        value={photoUrls} />
+              <input type="hidden" name="redirect_to"       value={detailBasePath} />
+              <EvalReminderBtn
+                label={staff.full_name}
+                sublabel={roleLabel(staff.role)}
+              />
+            </form>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -57,6 +150,78 @@ function ReminderButton({
   );
 }
 
+/* ─── WhatsApp Evaluation Button ────────────────────────────────── */
+function WhatsAppEvalButton({ item }: { item: PendingEvaluationItem }) {
+
+  function buildMessage(): string {
+    const line = "━━━━━━━━━━━━━━━━━━━━━━━━━━";
+
+    const carLines = item.trade_in_model
+      ? [
+          line,
+          "🚗 *بيانات السيارة المطلوب تقييمها*",
+          line,
+          item.trade_in_model      ? `▪️ *الموديل:* ${item.trade_in_model}`                                    : null,
+          item.trade_in_color      ? `▪️ *اللون:* ${item.trade_in_color}`                                      : null,
+          item.trade_in_year       ? `▪️ *سنة الصنع:* ${item.trade_in_year}`                                   : null,
+          item.trade_in_mileage    ? `▪️ *الممشى:* ${item.trade_in_mileage.toLocaleString("ar-SA")} كم`        : null,
+          item.trade_in_chassis    ? `▪️ *رقم الشاصي:* ${item.trade_in_chassis}`                              : null,
+          item.trade_in_inspection ? `▪️ *تقرير الفحص:* ${item.trade_in_inspection}`                         : null,
+          item.trade_in_status     ? `▪️ *الحالة الراهنة:* ${item.trade_in_status}`                           : null,
+        ].filter(Boolean).join("\n")
+      : null;
+
+    const photosLines = item.photos.length > 0
+      ? [
+          ``,
+          line,
+          `📷 *صور السيارة (${item.photos.length}):*`,
+          ...item.photos.slice(0, 5).map((p, i) => `${i + 1}. ${p.public_url}`),
+        ].join("\n")
+      : "";
+
+    return [
+      `🔔 *طلب تقييم سيارة*`,
+      line,
+      ``,
+      `السادة المحترمون،`,
+      `تحيةً طيبةً وبعد؛`,
+      ``,
+      `يُسعدنا التواصل معكم، ونأمل من سيادتكم التكرم بتقييم السيارة الموضحة بياناتها أدناه، وذلك لاتخاذ القرار المناسب بشأنها.`,
+      ``,
+      `نرجو مراجعة المعلومات المرفقة، والاطلاع على الصور إن وُجدت، ثم إفادتنا بـ *قيمة التقييم* في أقرب وقت ممكن حتى نتمكن من استكمال الإجراءات اللازمة.`,
+      ``,
+      carLines ?? `${line}\n🚗 لم تُسجَّل بيانات السيارة بعد`,
+      photosLines,
+      ``,
+      line,
+      `✅ *المطلوب:*`,
+      `يُرجى التكرم بإرسال *قيمة التقييم* بالشيقل في أقرب وقت ممكن.`,
+      ``,
+      `شكرًا جزيلًا على تعاونكم واهتمامكم.`,
+      line,
+    ].filter((l) => l !== null).join("\n");
+  }
+
+  function handleClick() {
+    const msg = buildMessage();
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank", "noopener,noreferrer");
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className="legacy-btn gap-1.5"
+      style={{ backgroundColor: "#25D366", color: "#fff", borderColor: "#1ebe5d" }}
+      title="إرسال طلب التقييم عبر واتساب"
+    >
+      <MessageCircle className="h-4 w-4" />
+      واتساب
+    </button>
+  );
+}
+
 export function AgendaCenterClient({
   agenda,
   incompleteTrades,
@@ -65,20 +230,18 @@ export function AgendaCenterClient({
   initialModal = null,
   detailBasePath = "/dashboard/customers",
   showButtons = true,
+  currentUserRole = "employee",
+  currentUserId = null,
 }: {
   agenda: AgendaOverview;
   incompleteTrades: OperationalAlertItem[];
   licenseDue: OperationalAlertItem[];
-  pendingEvaluation?: Array<{
-    id: string;
-    full_name: string;
-    requested_car: string | null;
-    assigned_user_name: string | null;
-    branch_name: string | null;
-  }>;
+  pendingEvaluation?: PendingEvaluationItem[];
   initialModal?: ModalKind;
   detailBasePath?: string;
   showButtons?: boolean;
+  currentUserRole?: string;
+  currentUserId?: string | null;
 }) {
   const [openModal, setOpenModal] = useState<ModalKind>(initialModal);
   const tasks = useMemo(() => [...agenda.followUps, ...agenda.reminders], [agenda.followUps, agenda.reminders]);
@@ -229,13 +392,30 @@ export function AgendaCenterClient({
                 {openModal === "evaluation"
                   ? pendingEvaluation.map((item) => (
                       <div key={item.id} className="rounded-lg border border-sky-300 bg-white p-4 shadow-sm">
-                        <div className="text-lg font-bold text-sky-700">{item.full_name}</div>
-                        <div className="text-sm text-slate-700">السيارة: {item.requested_car ?? "-"}</div>
-                        <div className="text-sm text-slate-700">الموظف: {item.assigned_user_name ?? "—"} | المعرض: {item.branch_name ?? "—"}</div>
-                        <div className="mt-3">
-                          <Link href={`${detailBasePath}?customer=${item.id}&mode=view&focus=trade`} className="legacy-btn legacy-btn-info">
+                        <div className="mb-1 flex flex-wrap items-start justify-between gap-2">
+                          <div className="text-lg font-bold text-sky-700">{item.full_name}</div>
+                          <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-800">{item.status}</span>
+                        </div>
+                        {item.trade_in_model ? (
+                          <div className="text-sm font-medium text-amber-700">🚗 السيارة: {item.trade_in_model}</div>
+                        ) : null}
+                        <div className="mt-1 text-sm text-slate-600">
+                          الموظف: {item.assigned_user_name ?? "—"} | المعرض: {item.branch_name ?? "—"}
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <Link
+                            href={`${detailBasePath}?customer=${item.id}&mode=view`}
+                            className="legacy-btn legacy-btn-info"
+                          >
+                            <Eye className="h-4 w-4" />
                             فتح وتحديث
                           </Link>
+                          <EvalReminderDropdown
+                            item={item}
+                            currentUserId={currentUserId}
+                            detailBasePath={detailBasePath}
+                          />
+                          <WhatsAppEvalButton item={item} />
                         </div>
                       </div>
                     ))

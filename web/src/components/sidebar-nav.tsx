@@ -61,7 +61,7 @@ export function SidebarNav({
   const navItems: NavItem[] = [
     { href: "/dashboard/customers/new", label: "إدخال عميل جديد", icon: UserPlus },
     { href: "/dashboard/customers", label: "تقرير عملائي", icon: List },
-    { href: "/dashboard/search", label: "بحث المعرض", icon: FileSearch },
+    { href: "/dashboard/search", label: "عملاء المعرض", icon: FileSearch },
     { href: "/dashboard/inventory", label: "المخزون", icon: Warehouse },
     { href: "/dashboard/notifications", label: "التنبيهات", icon: Bell, badge: unreadCount },
     { href: "/dashboard", label: "الإحصائيات", icon: ChartBar },
@@ -82,7 +82,7 @@ export function SidebarNav({
           <CarFront className="h-5 w-5 text-white" />
         </div>
         <div>
-          <div className="sidebar-brand-name">أوتو سيستم</div>
+          <div className="sidebar-brand-name">مجموعة المعلم للسيارات</div>
           <div className="sidebar-brand-role">{userRole}</div>
         </div>
       </div>
@@ -133,7 +133,7 @@ export function SidebarNav({
       <header className="mobile-topbar">
         <div className="mobile-brand">
           <CarFront className="h-5 w-5 text-sky-400" />
-          <span>أوتو سيستم</span>
+          <span>مجموعة المعلم للسيارات</span>
         </div>
         <button className="mobile-menu-btn" onClick={() => setOpen(true)} aria-label="القائمة">
           <Menu className="h-5 w-5" />

@@ -56,6 +56,10 @@ export type CustomerItem = {
   inventory_availability?: string | null;
   /** حالة سيارة العميل (trade_in) — للعرض في عمود الحالة */
   trade_in_status?: string | null;
+  /** موديل سيارة الاستبدال (buyer_tradein) أو سيارة العميل (sell_on_behalf) */
+  trade_in_model?: string | null;
+  /** طريقة الدفع من metadata.payment_method */
+  payment_method?: string | null;
 };
 
 export type InventoryItem = {
@@ -78,6 +82,9 @@ export type InventoryItem = {
   source_customer_id?: string | null;
   branch_name: string | null;
   branch_id?: string | null;
+  /** الموظف الذي أدخل العميل المرتبط بالسيارة (عبر source_customer_id) */
+  assigned_user_id?: string | null;
+  assigned_user_name?: string | null;
 };
 
 export type InventoryCarAttachment = {
@@ -372,13 +379,17 @@ function mapCustomerRow(item: Record<string, unknown>): CustomerItem {
     id: String(item.id),
     full_name: String(item.full_name ?? ""),
     phone: String(item.phone ?? ""),
-    operation_type: typeof item.operation_type === "string"
-      ? item.operation_type
-      : typeof metadata.operation_type_code === "string"
-        ? metadata.operation_type_code
-        : typeof metadata.operation_type === "string"
-          ? metadata.operation_type
-          : null,
+    // نُفضّل الكود الإنجليزي من metadata (يُخزَّن دائماً بواسطة الويب والبوت)
+    // لأن دوال الإثراء والمكونات تقارن بالكود وليس بالتسمية العربية
+    operation_type: (() => {
+      const KNOWN_CODES = ["buyer", "buyer_tradein_pending", "buyer_tradein_evaluated", "sell_on_behalf"];
+      const codeFromMeta = typeof metadata.operation_type_code === "string" ? metadata.operation_type_code : null;
+      if (codeFromMeta && KNOWN_CODES.includes(codeFromMeta)) return codeFromMeta;
+      const colVal = typeof item.operation_type === "string" ? item.operation_type : null;
+      if (colVal && KNOWN_CODES.includes(colVal)) return colVal;
+      // رجعة: التسمية العربية أو قيمة metadata.operation_type
+      return colVal ?? (typeof metadata.operation_type === "string" ? metadata.operation_type : null) ?? null;
+    })(),
     requested_car: (item.requested_car as string | null) ?? null,
     requested_car_report: (item.requested_car as string | null) ?? null,
     sale_offer_car: null,
@@ -400,6 +411,7 @@ function mapCustomerRow(item: Record<string, unknown>): CustomerItem {
     created_at: (item.created_at as string | null) ?? null,
     updated_at: (item.updated_at as string | null) ?? null,
     visit_count: Number.isFinite(parsedVisitCount) ? parsedVisitCount : 0,
+    payment_method: typeof metadata.payment_method === "string" ? metadata.payment_method : null,
   };
 }
 
@@ -414,6 +426,10 @@ async function enrichCustomersWithSaleOfferInReport(
 ) {
   if (!baseCustomers.length) return baseCustomers;
   const ids = baseCustomers.map((c) => c.id);
+
+  // دالة مساعدة: التحقق من sell_on_behalf بالكود أو التسمية العربية (توافق مع السجلات القديمة)
+  const isSellOnBehalf = (op: string | null | undefined): boolean =>
+    op === "sell_on_behalf" || op === "بيع بالوكالة";
 
   // خريطة نوع العملية لكل عميل (للتمييز بين sell_on_behalf والمشترين)
   const opTypeMap = new Map<string, string | null>();
@@ -434,12 +450,15 @@ async function enrichCustomersWithSaleOfferInReport(
     const model = String(row.model ?? "").trim();
     if (!model || latestTradeByCustomer.has(cid)) continue;
 
-    if (opType === "sell_on_behalf") {
+    if (isSellOnBehalf(opType ?? null)) {
       // بيع بالوكالة: نُظهر اسم السيارة دائماً — والشارة فقط عند العرض النشط
+      const isActiveOffer = Boolean(row.is_active) && isTradeOfferForReport(row.status);
       latestTradeByCustomer.set(cid, {
         model,
-        isOffer: Boolean(row.is_active) && isTradeOfferForReport(row.status),
-        status: row.status ?? null,
+        isOffer: isActiveOffer,
+        // نُعيِّن "برسم البيع" عندما السيارة نشطة — بغض النظر عن قيمة العمود في جدول trade_ins
+        // (قد يكون "استبدال (بانتظار التقييم)" للسجلات القادمة من البوت/المني آب)
+        status: isActiveOffer ? "برسم البيع" : (row.status ?? null),
       });
     } else {
       // مشتري / استبدال: نُظهر فقط إذا كانت سيارة نشطة ومعروضة
@@ -451,7 +470,7 @@ async function enrichCustomersWithSaleOfferInReport(
 
   // ── جلب حالة المخزون لعملاء sell_on_behalf (batch بـ source_customer_id) ──
   const sellOnBehalfIds = baseCustomers
-    .filter((c) => c.operation_type === "sell_on_behalf")
+    .filter((c) => isSellOnBehalf(c.operation_type))
     .map((c) => c.id);
 
   // ── جلب حالة المخزون للمشترين (batch بـ selected_inventory_id) ────────────
@@ -461,7 +480,7 @@ async function enrichCustomersWithSaleOfferInReport(
 
   // ── المشترون غير المرتبطين بسيارة محددة (للمطابقة التلقائية بالاسم) ────────
   const unlinkedBuyers = baseCustomers.filter(
-    (c) => c.operation_type !== "sell_on_behalf" && !c.selected_inventory_id,
+    (c) => !isSellOnBehalf(c.operation_type) && !c.selected_inventory_id,
   );
 
   const [invBySourceResult, invByIdResult, allInventoryResult] = await Promise.all([
@@ -548,19 +567,32 @@ async function enrichCustomersWithSaleOfferInReport(
     const normReq = cleanRequestedCarName(c.requested_car ?? "");
     if (!normReq || normReq.length < 2) continue;
 
+    const hasBranch = Boolean(c.branch_id);
     const branchPrefix = (c.branch_id ?? "") + "::";
     let bestStatus: string | null = null;
     let bestPriority = -1;
 
     for (const [key, { status, priority }] of invModelIndex) {
-      // فلترة بالفرع أولاً: المفتاح يبدأ بـ "branchId::"
-      if (!key.startsWith(branchPrefix)) continue;
-      const normModel = key.slice(branchPrefix.length);
+      // إذا كان للعميل فرع → طابق فرعه أولاً؛ إذا لم يكن → ابحث في كل المخزون
+      if (hasBranch && !key.startsWith(branchPrefix)) continue;
+      const normModel = key.slice(key.indexOf("::") + 2);
       // مطابقة جزئية: اسم السيارة المطلوبة يتضمن اسم المخزون أو العكس
       if (!normModel.includes(normReq) && !normReq.includes(normModel)) continue;
       if (priority > bestPriority) {
         bestPriority = priority;
         bestStatus = status;
+      }
+    }
+
+    // fallback: إذا لم يُوجد تطابق في فرع العميل → ابحث في كل المخزون
+    if (bestStatus === null && hasBranch) {
+      for (const [key, { status, priority }] of invModelIndex) {
+        const normModel = key.slice(key.indexOf("::") + 2);
+        if (!normModel.includes(normReq) && !normReq.includes(normModel)) continue;
+        if (priority > bestPriority) {
+          bestPriority = priority;
+          bestStatus = status;
+        }
       }
     }
 
@@ -594,6 +626,7 @@ async function enrichCustomersWithSaleOfferInReport(
       ...customer,
       requested_car_report,
       sale_offer_car: trade.isOffer ? trade.model : (customer.sale_offer_car ?? null),
+      trade_in_model: trade.model ?? null,
       inventory_availability,
       trade_in_status: trade.status ?? null,
     };
@@ -1012,6 +1045,41 @@ export async function getInventoryCarAttachments(
   return combined;
 }
 
+/**
+ * يُثري عناصر المخزون باسم/معرّف الموظف الذي أدخل العميل المرتبط بالسيارة.
+ * الربط عبر source_customer_id → customers.assigned_user_id → app_users.full_name.
+ * يُستخدم admin client (إن توفّر) لتجاوز RLS عند سيارات الفروع الأخرى.
+ */
+async function enrichInventoryAssignees(items: InventoryItem[]): Promise<InventoryItem[]> {
+  const customerIds = [
+    ...new Set(items.map((i) => i.source_customer_id).filter((id): id is string => Boolean(id))),
+  ];
+  if (customerIds.length === 0) return items;
+
+  const reader = hasSupabaseServiceRoleEnv() ? createAdminClient() : await createClient();
+  const { data } = await reader
+    .from("customers")
+    .select("id, assigned_user_id, app_users(full_name)")
+    .in("id", customerIds);
+
+  const map = new Map<string, { id: string | null; name: string | null }>();
+  for (const row of data ?? []) {
+    map.set(String(row.id), {
+      id: (row.assigned_user_id as string | null) ?? null,
+      name: getRelationshipFullName(
+        (row as { app_users?: Record<string, unknown> | Record<string, unknown>[] | null }).app_users,
+      ),
+    });
+  }
+
+  return items.map((item) => {
+    const found = item.source_customer_id ? map.get(item.source_customer_id) : null;
+    return found
+      ? { ...item, assigned_user_id: found.id, assigned_user_name: found.name }
+      : item;
+  });
+}
+
 export async function getInventoryDirectory(
   limit = 120,
   options?: { includeCrossBranchForMuallim?: boolean },
@@ -1075,7 +1143,7 @@ export async function getInventoryDirectory(
 
   const includeCrossBranchForMuallim = options?.includeCrossBranchForMuallim === true;
   if (!includeCrossBranchForMuallim || !profile?.branch_id) {
-    return scopedItems;
+    return enrichInventoryAssignees(scopedItems);
   }
 
   const { data: branchRow } = await supabase
@@ -1092,15 +1160,17 @@ export async function getInventoryDirectory(
   // Special handling for Muallim when the viewer is a general manager:
   // items from other branches should be shown as "برسم البيع" in حالة/الصفقة.
   if (capabilities.isGeneralManager) {
-    return scopedItems
-      .filter((item) => isAvailableStatus(item.availability_status))
-      .map((item) => {
-        const fromOtherBranch = (item.branch_name ?? "").trim() !== branchName;
-        if (fromOtherBranch && isCrossDealType(item.deal_type)) {
-          return { ...item, deal_type: "برسم البيع" };
-        }
-        return item;
-      });
+    return enrichInventoryAssignees(
+      scopedItems
+        .filter((item) => isAvailableStatus(item.availability_status))
+        .map((item) => {
+          const fromOtherBranch = (item.branch_name ?? "").trim() !== branchName;
+          if (fromOtherBranch && isCrossDealType(item.deal_type)) {
+            return { ...item, deal_type: "برسم البيع" };
+          }
+          return item;
+        }),
+    );
   }
 
   const externalInventoryQuery = supabase
@@ -1177,7 +1247,7 @@ export async function getInventoryDirectory(
     return true;
   });
 
-  return merged;
+  return enrichInventoryAssignees(merged);
 }
 
 export async function getDashboardOverview(): Promise<DashboardOverview> {
@@ -1200,10 +1270,11 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
   const branchId = profile?.branch_id ?? null;
   const userId = profile?.id ?? null;
 
-  // نحسب آخر دقيقة من اليوم لتصفية المتابعات من DB مباشرة
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
-  const todayEndIso = todayEnd.toISOString();
+  // نحسب حدود اليوم بتوقيت إسرائيل/فلسطين (UTC+3) — السيرفر UTC
+  const TZ_OFFSET_MS = 3 * 60 * 60 * 1000;
+  const localNow = new Date(Date.now() + TZ_OFFSET_MS);
+  const todayStr = localNow.toISOString().slice(0, 10);
+  const todayEndIso = new Date(new Date(todayStr + "T23:59:59.999Z").getTime() - TZ_OFFSET_MS).toISOString();
 
   // ── استعلام المتابعات (بيانات كاملة، مُفلترة من DB للأداء) ──────────────
   const dashboardFollowUpsQuery = supabase
@@ -1213,7 +1284,7 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
     )
     .not("next_follow_up_at", "is", null)
     .lte("next_follow_up_at", todayEndIso)
-    .or("status.ilike.%متابعة%,status.ilike.%حجز%")
+    .eq("is_active", true)
     .order("next_follow_up_at", { ascending: true });
 
   const dashboardNotificationsQuery = supabase
@@ -1439,22 +1510,29 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
   const branchId = profile?.branch_id ?? null;
   const userId = profile?.id ?? null;
   const now = Date.now();
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  const todayTs = today.getTime();
+  // حدود اليوم بتوقيت إسرائيل/فلسطين (UTC+3)
+  const TZ_OFFSET_MS_AG = 3 * 60 * 60 * 1000;
+  const localNowAG = new Date(Date.now() + TZ_OFFSET_MS_AG);
+  const todayStrAG = localNowAG.toISOString().slice(0, 10);
+  const todayEndMs = new Date(todayStrAG + "T23:59:59.999Z").getTime() - TZ_OFFSET_MS_AG;
+  const todayTs = todayEndMs;
+  const todayEndIso = new Date(todayEndMs).toISOString();
 
   const agendaRemindersQuery = supabase
     .from("reminders")
     .select(
       "id, customer_id, title, message, due_at, status, assigned_user_id, branch_id, branches(name), customers(full_name), app_users(full_name)",
     )
-    .eq("status", "pending");
+    .eq("status", "pending")
+    .lte("due_at", todayEndIso);  // فلتر في DB — نجلب فقط التذكيرات المستحقة اليوم أو قبله
   const agendaFollowupsQuery = supabase
     .from("customers")
     .select(
       "id, full_name, status, requested_car, next_follow_up_at, assigned_user_id, branch_id, branches(name), app_users(full_name)",
     )
-    .not("next_follow_up_at", "is", null);
+    .not("next_follow_up_at", "is", null)
+    .lte("next_follow_up_at", todayEndIso)  // فلتر في DB — ليس في JS
+    .eq("is_active", true);                 // العملاء النشطون فقط
   const agendaNotificationsQuery = supabase
     .from("notifications")
     .select("id, message, status, created_at, recipient_user_id, recipient_branch_id, recipient_label")
@@ -1479,7 +1557,7 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
       capabilities.isManager,
     ) as typeof agendaRemindersQuery)
       .order("due_at", { ascending: true })
-      .limit(16),
+      .limit(50),
     (applyStaffScope(
       applyBranchScope(
         agendaFollowupsQuery,
@@ -1490,7 +1568,7 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
       capabilities.isManager,
     ) as typeof agendaFollowupsQuery)
       .order("next_follow_up_at", { ascending: true })
-      .limit(16),
+      .limit(50),
     (applyStaffScope(
       applyBranchScope(
         agendaNotificationsQuery,
@@ -1577,10 +1655,11 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
     recipient_label: item.recipient_label ?? null,
   }));
 
+  const todayStartMs_AG = new Date(todayStrAG + "T00:00:00.000Z").getTime() - TZ_OFFSET_MS_AG;
   const dueToday = [...reminders, ...followUps].filter((item) => {
     if (!item.due_at) return false;
     const time = new Date(item.due_at).getTime();
-    return !Number.isNaN(time) && time <= todayTs && time >= now - 1000 * 60 * 60 * 24;
+    return !Number.isNaN(time) && time <= todayTs && time >= todayStartMs_AG;
   }).length;
 
   const overdue = [...reminders, ...followUps].filter((item) => {
@@ -1831,7 +1910,8 @@ export async function getCustomerById(customerId: string): Promise<CustomerDetai
   const [{ data: customer }, { data: logs }, { data: reminders }, { data: attachments }, { data: tradeIns }] =
     await Promise.all([
       (applyBranchScope(customerQuery, branchId, capabilities.isGeneralManager) as typeof customerQuery).maybeSingle(),
-      supabase
+      // admin لتجاوز RLS — السجلات المُدخلة من البوت/المني-آب قد لا تكون مرئية للـ RLS العادي
+      (hasSupabaseServiceRoleEnv() ? createAdminClient() : supabase)
         .from("customer_logs")
         .select("id, action, details, actor_name, next_follow_up_at, created_at")
         .eq("customer_id", customerId)
@@ -1845,7 +1925,8 @@ export async function getCustomerById(customerId: string): Promise<CustomerDetai
         .eq("customer_id", customerId)
         .order("created_at", { ascending: false })
         .limit(12),
-      supabase
+      // استخدام admin لتجاوز RLS — المرفقات المُدخلة من البوت/المني-آب تكون بـ app_users.id وليس auth.uid
+      (hasSupabaseServiceRoleEnv() ? createAdminClient() : supabase)
         .from("customer_attachments")
         .select("id, file_name, file_category, public_url, storage_path, mime_type, created_at")
         .eq("customer_id", customerId)
@@ -2263,5 +2344,151 @@ export async function getBranchesAdmin(): Promise<BranchAdminItem[]> {
     total_staff: staffCount.get(b.id as string) ?? 0,
     total_customers: custCount.get(b.id as string) ?? 0,
   }));
+}
+
+// ─── سيارات بانتظار التقييم — بطاقة كاملة ───────────────────────────────────
+
+export type EvaluationStaffMember = {
+  id: string;
+  full_name: string;
+  role: string;
+};
+
+export type PendingEvaluationItem = {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  status: string;
+  operation_type: string | null;
+  requested_car: string | null;
+  notes: string | null;
+  branch_id: string | null;
+  branch_name: string | null;
+  assigned_user_id: string | null;
+  assigned_user_name: string | null;
+  // تفاصيل سيارة العميل (trade-in / بيع بالوكالة)
+  trade_in_id: string | null;
+  trade_in_model: string | null;
+  trade_in_color: string | null;
+  trade_in_year: number | null;
+  trade_in_mileage: number | null;
+  trade_in_price: number | null;
+  trade_in_chassis: string | null;
+  trade_in_inspection: string | null;
+  trade_in_status: string | null;
+  // صور سيارة العميل
+  photos: Array<{ id: string; public_url: string; file_name: string }>;
+  // موظفو الفرع (لزر التذكير) — يشمل مدير الفرع والموظفين والمدير العام
+  branch_staff: EvaluationStaffMember[];
+};
+
+export async function getPendingEvaluationWithDetails(): Promise<PendingEvaluationItem[]> {
+  if (!hasSupabaseEnv()) return [];
+
+  const supabase = await createClient();
+  const { profile, capabilities } = await getScopedProfile();
+  const branchId = profile?.branch_id ?? null;
+  const userId = profile?.id ?? null;
+
+  const query = supabase
+    .from("customers")
+    .select(
+      "id, full_name, phone, status, operation_type, requested_car, notes, branch_id, assigned_user_id, branches(name), app_users(full_name), trade_ins(id, model, color, production_year, mileage, price, chassis_no, inspection, status, is_active)",
+    )
+    .or("status.ilike.%التقييم%")
+    .eq("is_active", true);
+
+  const scoped = applyStaffScope(
+    applyBranchScope(query, branchId, capabilities.isGeneralManager) as typeof query,
+    userId,
+    capabilities.isManager,
+  ) as typeof query;
+
+  const { data } = await scoped.order("updated_at", { ascending: false }).limit(100);
+
+  if (!data || data.length === 0) return [];
+
+  // ── جلب الصور ──────────────────────────────────────────────────────────────
+  const customerIds = data.map((c) => c.id);
+  const { data: attachments } = await supabase
+    .from("customer_attachments")
+    .select("id, customer_id, public_url, file_name, file_category, mime_type")
+    .in("customer_id", customerIds)
+    .not("file_category", "eq", "voice_note")
+    .order("created_at", { ascending: false });
+
+  const photosByCustomer = new Map<string, Array<{ id: string; public_url: string; file_name: string }>>();
+  for (const att of attachments ?? []) {
+    if (att.mime_type?.startsWith("audio/")) continue;
+    const arr = photosByCustomer.get(att.customer_id) ?? [];
+    arr.push({ id: att.id, public_url: att.public_url, file_name: att.file_name });
+    photosByCustomer.set(att.customer_id, arr);
+  }
+
+  // ── جلب موظفي الفروع المعنية (لزر التذكير) ─────────────────────────────────
+  const branchIds = [...new Set(data.map((c) => c.branch_id).filter(Boolean))] as string[];
+  const { data: staffRows } = await supabase
+    .from("app_users")
+    .select("id, full_name, role, branch_id")
+    .eq("is_active", true)
+    .or(
+      branchIds.length > 0
+        ? `branch_id.in.(${branchIds.map((b) => `"${b}"`).join(",")}),role.eq.general_manager`
+        : "role.eq.general_manager",
+    );
+
+  // تجميع الموظفين حسب الفرع (+ المدير العام يُضاف لكل الفروع)
+  const gmStaff: EvaluationStaffMember[] = (staffRows ?? [])
+    .filter((u) => u.role === "general_manager")
+    .map((u) => ({ id: u.id as string, full_name: (u.full_name as string) ?? "", role: u.role as string }));
+
+  const staffByBranch = new Map<string, EvaluationStaffMember[]>();
+  for (const u of staffRows ?? []) {
+    if (u.role === "general_manager") continue;
+    const bid = u.branch_id as string | null;
+    if (!bid) continue;
+    const arr = staffByBranch.get(bid) ?? [];
+    arr.push({ id: u.id as string, full_name: (u.full_name as string) ?? "", role: u.role as string });
+    staffByBranch.set(bid, arr);
+  }
+
+  const items = data.map((customer) => {
+    const trades = Array.isArray(customer.trade_ins) ? customer.trade_ins : [];
+    const activeTrade = trades.find((t) => (t as Record<string, unknown>).is_active) ?? trades[0] ?? null;
+    const t = activeTrade as Record<string, unknown> | null;
+    const bid = customer.branch_id ?? null;
+    const branchStaff = bid ? (staffByBranch.get(bid) ?? []) : [];
+    const allStaff = [...branchStaff, ...gmStaff];
+    // إزالة المكررين (المدير العام قد يكون في الفرع أيضاً)
+    const uniqueStaff = allStaff.filter((s, idx, arr) => arr.findIndex((x) => x.id === s.id) === idx);
+
+    return {
+      id: customer.id,
+      full_name: customer.full_name,
+      phone: customer.phone ?? null,
+      status: customer.status ?? "",
+      operation_type: (customer.operation_type as string | null) ?? null,
+      requested_car: customer.requested_car ?? null,
+      notes: (customer.notes as string | null) ?? null,
+      branch_id: bid,
+      branch_name: getRelationshipName(customer.branches),
+      assigned_user_id: customer.assigned_user_id ?? null,
+      assigned_user_name: getRelationshipFullName(customer.app_users),
+      trade_in_id: (t?.id as string | null) ?? null,
+      trade_in_model: (t?.model as string | null) ?? null,
+      trade_in_color: (t?.color as string | null) ?? null,
+      trade_in_year: (t?.production_year as number | null) ?? null,
+      trade_in_mileage: (t?.mileage as number | null) ?? null,
+      trade_in_price: (t?.price as number | null) ?? null,
+      trade_in_chassis: (t?.chassis_no as string | null) ?? null,
+      trade_in_inspection: (t?.inspection as string | null) ?? null,
+      trade_in_status: (t?.status as string | null) ?? null,
+      photos: photosByCustomer.get(customer.id) ?? [],
+      branch_staff: uniqueStaff,
+    };
+  });
+
+  // ── فلتر: يظهر في الأجندة فقط إذا لم يُدخل سعر التقييم بعد ──────────────
+  return items.filter((item) => item.trade_in_price === null || item.trade_in_price === undefined);
 }
 

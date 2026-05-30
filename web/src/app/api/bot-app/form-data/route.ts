@@ -1,36 +1,7 @@
-import { type NextRequest, NextResponse } from "next/server";
+﻿import { type NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRoleCapabilities } from "@/lib/roles";
-
-// قائمة مبسطة للبوت — تشمل الحالات الأكثر استخداماً
-const CUSTOMER_STATUSES = [
-  "جديد",
-  "قيد المتابعة",
-  "قيد المتابعة — بانتظار التقييم",
-  "قيد المتابعة — تمت عملية التقييم",
-  "حجز",
-  "حجز (استبدال)",
-  "حجز (سيارة العميل)",
-  "عرض سيارة للبيع",
-  "تمت عملية البيع",
-  "تمت عملية البيع + استبدال",
-  "تمت عملية البيع (للعميل)",
-  "شراء من قبل المعرض",
-  "رفض من قبل العميل",
-  "رفض من قبل المعرض",
-  "تراجع العميل عن الاستبدال",
-  "سحب السيارة من البيع",
-  "إغلاق الملف",
-];
-
-const CUSTOMER_SOURCES = [
-  "المعرض",
-  "واتساب",
-  "تيليجرام",
-  "إعلان",
-  "توصية",
-  "فيسبوك",
-];
+import { STATUS_BY_TYPE } from "@/lib/statuses";
 
 function isUnavailable(status: string | null) {
   const s = (status ?? "").toLowerCase();
@@ -76,9 +47,11 @@ export async function GET(req: NextRequest) {
     staffQuery = staffQuery.eq("branch_id", user.branch_id) as typeof staffQuery;
   }
 
-  const [{ data: inventory }, { data: staff }] = await Promise.all([
+  let branchesQuery = admin.from("branches").select("id, name").eq("is_active", true).order("name");
+  const [{ data: inventory }, { data: staff }, { data: branches }] = await Promise.all([
     inventoryQuery,
     staffQuery,
+    caps.isGeneralManager ? branchesQuery : Promise.resolve({ data: [] }),
   ]);
 
   const inventoryOptions = (inventory ?? [])
@@ -90,7 +63,7 @@ export async function GET(req: NextRequest) {
         item.production_year ? `موديل:${item.production_year}` : null,
         item.chassis_no ? `شاصي:${item.chassis_no}` : null,
         item.color ?? null,
-        item.price ? `${Number(item.price).toLocaleString("ar-EG")} ر.س` : null,
+        item.price ? `${Number(item.price).toLocaleString("ar-EG")} ₪` : null,
       ]
         .filter(Boolean)
         .join(" — "),
@@ -98,11 +71,12 @@ export async function GET(req: NextRequest) {
     }));
 
   return NextResponse.json({
-    statuses: CUSTOMER_STATUSES,
-    sources: CUSTOMER_SOURCES,
+    statusesByType: STATUS_BY_TYPE,
     inventoryOptions,
     staff: (staff ?? []).map((s) => ({ id: s.id, full_name: s.full_name })),
+    branches: (branches ?? []).map((b) => ({ id: b.id, name: b.name })),
     currentUserId: user.id,
     isManager: caps.isManager,
+    isGeneralManager: caps.isGeneralManager,
   });
 }

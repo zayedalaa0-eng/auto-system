@@ -785,18 +785,18 @@ select {
 }
 
 .profile-header-card__avatar {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
   background: linear-gradient(135deg, #38bdf8, #0ea5e9);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   font-weight: 800;
   color: white;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.35);
+  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.4);
   letter-spacing: 1px;
 }
 
@@ -816,10 +816,18 @@ select {
 }
 
 .profile-header-card__name {
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   font-weight: 800;
   color: white;
   line-height: 1.2;
+}
+
+.profile-header-card__nickname {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #93c5fd;
+  line-height: 1.2;
+  opacity: 0.9;
 }
 
 .profile-header-card__meta {
@@ -828,7 +836,7 @@ select {
   gap: 6px;
   flex-wrap: wrap;
   color: #94a3b8;
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   font-weight: 500;
 }
 
@@ -841,7 +849,7 @@ select {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   color: #64748b;
 }
 
@@ -2046,6 +2054,15 @@ select {
   background: #ecfdf5;
   color: #047857;
   border-color: #86efac;
+}
+
+.legacy-table-btn--sm {
+  min-height: 32px;
+  min-width: 0;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 8px;
 }
 
 .legacy-table-icon-btn {

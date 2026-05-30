@@ -14,6 +14,7 @@ export const STATUSES_BUYER = [
 ];
 
 export const STATUSES_BUYER_TRADEIN = [
+  "استبدال — تحت التقييم",
   "قيد المتابعة — بانتظار التقييم",
   "قيد المتابعة — تمت عملية التقييم",
   "حجز (استبدال)",
@@ -59,6 +60,8 @@ const CLOSED_STATUSES = new Set([
   "إغلاق الملف",
   "تراجع العميل عن الاستبدال",
   "سحب السيارة من البيع",
+  "بيع السيارة لعميل خارجي",
+  "تراجع",
 ]);
 
 export function isClosedStatus(status: string): boolean {

@@ -8,6 +8,7 @@ import { openNewCycleAction, upsertCustomerAction } from "@/app/dashboard/action
 import { VoiceRecorder } from "@/components/voice-recorder";
 import type { CustomerFormOptions } from "@/lib/data";
 import { STATUSES_BUYER, STATUSES_BUYER_TRADEIN, STATUSES_SELL_ON_BEHALF } from "@/lib/statuses";
+import { PHONE_LENGTH, normalizePhone } from "@/lib/phone";
 
 type CustomerWizardProps = {
   options: CustomerFormOptions;
@@ -139,8 +140,8 @@ export function CustomerWizard({ options, errorMessage, initialParentId, initial
   useEffect(() => {
     // لا نفحص في وضع الدورة الجديدة أو إذا تم تأكيد الهاتف مسبقاً
     if (isNewCycleMode || phoneConfirmed) return;
-    const normalized = phone.replace(/\D/g, "");
-    if (normalized.length < 8) {
+    const normalized = normalizePhone(phone);
+    if (normalized.length !== PHONE_LENGTH) {
       setExistingCustomer(null);
       setPhoneError("");
       return;
@@ -273,9 +274,9 @@ export function CustomerWizard({ options, errorMessage, initialParentId, initial
   }
 
   function handleContinueFromPhoneStep() {
-    const normalized = phone.replace(/\D/g, "");
-    if (normalized.length < 8) {
-      setPhoneError("أدخل رقم هاتف صحيحاً (8 أرقام على الأقل).");
+    const normalized = normalizePhone(phone);
+    if (normalized.length !== PHONE_LENGTH) {
+      setPhoneError(`أدخل رقم هاتف صحيحاً (${PHONE_LENGTH} أرقام بالضبط).`);
       return;
     }
     if (existingCustomer) return; // منع المتابعة إذا كان موجوداً
@@ -526,7 +527,7 @@ export function CustomerWizard({ options, errorMessage, initialParentId, initial
                 type="button"
                 className="legacy-btn legacy-btn-primary legacy-btn-block mt-2"
                 onClick={handleContinueFromPhoneStep}
-                disabled={checkingPhone || phone.replace(/\D/g, "").length < 8}
+                disabled={checkingPhone || normalizePhone(phone).length !== PHONE_LENGTH}
               >
                 {checkingPhone ? "جاري الفحص..." : "التالي: بيانات العميل"}
               </button>

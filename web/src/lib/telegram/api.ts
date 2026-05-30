@@ -130,23 +130,32 @@ export function escapeHtml(text: string) {
 // ─── Keyboards ──────────────────────────────────────────────────────────────
 
 export const BTN = {
-  TODAY:     "📋 مهام اليوم",
+  TODAY:     "📅 الأجندة",
   MY:        "👥 عملائي",
   SEARCH:    "🔍 بحث",
   REPORT:    "📊 التقرير",
   ADD_CUST:  "➕ عميل جديد",
+  CARD:      "👤 بطاقة عميل",
   INVENTORY: "📦 المخزون",
   NOTIFS:    "🔔 تنبيهاتي",
   MSG_STAFF: "📢 رسالة للموظفين",
   STAFF:     "👨‍💼 الموظفون",
+  EVAL:      "🔍 طلبات التقييم",
   CANCEL:    "❌ إلغاء",
+  BACK:      "⬅️ رجوع",
+  HOME:      "🏠 القائمة",
 } as const;
 
-export function mainMenuKeyboard(isManager: boolean, isGeneralManager: boolean): ReplyKeyboardMarkup {
+export function mainMenuKeyboard(
+  isManager: boolean,
+  isGeneralManager: boolean,
+  isMaalamMgr = false,
+): ReplyKeyboardMarkup {
   const row1 = [BTN.TODAY, BTN.MY];
-  const row2 = [BTN.ADD_CUST, BTN.SEARCH];
-  const row3: string[] = [BTN.INVENTORY, BTN.NOTIFS];
+  const row2 = [BTN.ADD_CUST, BTN.CARD];
+  const row3: string[] = [BTN.SEARCH, BTN.INVENTORY, BTN.NOTIFS];
   const row4: string[] = [];
+  const row5: string[] = [];
 
   if (isManager) {
     row4.push(BTN.REPORT, BTN.MSG_STAFF);
@@ -154,21 +163,39 @@ export function mainMenuKeyboard(isManager: boolean, isGeneralManager: boolean):
   if (isGeneralManager) {
     row4.push(BTN.STAFF);
   }
+  // زر خاص لمدير معرض المعلم
+  if (isMaalamMgr) {
+    row5.push(BTN.EVAL);
+  }
 
   const rows = [row1, row2, row3];
   if (row4.length > 0) rows.push(row4);
+  if (row5.length > 0) rows.push(row5);
 
   return { keyboard: rows, resize_keyboard: true, persistent: true };
 }
 
-export function selectionKeyboard(options: string[], includeCancel = true): ReplyKeyboardMarkup {
+
+export function selectionKeyboard(
+  options: string[],
+  includeCancel = true,
+  includeBack = false,
+): ReplyKeyboardMarkup {
   const rows: string[][] = options.map((opt) => [opt]);
-  if (includeCancel) rows.push([BTN.CANCEL]);
+  const footer: string[] = [];
+  if (includeBack) footer.push(BTN.BACK);
+  if (includeCancel) footer.push(BTN.CANCEL);
+  if (footer.length > 0) rows.push(footer);
   return { keyboard: rows, resize_keyboard: true, one_time_keyboard: true };
 }
 
 export function cancelKeyboard(): ReplyKeyboardMarkup {
   return { keyboard: [[BTN.CANCEL]], resize_keyboard: true, one_time_keyboard: true };
+}
+
+/** زر رجوع + إلغاء معاً في صف واحد */
+export function backCancelKeyboard(): ReplyKeyboardMarkup {
+  return { keyboard: [[BTN.BACK, BTN.CANCEL]], resize_keyboard: true, one_time_keyboard: true };
 }
 
 export function removeKeyboard(): ReplyKeyboardRemove {
@@ -185,8 +212,12 @@ export function forceReplyPrompt(placeholder: string): ForceReply {
 
 // ─── Inline keyboard with Web App button ────────────────────────────────────
 
+type InlineKeyboardButton =
+  | { text: string; web_app: { url: string } }
+  | { text: string; callback_data: string };
+
 type InlineKeyboardMarkup = {
-  inline_keyboard: Array<Array<{ text: string; web_app?: { url: string }; callback_data?: string }>>;
+  inline_keyboard: Array<Array<InlineKeyboardButton>>;
 };
 
 export async function sendMessageWithWebApp(
@@ -204,13 +235,80 @@ export async function sendMessageWithWebApp(
       reply_markup: {
         inline_keyboard: [
           buttons.map((btn) => ({ text: btn.text, web_app: { url: btn.url } })),
+          [{ text: "🏠 القائمة الرئيسية", callback_data: "main_menu" }],
+        ],
+      } satisfies InlineKeyboardMarkup,
+    }),
+  });
+  const json = await res.json() as { ok: boolean; description?: string };
+  if (!json.ok) {
+    console.error("[sendMessageWithWebApp] Telegram error:", json.description, "| text length:", text.length);
+  }
+  return json;
+}
+
+/**
+ * يُحضر مسار الملف من Telegram ثم يُرجع رابط تحميله
+ * يُستخدم لتحميل الصوتيات/الصور من Telegram servers
+ */
+export async function getTelegramFileUrl(fileId: string): Promise<string | null> {
+  const base = getBaseUrl();
+  const res = await fetch(`${base}/getFile`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ file_id: fileId }),
+  });
+  const json = await res.json() as { ok: boolean; result?: { file_path?: string } };
+  if (!json.ok || !json.result?.file_path) return null;
+  const token = process.env.TELEGRAM_BOT_TOKEN ?? "";
+  return `https://api.telegram.org/file/bot${token}/${json.result.file_path}`;
+}
+
+export function getAppUrl() {
+  return (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
+}
+
+/**
+ * زر inline شفاف ثابت أسفل أي رسالة بوت للرجوع للقائمة الرئيسية
+ * يُستخدم كشبكة أمان إذا علق المني-آب أو انتهت المحادثة
+ */
+export function menuInlineKeyboard(): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [[{ text: "🏠 القائمة الرئيسية", callback_data: "main_menu" }]],
+  };
+}
+
+/** الرد على callback_query لإسكات تنبيه الساعة الرملية في تيليجرام */
+export async function answerCallbackQuery(callbackQueryId: string, text?: string) {
+  await fetch(`${getBaseUrl()}/answerCallbackQuery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ callback_query_id: callbackQueryId, ...(text ? { text } : {}) }),
+  });
+}
+
+/**
+ * إرسال رسالة مع قائمة أزرار Mini App (كل زر في صف مستقل)
+ */
+export async function sendMessageWithWebAppList(
+  chatId: number | string,
+  text: string,
+  buttons: Array<{ text: string; url: string }>,
+) {
+  const res = await fetch(`${getBaseUrl()}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          ...buttons.map((btn) => [{ text: btn.text, web_app: { url: btn.url } }]),
+          [{ text: "🏠 القائمة الرئيسية", callback_data: "main_menu" }],
         ],
       } satisfies InlineKeyboardMarkup,
     }),
   });
   return res.json();
-}
-
-export function getAppUrl() {
-  return (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
 }

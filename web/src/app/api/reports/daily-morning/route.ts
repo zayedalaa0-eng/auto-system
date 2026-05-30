@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
       msg += `┌ صفقات مكتملة: <b>${myClosed.length}</b>\n`;
       msg += `├ معدل التحويل: <b>${conversionRate}%</b>\n`;
       if (monthlyRevenue > 0) {
-        msg += `├ إجمالي الإيرادات: <b>${monthlyRevenue.toLocaleString("ar-SA")} ريال</b>\n`;
+        msg += `├ إجمالي الإيرادات: <b>${monthlyRevenue.toLocaleString("ar-SA")} شيقل</b>\n`;
       }
       if (topStaff && topStaffEntry) {
         msg += `└ أفضل موظف: <b>${topStaff.full_name}</b> (${topStaffEntry[1]} صفقة)\n`;

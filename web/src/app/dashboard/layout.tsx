@@ -9,10 +9,10 @@ import { SetupNotice } from "@/components/setup-notice";
 import { SidebarNav } from "@/components/sidebar-nav";
 import {
   getAgendaOverview,
-  getCustomersDirectory,
   getDashboardContext,
   getDashboardOverview,
   getOperationalAlerts,
+  getPendingEvaluationWithDetails,
 } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
 import { getRoleCapabilities } from "@/lib/roles";
@@ -28,12 +28,12 @@ export default async function DashboardLayout({
 
   if (envReady && !session) redirect("/login");
 
-  const [overview, agendaOverview, operationalAlerts, customers] = envReady
+  const [overview, agendaOverview, operationalAlerts, pendingEvaluation] = envReady
     ? await Promise.all([
         getDashboardOverview(),
         getAgendaOverview(),
         getOperationalAlerts(),
-        getCustomersDirectory(250),
+        getPendingEvaluationWithDetails(),
       ])
     : [null, null, null, []];
 
@@ -42,14 +42,6 @@ export default async function DashboardLayout({
   const unreadCount = overview?.notifications.filter((item) => item.status === "unread").length ?? 0;
   const incompleteTradesCount = operationalAlerts?.incompleteTrades.length ?? 0;
   const licenseDueCount = operationalAlerts?.licenseDue.length ?? 0;
-  const pendingEvaluation = customers.filter((customer) => {
-    const statusText = customer.status ?? "";
-    const requestedCarText = customer.requested_car ?? "";
-    const isPending = statusText.includes("التقييم") || requestedCarText.includes("طلب خاص");
-    if (!isPending) return false;
-    if (capabilities.isManager) return true;
-    return customer.assigned_user_id === profile?.id;
-  });
 
   const hasAgendaItems =
     followupsCount > 0 ||
@@ -99,13 +91,9 @@ export default async function DashboardLayout({
                 agenda={agendaOverview}
                 incompleteTrades={operationalAlerts.incompleteTrades}
                 licenseDue={operationalAlerts.licenseDue}
-                pendingEvaluation={pendingEvaluation.map((customer) => ({
-                  id: customer.id,
-                  full_name: customer.full_name,
-                  requested_car: customer.requested_car,
-                  assigned_user_name: customer.assigned_user_name ?? null,
-                  branch_name: customer.branch_name ?? null,
-                }))}
+                pendingEvaluation={pendingEvaluation ?? []}
+                currentUserRole={profile?.role ?? "employee"}
+                currentUserId={profile?.id ?? null}
                 detailBasePath={capabilities.isManager ? "/dashboard/management" : "/dashboard/customers"}
               />
             </div>
