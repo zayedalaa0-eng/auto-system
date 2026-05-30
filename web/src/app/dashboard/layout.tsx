@@ -1,3 +1,6 @@
+// منع Vercel من pre-render صفحات الداشبورد — تعتمد على cookies و Supabase
+export const dynamic = "force-dynamic";
+
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Bell } from "lucide-react";
