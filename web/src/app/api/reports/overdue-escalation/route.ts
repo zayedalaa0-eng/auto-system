@@ -4,12 +4,21 @@ import { getRoleCapabilities } from "@/lib/roles";
 import { sendMessage } from "@/lib/telegram/api";
 
 /**
- * POST /api/reports/overdue-escalation
+ * GET  /api/reports/overdue-escalation  ← Vercel Cron يُرسل GET
+ * POST /api/reports/overdue-escalation  ← للاختبار اليدوي
  * يُرسل تنبيهاً عاجلاً للمديرين عن المتابعات المتأخرة أكثر من 48 ساعة
- * يُشغَّل كل يوم (يُفضَّل مساءً — 17:00 بتوقيت الرياض)
+ * يُشغَّل كل يوم صباحاً (9:00 UTC = 12:00 بتوقيت فلسطين UTC+3)
  * مؤمَّن بـ: Authorization: Bearer {CRON_SECRET}
  */
+export async function GET(req: NextRequest) {
+  return handler(req);
+}
+
 export async function POST(req: NextRequest) {
+  return handler(req);
+}
+
+async function handler(req: NextRequest) {
   const auth = req.headers.get("authorization") ?? "";
   const secret = process.env.CRON_SECRET;
   if (!secret || auth !== `Bearer ${secret}`) {
