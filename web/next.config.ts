@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // تحديد root directory لـ Turbopack لتفادي الالتباس مع lockfile الجذر
+  turbopack: {
+    root: __dirname,
+  },
 };
 
 export default nextConfig;
