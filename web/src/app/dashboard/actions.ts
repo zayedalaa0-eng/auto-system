@@ -1724,7 +1724,17 @@ export async function upsertCustomerAction(formData: FormData) {
 
   const inventoryIdForStatus = getNullableText(formData, "inventory_id_for_status");
   const isActive = isClosedStatus(status) ? false : requestedActive;
-  const resolvedNextFollowup = isActive ? nextFollowUpAt : null;
+  // إذا كان موعد المتابعة في الماضي أو اليوم → نصفّره (المهمة أُنجزت بالحفظ)
+  // إذا كان مستقبلياً → يبقى لتظهر المهمة في يومها
+  const resolvedNextFollowup = (() => {
+    if (!isActive || !nextFollowUpAt) return null;
+    const followUpDate = new Date(nextFollowUpAt);
+    const nowPlus3 = new Date(Date.now() + 3 * 60 * 60 * 1000); // UTC+3
+    const todayEnd = new Date(nowPlus3.toISOString().slice(0, 10) + "T23:59:59+03:00");
+    // إذا كان الموعد اليوم أو قبله → صفّر (تم التعامل مع العميل)
+    if (followUpDate <= todayEnd) return null;
+    return nextFollowUpAt;
+  })();
 
   const tradeModelInput = getNullableText(formData, "trade_in_model");
   const tradeYearInput = parseNumber(getNullableText(formData, "trade_in_year"));

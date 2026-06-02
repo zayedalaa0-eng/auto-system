@@ -129,7 +129,15 @@ export async function POST(req: NextRequest) {
     // موعد المتابعة (يُعيَّن فقط إذا الملف نشط)
     const isClosed = isClosedStatus(newStatus || String(customer.status ?? ""));
     if (!isClosed && next_follow_up_at !== undefined) {
-      updates.next_follow_up_at = next_follow_up_at ? new Date(next_follow_up_at).toISOString() : null;
+      if (next_follow_up_at) {
+        const followUpDate = new Date(next_follow_up_at);
+        const nowPlus3 = new Date(Date.now() + 3 * 60 * 60 * 1000);
+        const todayEnd = new Date(nowPlus3.toISOString().slice(0, 10) + "T23:59:59+03:00");
+        // إذا كان الموعد اليوم أو قبله → صفّر (تم التعامل مع العميل)
+        updates.next_follow_up_at = followUpDate <= todayEnd ? null : followUpDate.toISOString();
+      } else {
+        updates.next_follow_up_at = null;
+      }
     }
 
     // السيارة المطلوبة
