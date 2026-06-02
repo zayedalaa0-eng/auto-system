@@ -16,7 +16,7 @@ type TelegramWebApp = {
 
 type Branch = { id: string; name: string };
 
-const DEAL_TYPES    = ["شراء", "استبدال", "برسم البيع", "حيازة"];
+const DEAL_TYPES    = ["شراء", "استبدال", "برسم البيع"];
 const CONDITIONS    = ["مستعملة", "جديدة", "شبه جديدة"];
 const GEARBOX_OPTS  = ["اتوماتيك", "يدوي"];
 const FUEL_OPTS     = ["بنزين", "سولار", "هايبرد", "كهربائية بالكامل", "بلك أن"];
@@ -95,8 +95,12 @@ export default function InventoryAddPage() {
     boxShadow: isDark ? "none" : "0 1px 4px rgba(0,0,0,0.06)",
   };
 
+  const consign = dealType === "برسم البيع";
+
   async function handleSubmit() {
     if (!model.trim()) { setError("نوع السيارة مطلوب"); return; }
+    if (!chassis.trim()) { setError("رقم الشاصي مطلوب"); return; }
+    if (consign && !ownerName.trim()) { setError("اسم المالك مطلوب عند اختيار برسم البيع"); return; }
     setSaving(true); setError(null);
 
     const res = await fetch("/api/bot-app/inventory-add", {
@@ -202,7 +206,7 @@ export default function InventoryAddPage() {
           <div style={{ fontSize: 13, fontWeight: 700, color: hint }}>البيانات الأساسية</div>
 
           <div style={fld}>
-            <span style={lbl}>نوع السيارة / الموديل *</span>
+            <span style={lbl}>نوع السيارة *</span>
             <input value={model} onChange={e => setModel(e.target.value)}
               style={inp} placeholder="مثال: تويوتا كامري"
               list="inv-cars-list" autoComplete="off" />
@@ -223,9 +227,10 @@ export default function InventoryAddPage() {
                 style={{ ...inp, direction: "ltr" }} placeholder="0" />
             </div>
             <div style={fld}>
-              <span style={lbl}>رقم الشاصي</span>
+              <span style={lbl}>رقم الشاصي *</span>
               <input value={chassis} onChange={e => setChassis(e.target.value)}
-                style={{ ...inp, direction: "ltr" }} placeholder="اختياري" />
+                style={{ ...inp, direction: "ltr", borderColor: !chassis.trim() ? "#f87171" : undefined }}
+                placeholder="مطلوب" />
             </div>
             <div style={fld}>
               <span style={lbl}>اللون</span>
@@ -238,9 +243,10 @@ export default function InventoryAddPage() {
                 style={{ ...inp, direction: "ltr" }} placeholder="0" />
             </div>
             <div style={fld}>
-              <span style={lbl}>المالك</span>
+              <span style={lbl}>المالك {consign ? <span style={{ color: "#ef4444" }}>*</span> : "(اختياري)"}</span>
               <input value={ownerName} onChange={e => setOwnerName(e.target.value)}
-                style={inp} placeholder="اختياري" />
+                style={{ ...inp, borderColor: consign && !ownerName.trim() ? "#f87171" : undefined }}
+                placeholder={consign ? "مطلوب عند برسم البيع" : "اختياري"} />
             </div>
           </div>
         </div>
@@ -304,7 +310,7 @@ export default function InventoryAddPage() {
 
       {/* زر الحفظ */}
       <div style={{ position: "fixed", bottom: 0, right: 0, left: 0, padding: "10px 12px", background: bg, borderTop: `1px solid ${border}`, boxShadow: "0 -4px 16px rgba(0,0,0,0.06)" }}>
-        <button onClick={handleSubmit} disabled={saving || !model.trim() || !chatId}
+        <button onClick={handleSubmit} disabled={saving || !model.trim() || !chassis.trim() || (consign && !ownerName.trim()) || !chatId}
           style={{
             width: "100%", padding: "14px", borderRadius: 14, border: "none",
             background: (saving || !model.trim()) ? (isDark ? "#3a3a3c" : "#c7c7cc") : btnBg,

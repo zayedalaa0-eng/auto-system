@@ -6,7 +6,7 @@ import { CAR_MAKES } from "@/lib/suggestions";
 
 type Branch = { id: string; name: string };
 
-const DEAL_TYPES = ["شراء", "استبدال", "برسم البيع", "حيازة"];
+const DEAL_TYPES = ["شراء", "استبدال", "برسم البيع"];
 const CONDITION_LABELS = ["جديدة", "مستعملة", "شبه جديدة"];
 const GEARBOX_OPTIONS = ["اتوماتيك", "يدوي"];
 const FUEL_OPTIONS = ["بنزين", "سولار", "هايبرد", "كهربائية بالكامل", "بلك أن"];
@@ -44,9 +44,14 @@ export function AddInventoryForm({
   const [error,   setError]   = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  const consign = dealType === "برسم البيع";
+  const isValid = model.trim() && chassis.trim() && (!consign || ownerName.trim());
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!model.trim()) { setError("نوع السيارة مطلوب"); return; }
+    if (!chassis.trim()) { setError("رقم الشاصي مطلوب"); return; }
+    if (consign && !ownerName.trim()) { setError("اسم المالك مطلوب عند اختيار برسم البيع"); return; }
     setSaving(true); setError(null);
 
     const res = await fetch("/api/inventory/add", {
@@ -123,7 +128,7 @@ export function AddInventoryForm({
       <div className="grid gap-4 sm:grid-cols-2">
 
         <div className="sm:col-span-2">
-          <label className={labelClass}>نوع السيارة / الموديل *</label>
+          <label className={labelClass}>نوع السيارة *</label>
           <input value={model} onChange={e => setModel(e.target.value)}
             className={inputClass} placeholder="مثال: تويوتا كامري"
             list="inv-cars-list" autoComplete="off" required />
@@ -145,9 +150,10 @@ export function AddInventoryForm({
         </div>
 
         <div>
-          <label className={labelClass}>رقم الشاصي</label>
+          <label className={labelClass}>رقم الشاصي *</label>
           <input value={chassis} onChange={e => setChassis(e.target.value)}
-            className={inputClass} placeholder="اختياري" dir="ltr" />
+            className={`${inputClass}${!chassis.trim() ? " border-rose-300" : ""}`}
+            placeholder="مطلوب" dir="ltr" required />
         </div>
 
         <div>
@@ -163,9 +169,10 @@ export function AddInventoryForm({
         </div>
 
         <div>
-          <label className={labelClass}>المالك</label>
+          <label className={labelClass}>المالك {consign && <span className="text-rose-500">*</span>}</label>
           <input value={ownerName} onChange={e => setOwnerName(e.target.value)}
-            className={inputClass} placeholder="اسم المالك (اختياري)" />
+            className={`${inputClass}${consign && !ownerName.trim() ? " border-rose-300" : ""}`}
+            placeholder={consign ? "مطلوب عند برسم البيع" : "اختياري"} />
         </div>
 
         <div>
@@ -232,7 +239,7 @@ export function AddInventoryForm({
           className="legacy-btn border flex-1">
           إلغاء
         </button>
-        <button type="submit" disabled={saving || !model.trim()}
+        <button type="submit" disabled={saving || !isValid}
           className="legacy-btn legacy-btn-primary flex-[2]">
           {saving ? "⏳ جاري الحفظ..." : "✅ إضافة السيارة"}
         </button>
