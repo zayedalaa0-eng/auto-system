@@ -13,6 +13,8 @@ export async function POST(req: NextRequest) {
       full_name,
       phone,
       nickname,
+      address,
+      whatsapp_prefix,
       operation_type,
       status,
       requested_car,
@@ -109,6 +111,8 @@ export async function POST(req: NextRequest) {
         full_name: full_name.trim(),
         phone: normalizedPhone,
         nickname: nickname?.trim() || null,
+        address: address?.trim() || null,
+        whatsapp_prefix: whatsapp_prefix?.trim() || "+970",
         // نُخزّن التسمية العربية في العمود (مطابق لمسار الويب) + الكود الإنجليزي في metadata
         operation_type: opLabel,
         status: resolvedStatus,

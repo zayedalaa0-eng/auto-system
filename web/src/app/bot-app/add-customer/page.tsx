@@ -200,8 +200,10 @@ export default function AddCustomerMiniApp() {
 
   // Form fields
   const [operationType, setOperationType] = useState<OperationType>("buyer");
-  const [fullName, setFullName] = useState("");
-  const [nickname, setNickname] = useState("");
+  const [fullName, setFullName]       = useState("");
+  const [nickname, setNickname]       = useState("");
+  const [address,  setAddress]        = useState("");
+  const [whatsappPrefix, setWhatsappPrefix] = useState("+970");
   const [phone, setPhone] = useState("");
   const [status, setStatus] = useState("جديد");
   const [paymentMethod, setPaymentMethod] = useState("");
@@ -382,6 +384,8 @@ export default function AddCustomerMiniApp() {
           chat_id: chatId,
           full_name: fullName,
           nickname: nickname || null,
+          address: address || null,
+          whatsapp_prefix: whatsappPrefix || "+970",
           phone,
           operation_type: operationType,
           status,
@@ -519,7 +523,7 @@ export default function AddCustomerMiniApp() {
               // إضافة عميل جديد — مسح كل الحقول
               setSuccess(false);
               setSavedCustomerId(null);
-              setFullName(""); setNickname(""); setPhone("");
+              setFullName(""); setNickname(""); setAddress(""); setWhatsappPrefix("+970"); setPhone("");
               setRcUseInventory(false); setRcSelectedCars([]); setRcNegotiations({});
               setRcInventoryToAdd(""); setRcUseCustom(false);
               setRcCustomType(""); setRcCustomYear(""); setRcCustomNeg("");
@@ -645,16 +649,39 @@ export default function AddCustomerMiniApp() {
               onChange={(e) => setFullName(e.target.value)} style={input} />
           </div>
 
-          <div style={field}>
-            <span style={label}>الكنية / المدينة</span>
-            <input type="text" placeholder="اختياري" value={nickname}
-              onChange={(e) => setNickname(e.target.value)} style={input} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div style={field}>
+              <span style={label}>الكنية</span>
+              <input type="text" placeholder="اختياري" value={nickname}
+                onChange={(e) => setNickname(e.target.value)} style={input} />
+            </div>
+            <div style={field}>
+              <span style={label}>المدينة / العنوان</span>
+              <input type="text" placeholder="اختياري" value={address}
+                onChange={(e) => setAddress(e.target.value)} style={input} />
+            </div>
           </div>
 
           <div style={field}>
             <span style={label}>رقم الهاتف * (10 أرقام)</span>
-            <input type="tel" inputMode="numeric" maxLength={14} placeholder="05xxxxxxxx" value={phone}
-              onChange={(e) => setPhone(e.target.value)} style={input} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <select
+                value={whatsappPrefix}
+                onChange={(e) => setWhatsappPrefix(e.target.value)}
+                style={{ ...input, width: "auto", flexShrink: 0, direction: "ltr", paddingLeft: 8, paddingRight: 8 }}
+              >
+                <option value="+970">🇵🇸 +970</option>
+                <option value="+972">🇮🇱 +972</option>
+                <option value="+962">🇯🇴 +962</option>
+                <option value="+966">🇸🇦 +966</option>
+                <option value="+971">🇦🇪 +971</option>
+                <option value="+20">🇪🇬 +20</option>
+                <option value="+1">🇺🇸 +1</option>
+                <option value="+44">🇬🇧 +44</option>
+              </select>
+              <input type="tel" inputMode="numeric" maxLength={14} placeholder="05xxxxxxxx" value={phone}
+                onChange={(e) => setPhone(e.target.value)} style={{ ...input, flex: 1 }} />
+            </div>
             {phone.trim().length > 0 && !phoneValid && (
               <span style={{ fontSize: 12, color: "#dc2626" }}>الرقم يجب أن يكون 10 أرقام بالضبط</span>
             )}
