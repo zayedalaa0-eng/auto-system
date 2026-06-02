@@ -880,7 +880,7 @@ async function syncTradeInventoryFromCustomer({
       ownerName = branch?.name ?? customerName;
     }
   } else if (isShowroomPurchase) {
-    dealType = "حيازة";
+    dealType = "شراء";
     if (branchId) {
       const { data: branch } = await supabase.from("branches").select("name").eq("id", branchId).maybeSingle();
       ownerName = branch?.name ?? customerName;
