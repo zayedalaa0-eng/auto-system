@@ -1609,7 +1609,7 @@ export async function inviteStaffMemberAction(formData: FormData) {
       redirect("/dashboard/staff?staff_error=" + encodeURIComponent(`تم إرسال الدعوة لكن فشل تحديث سجل الموظف: ${error.message}`));
     }
   } else {
-    const { error } = await supabase.from("app_users").insert({
+    const { error } = await admin.from("app_users").insert({
       auth_user_id: authUserId,
       full_name: fullName,
       phone,
