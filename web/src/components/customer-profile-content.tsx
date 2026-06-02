@@ -665,6 +665,7 @@ export function CustomerProfileContent({
   const [editBasicNickname, setEditBasicNickname] = useState(customer.nickname ?? "");
   const [editBasicPhone, setEditBasicPhone] = useState(customer.phone ?? "");
   const [editBasicAddress, setEditBasicAddress] = useState(customer.address ?? "");
+  const [editBasicWaPrefix, setEditBasicWaPrefix] = useState(customer.whatsapp_prefix ?? "+970");
   const [editBasicError, setEditBasicError] = useState<string | null>(null);
   const [editBasicPending, startEditBasicTransition] = useTransition();
 
@@ -2309,6 +2310,20 @@ export function CustomerProfileContent({
               </label>
 
               <label className="legacy-field">
+                <span className="legacy-field__label">مقدمة الواتس آب</span>
+                <select value={editBasicWaPrefix} onChange={e => setEditBasicWaPrefix(e.target.value)} className="legacy-input" disabled={editBasicPending}>
+                  <option value="+970">🇵🇸 +970</option>
+                  <option value="+972">🇮🇱 +972</option>
+                  <option value="+962">🇯🇴 +962</option>
+                  <option value="+966">🇸🇦 +966</option>
+                  <option value="+971">🇦🇪 +971</option>
+                  <option value="+20">🇪🇬 +20</option>
+                  <option value="+1">🇺🇸 +1</option>
+                  <option value="+44">🇬🇧 +44</option>
+                </select>
+              </label>
+
+              <label className="legacy-field">
                 <span className="legacy-field__label">المدينة / العنوان</span>
                 <input
                   type="text"
@@ -2347,6 +2362,7 @@ export function CustomerProfileContent({
                     fd.set("nickname", editBasicNickname.trim());
                     fd.set("phone", editBasicPhone.trim());
                     fd.set("address", editBasicAddress.trim());
+                    fd.set("whatsapp_prefix", editBasicWaPrefix);
                     startEditBasicTransition(async () => {
                       const result = await updateCustomerBasicInfoAction(fd);
                       if (result?.error) {

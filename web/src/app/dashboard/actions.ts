@@ -3263,6 +3263,7 @@ export async function updateCustomerBasicInfoAction(formData: FormData) {
   const phone = normalizePhone(getText(formData, "phone"));
   const nickname = getNullableText(formData, "nickname");
   const address = getNullableText(formData, "address");
+  const whatsappPrefix = getNullableText(formData, "whatsapp_prefix") ?? "+970";
 
   if (!customerId) return { error: "معرّف العميل مفقود" };
   if (!fullName) return { error: "الاسم مطلوب" };
@@ -3283,7 +3284,7 @@ export async function updateCustomerBasicInfoAction(formData: FormData) {
 
   const { error } = await admin
     .from("customers")
-    .update({ full_name: fullName, phone, nickname, address, updated_at: new Date().toISOString() })
+    .update({ full_name: fullName, phone, nickname, address, whatsapp_prefix: whatsappPrefix, updated_at: new Date().toISOString() })
     .eq("id", customerId);
 
   if (error) return { error: error.message };

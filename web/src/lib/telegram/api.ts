@@ -290,6 +290,23 @@ export async function answerCallbackQuery(callbackQueryId: string, text?: string
 /**
  * إرسال رسالة مع قائمة أزرار Mini App (كل زر في صف مستقل)
  */
+/** إرسال رسالة مع أزرار متعددة (web_app + callback مختلطة) */
+export async function sendMessageWithInlineKeyboard(
+  chatId: number | string,
+  text: string,
+  inlineKeyboard: Array<Array<{ text: string; callback_data?: string; web_app?: { url: string } }>>,
+) {
+  const res = await fetch(`${getBaseUrl()}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId, text, parse_mode: "HTML",
+      reply_markup: { inline_keyboard: inlineKeyboard },
+    }),
+  });
+  return res.json();
+}
+
 export async function sendMessageWithWebAppList(
   chatId: number | string,
   text: string,

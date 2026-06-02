@@ -26,6 +26,7 @@ type Customer = {
   assigned_user_id: string | null; branch_id: string | null;
   cycle_number: number; parent_customer_id: string | null;
   metadata: Record<string, unknown> | null;
+  whatsapp_prefix: string | null;
 };
 type TradeIn = {
   id: string; model: string; chassis_no: string | null; price: number | null;
@@ -153,14 +154,17 @@ export default function CustomerPage() {
   const [tiInspection,  setTiInspection]  = useState("");
   const [tiLicense,     setTiLicense]     = useState("");
   const [tiNotes,       setTiNotes]       = useState("");
+  const [tiGear,        setTiGear]        = useState("اتوماتيك");
+  const [tiFuel,        setTiFuel]        = useState("بنزين");
   const [tiEditMode,    setTiEditMode]    = useState(false);
 
   /* basic info edit modal */
   const [basicOpen,    setBasicOpen]    = useState(false);
-  const [editName,     setEditName]     = useState("");
-  const [editPhone,    setEditPhone]    = useState("");
-  const [editNickname, setEditNickname] = useState("");
-  const [editAddress,  setEditAddress]  = useState("");
+  const [editName,       setEditName]       = useState("");
+  const [editPhone,      setEditPhone]      = useState("");
+  const [editNickname,   setEditNickname]   = useState("");
+  const [editAddress,    setEditAddress]    = useState("");
+  const [editWaPrefix,   setEditWaPrefix]   = useState("+970");
 
   /* history */
   const [showHistory,    setShowHistory]    = useState(false);
@@ -260,6 +264,9 @@ export default function CustomerPage() {
           setTiInspection(ti.inspection??"");
           setTiLicense(toDateInput(ti.license_expiry));
           setTiNotes(ti.notes??"");
+          const tiMeta = ti.metadata as Record<string,unknown>|null;
+          setTiGear((tiMeta?.gear as string|null) ?? "اتوماتيك");
+          setTiFuel((tiMeta?.fuel as string|null) ?? "بنزين");
         }
         setNewOpCode(c.operation_type_code);
         setDealValue((c.metadata?.deal_value as string|undefined)??"");
@@ -268,6 +275,7 @@ export default function CustomerPage() {
         setEditPhone(c.phone);
         setEditNickname(c.nickname??"");
         setEditAddress(c.address??"");
+        setEditWaPrefix(c.whatsapp_prefix??"+970");
       })
       .catch(()=>setError("تعذر تحميل بيانات العميل"))
       .finally(()=>setLoading(false));
@@ -376,6 +384,8 @@ export default function CustomerPage() {
         inspection:tiInspection.trim()||null,
         license_expiry:tiLicense||null,
         notes:tiNotes.trim()||null,
+        gear:tiGear||null,
+        fuel:tiFuel||null,
       };
     }
 
@@ -394,7 +404,7 @@ export default function CustomerPage() {
     const res = await fetch("/api/bot-app/update-customer",{
       method:"POST", headers:{"Content-Type":"application/json"},
       body:JSON.stringify({ chat_id:chatId, customer_id:custId,
-        full_name:editName, phone:editPhone, nickname:editNickname||null, address:editAddress||null }),
+        full_name:editName, phone:editPhone, nickname:editNickname||null, address:editAddress||null, whatsapp_prefix:editWaPrefix }),
     });
     const json = await res.json();
     if(!res.ok){ setSaveError(json.error??"حدث خطأ"); return; }
@@ -590,11 +600,27 @@ export default function CustomerPage() {
               {/* حالة مغلق */}
               {isClosed&&<span style={{fontSize:"0.72rem",fontWeight:700,background:"#fef2f2",color:"#b91c1c",borderRadius:99,padding:"2px 8px",border:"1px solid #fca5a5"}}>🔒 مغلق</span>}
             </div>
-            {/* رقم الهاتف + العنوان */}
-            <div style={{fontSize:"0.82rem",color:hint,marginTop:2,display:"flex",gap:8,flexWrap:"wrap"}}>
-              <span style={{fontFamily:"monospace"}}>{c.phone}</span>
+            {/* رقم الهاتف + العنوان + واتس آب */}
+            <div style={{fontSize:"0.82rem",color:hint,marginTop:2,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+              <a href={`https://wa.me/${(c.whatsapp_prefix??"+970").replace(/\D/g,"")}${c.phone.replace(/\D/g,"")}`}
+                target="_blank" rel="noreferrer"
+                style={{fontFamily:"monospace",color:"#16a34a",fontWeight:600,textDecoration:"none"}}>
+                📱 {c.phone}
+              </a>
               {c.address&&<span>· {c.address}</span>}
             </div>
+            {/* قيمة الصفقة وطريقة الدفع */}
+            {(()=>{
+              const dv = c.metadata?.deal_value as number|null|undefined;
+              const pm = c.metadata?.payment_method as string|null|undefined;
+              if(!dv && !pm) return null;
+              return (
+                <div style={{fontSize:"0.78rem",color:hint,marginTop:3,display:"flex",gap:8,flexWrap:"wrap"}}>
+                  {!!dv&&<span style={{color:emerald,fontWeight:700}}>💰 {Number(dv).toLocaleString("en-US")} ₪</span>}
+                  {!!pm&&<span>💳 {pm}</span>}
+                </div>
+              );
+            })()}
             {/* بادجات */}
             <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
               <span style={{padding:"2px 10px",borderRadius:99,fontSize:"0.72rem",fontWeight:700,
@@ -1043,6 +1069,25 @@ export default function CustomerPage() {
                           <input type={type} value={val} onChange={e=>set(e.target.value)} style={css.input}/>
                         </div>
                       ))}
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                      <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                        <span style={css.label}>ناقل الحركة</span>
+                        <select value={tiGear} onChange={e=>setTiGear(e.target.value)} style={css.input}>
+                          <option value="اتوماتيك">اتوماتيك</option>
+                          <option value="يدوي">يدوي</option>
+                        </select>
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                        <span style={css.label}>نوع الوقود</span>
+                        <select value={tiFuel} onChange={e=>setTiFuel(e.target.value)} style={css.input}>
+                          <option value="بنزين">بنزين</option>
+                          <option value="سولار">سولار</option>
+                          <option value="هايبرد">هايبرد</option>
+                          <option value="كهربائية بالكامل">كهربائية بالكامل</option>
+                          <option value="بلك أن">بلك أن</option>
+                        </select>
+                      </div>
                     </div>
                     {[
                       {lbl:"المواصفات",val:tiSpecs,set:setTiSpecs},
@@ -1687,6 +1732,19 @@ export default function CustomerPage() {
                   <input value={val} onChange={e=>set(e.target.value)} placeholder={ph} style={css.input}/>
                 </div>
               ))}
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                <span style={css.label}>مقدمة الواتس آب</span>
+                <select value={editWaPrefix} onChange={e=>setEditWaPrefix(e.target.value)} style={css.input}>
+                  <option value="+970">🇵🇸 +970</option>
+                  <option value="+972">🇮🇱 +972</option>
+                  <option value="+962">🇯🇴 +962</option>
+                  <option value="+966">🇸🇦 +966</option>
+                  <option value="+971">🇦🇪 +971</option>
+                  <option value="+20">🇪🇬 +20</option>
+                  <option value="+1">🇺🇸 +1</option>
+                  <option value="+44">🇬🇧 +44</option>
+                </select>
+              </div>
               {saveError&&<div style={{color:"#dc2626",fontSize:13}}>⚠️ {saveError}</div>}
               <div style={{display:"flex",gap:8,marginTop:4}}>
                 <button onClick={()=>setBasicOpen(false)} style={{

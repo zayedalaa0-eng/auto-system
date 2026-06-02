@@ -3,6 +3,10 @@
     {
       "path": "/api/reports/daily-morning",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/reports/overdue-escalation",
+      "schedule": "0 9 * * *"
     }
   ]
 }

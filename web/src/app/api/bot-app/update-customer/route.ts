@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
       phone,
       nickname,
       address,
+      whatsapp_prefix,
       // سيارة الاستبدال / بيع بالوكالة
       trade_in,
       // ربط المخزون (للمشتري عند الحجز/البيع)
@@ -168,6 +169,7 @@ export async function POST(req: NextRequest) {
 
     if (nickname !== undefined) updates.nickname = (nickname ?? "").trim() || null;
     if (address !== undefined) updates.address = (address ?? "").trim() || null;
+    if (whatsapp_prefix !== undefined) updates.whatsapp_prefix = (whatsapp_prefix ?? "+970").trim() || "+970";
 
     // نوع العملية — مشتري ↔ مشتري+استبدال فقط (بيع بالوكالة مقفل)
     const currentOpCode = (() => {

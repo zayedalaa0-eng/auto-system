@@ -13,6 +13,7 @@ import {
   selectionKeyboard,
   sendChatAction,
   sendMessage,
+  sendMessageWithInlineKeyboard,
   sendMessageWithWebApp,
   sendMessageWithWebAppList,
 } from "./api";
@@ -280,6 +281,14 @@ async function handleToday(chatId: number, user: BotUser) {
     text += "\n";
   }
 
+  // أزرار "تم" للتذكيرات
+  const reminderButtons: Array<Array<{ text: string; callback_data: string }>> = agenda.reminders
+    .slice(0, 5)
+    .map((r) => [{
+      text: `✅ تم — ${(r.title ?? r.message ?? "تذكير").slice(0, 30)}`,
+      callback_data: `done_reminder:${r.id}`,
+    }]);
+
   // ── 4. سيارات بانتظار التقييم ───────────────────────────────────────────
   if (agenda.pendingEvaluations.length > 0) {
     text += `🔍 <b>سيارات بانتظار التقييم (${agenda.pendingEvaluations.length})</b>\n`;
@@ -327,13 +336,16 @@ async function handleToday(chatId: number, user: BotUser) {
   text += footer;
 
   const appUrl = getAppUrl();
+  const inlineRows: Array<Array<{ text: string; callback_data?: string; web_app?: { url: string } }>> = [];
   if (appUrl) {
-    const agendaUrl = `${appUrl}/bot-app/agenda?chat_id=${chatId}`;
-    return sendMessageWithWebApp(
-      chatId,
-      text,
-      [{ text: "📅 فتح الأجندة التفاعلية", url: agendaUrl }],
-    );
+    inlineRows.push([{ text: "📅 فتح الأجندة التفاعلية", web_app: { url: `${appUrl}/bot-app/agenda?chat_id=${chatId}` } }]);
+  }
+  // أزرار "تم" للتذكيرات (حتى 4 أزرار)
+  for (const btn of reminderButtons.slice(0, 4)) inlineRows.push(btn);
+  inlineRows.push([{ text: "🏠 القائمة الرئيسية", callback_data: "main_menu" }]);
+
+  if (inlineRows.length > 1) {
+    return sendMessageWithInlineKeyboard(chatId, text, inlineRows);
   }
   return sendMessage(chatId, text, { replyMarkup: menuKeyboard(user) });
 }
@@ -496,7 +508,7 @@ async function handleInventory(chatId: number, user: BotUser) {
     for (const car of available) {
       const year = car.production_year ? ` ${car.production_year}` : "";
       const name = `${escapeHtml(car.model)}${year}`;
-      const price = car.price ? ` | ${Number(car.price).toLocaleString("ar-EG")} ₪` : "";
+      const price = car.price ? ` | ${Number(car.price).toLocaleString("en-US")} ₪` : "";
       const color = car.color ? ` | ${escapeHtml(car.color)}` : "";
       text += `• <b>${name}</b>${color}${price}\n`;
       if (user.capabilities.isGeneralManager && car.branch_name) {
@@ -686,7 +698,7 @@ async function handleEvalRequests(chatId: number, user: BotUser) {
     fullText += `🚗 <b>الموديل:</b> ${escapeHtml(e.model)}\n`;
     if (e.color)           fullText += `🎨 <b>اللون:</b> ${escapeHtml(e.color)}\n`;
     if (e.production_year) fullText += `📅 <b>سنة الصنع:</b> ${e.production_year}\n`;
-    if (e.mileage)         fullText += `🛣 <b>الكيلومترات:</b> ${e.mileage.toLocaleString("ar-EG")} كم\n`;
+    if (e.mileage)         fullText += `🛣 <b>الكيلومترات:</b> ${e.mileage.toLocaleString("en-US")} كم\n`;
     if (e.chassis_no)      fullText += `🔢 <b>رقم الشاصي:</b> ${escapeHtml(e.chassis_no)}\n`;
     if (e.inspection)      fullText += `🔍 <b>الفحص:</b> ${escapeHtml(e.inspection)}\n`;
     if (e.specs)           fullText += `⚙️ <b>المواصفات:</b> ${escapeHtml(e.specs)}\n`;
@@ -701,7 +713,7 @@ async function handleEvalRequests(chatId: number, user: BotUser) {
     if (e.customer_phone) photoCaption += ` | 📱 ${escapeHtml(e.customer_phone)}`;
     if (e.color)           photoCaption += `\n🎨 ${escapeHtml(e.color)}`;
     if (e.production_year) photoCaption += ` | 📅 ${e.production_year}`;
-    if (e.mileage)         photoCaption += ` | 🛣 ${e.mileage.toLocaleString("ar-EG")} كم`;
+    if (e.mileage)         photoCaption += ` | 🛣 ${e.mileage.toLocaleString("en-US")} كم`;
     if (e.chassis_no)      photoCaption += `\n🔢 ${escapeHtml(e.chassis_no)}`;
     if (e.staff_name)      photoCaption += `\n👨‍💼 ${escapeHtml(e.staff_name)}`;
 
@@ -866,7 +878,7 @@ async function handleEvalReplyPrice(chatId: number, user: BotUser, input: string
   const customerName = (Array.isArray(custRel) ? custRel[0]?.full_name : custRel?.full_name) ?? "العميل";
   const tradeModel = (tradeRow as { model?: string | null })?.model ?? "";
 
-  const priceFormatted = price.toLocaleString("ar-EG");
+  const priceFormatted = price.toLocaleString("en-US");
 
   const SEP_E = "━━━━━━━━━━━━━━━━━━━━";
 
@@ -965,7 +977,7 @@ async function handleEvalTextCommand(chatId: number, user: BotUser, text: string
 
   await admin.from("trade_ins").update({ price, status: "تم التقييم" }).eq("id", item.trade_in_id);
 
-  const priceFormatted = price.toLocaleString("ar-EG");
+  const priceFormatted = price.toLocaleString("en-US");
 
   await sendMessage(
     chatId,
@@ -1750,6 +1762,20 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       await clearSession(String(chatId));
       const isMaalam = await checkIsMaalamMgr(user.id);
       return sendMessage(chatId, "🏠 القائمة الرئيسية:", { replyMarkup: menuKeyboard(user, isMaalam) });
+    }
+
+    // زر "تم" للتذكير
+    if (cq.data?.startsWith("done_reminder:")) {
+      const reminderId = cq.data.slice("done_reminder:".length);
+      const appUrl = getAppUrl();
+      if (appUrl) {
+        await fetch(`${appUrl}/api/bot-app/reminder-done`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: String(chatId), reminder_id: reminderId }),
+        });
+      }
+      return sendMessage(chatId, "✅ تم وضع علامة \"منجز\" على التذكير.", { replyMarkup: menuKeyboard(user) });
     }
 
     // زر "إرسال قيمة التقييم" من رسالة التقييم

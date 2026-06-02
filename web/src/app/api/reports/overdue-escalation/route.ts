@@ -138,6 +138,40 @@ async function handler(req: NextRequest) {
       await admin.from("notifications").insert(rows);
     }
 
+    // ── تنبيه رخص سيارات المخزون التي تنتهي خلال 7 أيام ─────────────────────
+    const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const { data: expiringLicenses } = await admin
+      .from("inventory")
+      .select("id, model, chassis_no, license_expiry, branch_id, branches(name)")
+      .not("license_expiry", "is", null)
+      .lte("license_expiry", in7Days)
+      .gte("license_expiry", now.toISOString().slice(0, 10))
+      .eq("availability_status", "متوفرة")
+      .eq("is_active", true);
+
+    if (expiringLicenses && expiringLicenses.length > 0) {
+      for (const manager of recipients) {
+        const caps = getRoleCapabilities(manager.role);
+        const isGM = caps.isGeneralManager;
+        const myExpiring = expiringLicenses.filter(i =>
+          isGM ? true : i.branch_id === manager.branch_id,
+        );
+        if (myExpiring.length === 0) continue;
+
+        let licenseMsg = `⚠️ <b>رخص سيارات مخزون تنتهي خلال 7 أيام (${myExpiring.length})</b>\n\n`;
+        myExpiring.forEach((car, i) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const branchName = (car as any).branches?.name ?? "—";
+          licenseMsg += `${i + 1}. <b>${car.model}</b>`;
+          if (car.chassis_no) licenseMsg += ` — ${car.chassis_no}`;
+          licenseMsg += `\n   📅 تنتهي: ${car.license_expiry}\n`;
+          if (isGM) licenseMsg += `   🏢 ${branchName}\n`;
+        });
+        licenseMsg += `\n🤖 <i>نظام المعرض الذكي — تنبيه رخص المخزون</i>`;
+        await sendMessage(manager.telegram_chat_id as string, licenseMsg);
+      }
+    }
+
     return NextResponse.json({ sent, overdue: overdueCustomers.length });
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";

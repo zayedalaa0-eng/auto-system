@@ -628,6 +628,14 @@ export default async function InventoryPage({
                         >
                           بطاقة
                         </Link>
+                        {/* تعديل */}
+                        <Link
+                          href={`/dashboard/inventory/${item.id}/edit`}
+                          className="legacy-table-btn legacy-table-btn--sm"
+                          title="تعديل بيانات السيارة"
+                        >
+                          ✏️
+                        </Link>
                       </div>
                     </td>
                   </tr>

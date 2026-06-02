@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRoleCapabilities } from "@/lib/roles";
-import { sendMessage } from "@/lib/telegram/api";
+import { sendMessage, sendMessageWithInlineKeyboard } from "@/lib/telegram/api";
 
 /**
  * GET  /api/reports/daily-morning  ← Vercel Cron يُرسل GET
@@ -63,7 +63,7 @@ async function handler(req: NextRequest) {
     if (recipients.length === 0) return NextResponse.json({ sent: 0 });
 
     // ── جلب كل البيانات مرة واحدة قبل الـ loop ───────────────────────────
-    const [{ data: allCustomers }, { data: allBranches }, { data: closedThisMonth }, { data: allStaff }] = await Promise.all([
+    const [{ data: allCustomers }, { data: allBranches }, { data: closedThisMonth }, { data: allStaff }, { data: consignmentInventory }] = await Promise.all([
       admin
         .from("customers")
         .select("id, full_name, nickname, phone, status, next_follow_up_at, branch_id, assigned_user_id")
@@ -77,6 +77,8 @@ async function handler(req: NextRequest) {
         .ilike("status", "%تمت عملية البيع%")
         .gte("updated_at", new Date(now.getFullYear(), now.getMonth(), 1).toISOString()),
       admin.from("app_users").select("id, full_name, branch_id").eq("is_active", true),
+      // سيارات برسم البيع في المخزون
+      admin.from("inventory").select("id, branch_id").eq("deal_type", "برسم البيع").eq("availability_status", "متوفرة").eq("is_active", true),
     ]);
 
     const branchNameMap = new Map<string, string>(
@@ -146,6 +148,11 @@ async function handler(req: NextRequest) {
         (c) => !c.next_follow_up_at && !isGM,
       );
 
+      // سيارات برسم البيع في المخزون
+      const consignCount = (consignmentInventory ?? []).filter(i =>
+        isGM ? true : i.branch_id === branchId,
+      ).length;
+
       // ── بناء الرسالة ───────────────────────────────────────────────────
       const greeting = isGM
         ? `صباح الخير، <b>${manager.full_name}</b> — المدير العام`
@@ -163,14 +170,15 @@ async function handler(req: NextRequest) {
       msg += `├ متابعات مجدولة اليوم: <b>${followupsToday.length}</b>\n`;
       msg += `├ متابعات متأخرة (لم تُنجز): <b>${overdueFollowups.length}</b>\n`;
       msg += `├ حجوزات مفتوحة: <b>${openReservations.length}</b>\n`;
-      msg += `└ سيارات بانتظار التقييم: <b>${awaitingAssessment.length}</b>\n\n`;
+      msg += `├ سيارات بانتظار التقييم: <b>${awaitingAssessment.length}</b>\n`;
+      msg += `└ سيارات برسم البيع في المخزون: <b>${consignCount}</b>\n\n`;
 
       // ── KPIs الشهرية ─────────────────────────────────────────────────
       msg += `📈 <b>أداء هذا الشهر</b>\n`;
       msg += `┌ صفقات مكتملة: <b>${myClosed.length}</b>\n`;
       msg += `├ معدل التحويل: <b>${conversionRate}%</b>\n`;
       if (monthlyRevenue > 0) {
-        msg += `├ إجمالي الإيرادات: <b>${monthlyRevenue.toLocaleString("ar-SA")} شيقل</b>\n`;
+        msg += `├ إجمالي الإيرادات: <b>${monthlyRevenue.toLocaleString("en-US")} شيقل</b>\n`;
       }
       if (topStaff && topStaffEntry) {
         msg += `└ أفضل موظف: <b>${topStaff.full_name}</b> (${topStaffEntry[1]} صفقة)\n`;
@@ -233,7 +241,15 @@ async function handler(req: NextRequest) {
       msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
       msg += `🤖 <i>نظام المعرض الذكي — تقرير تلقائي يومي</i>`;
 
-      await sendMessage(manager.telegram_chat_id as string, msg);
+      const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
+      const chatId = manager.telegram_chat_id as string;
+      if (appUrl) {
+        await sendMessageWithInlineKeyboard(chatId, msg, [[
+          { text: "📅 فتح أجندة اليوم", web_app: { url: `${appUrl}/bot-app/agenda?chat_id=${chatId}` } },
+        ]]);
+      } else {
+        await sendMessage(chatId, msg);
+      }
       sent++;
     }
 
@@ -372,7 +388,15 @@ async function handler(req: NextRequest) {
       msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
       msg += `🤖 <i>نظام المعرض الذكي — تقريرك الصباحي الشخصي</i>`;
 
-      await sendMessage(emp.telegram_chat_id as string, msg);
+      const empChatId = emp.telegram_chat_id as string;
+      const empAppUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
+      if (empAppUrl) {
+        await sendMessageWithInlineKeyboard(empChatId, msg, [[
+          { text: "📅 فتح أجندتك", web_app: { url: `${empAppUrl}/bot-app/agenda?chat_id=${empChatId}` } },
+        ]]);
+      } else {
+        await sendMessage(empChatId, msg);
+      }
       sent++;
     }
 

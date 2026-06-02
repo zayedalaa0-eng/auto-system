@@ -409,7 +409,7 @@ export async function pushEvaluationRequestToMaalamManager({
     fullText += `🚗 <b>الموديل:</b> ${escapeHtml(car.model)}\n`;
     if (car.color)           fullText += `🎨 <b>اللون:</b> ${escapeHtml(car.color)}\n`;
     if (car.production_year) fullText += `📅 <b>سنة الصنع:</b> ${car.production_year}\n`;
-    if (car.mileage)         fullText += `🛣 <b>المسافة المقطوعة:</b> ${car.mileage.toLocaleString("ar-EG")} كم\n`;
+    if (car.mileage)         fullText += `🛣 <b>المسافة المقطوعة:</b> ${car.mileage.toLocaleString("en-US")} كم\n`;
     if (car.chassis_no)      fullText += `🔢 <b>رقم الشاصي:</b> ${escapeHtml(car.chassis_no)}\n`;
     if (car.inspection)      fullText += `🔍 <b>حالة الفحص:</b> ${escapeHtml(car.inspection)}\n`;
     if (car.specs)           fullText += `⚙️ <b>المواصفات:</b> ${escapeHtml(car.specs)}\n`;
@@ -421,7 +421,7 @@ export async function pushEvaluationRequestToMaalamManager({
     if (customerPhone)       photoCaption += ` | 📱 ${escapeHtml(customerPhone)}`;
     if (car.color)           photoCaption += `\n🎨 ${escapeHtml(car.color)}`;
     if (car.production_year) photoCaption += ` | 📅 ${car.production_year}`;
-    if (car.mileage)         photoCaption += ` | 🛣 ${car.mileage.toLocaleString("ar-EG")} كم`;
+    if (car.mileage)         photoCaption += ` | 🛣 ${car.mileage.toLocaleString("en-US")} كم`;
     if (car.chassis_no)      photoCaption += `\n🔢 ${escapeHtml(car.chassis_no)}`;
     if (submitterName)       photoCaption += `\n👨‍💼 ${escapeHtml(submitterName)}`;
 
