@@ -20,6 +20,7 @@ type InventoryFilters = {
   fuel?: string;
   car?: string;
   cross?: string;
+  tab?: string;
 };
 
 function normalize(value: string | null | undefined) {
@@ -119,7 +120,10 @@ export default async function InventoryPage({
   searchParams: Promise<InventoryFilters>;
 }) {
   const params = await searchParams;
-  const { q, branch, owner, deal, status, gearbox, fuel, car, cross } = params;
+  const { q, branch, owner, deal, status, gearbox, fuel, car, cross, tab } = params;
+
+  // التبويب: showroom = مخزون المعرض، customers = مخزون العملاء
+  const activeTab = tab === "customers" ? "customers" : "showroom";
   const ctx = await getInventoryFilterContext();
   const branchFilter = parseBranchFilter(branch);
   const includeCross =
@@ -225,6 +229,19 @@ export default async function InventoryPage({
     return normalize(item.availability_status) === status;
   });
 
+  // ── تقسيم المخزون: معرض vs عملاء ───────────────────────────────────────────
+  const CUSTOMER_DEALS = ["برسم البيع", "استبدال"];
+  const isCustomerCar = (item: InventoryItem) =>
+    CUSTOMER_DEALS.some((d) => normalize(item.deal_type).includes(normalize(d)));
+
+  const tabInventory = filteredInventory.filter((item) =>
+    activeTab === "customers" ? isCustomerCar(item) : !isCustomerCar(item),
+  );
+
+  // إحصاءات التبويبين (من baseFiltered بدون فلتر status)
+  const showroomCount  = baseFiltered.filter((i) => !isCustomerCar(i)).length;
+  const customersCount = baseFiltered.filter((i) => isCustomerCar(i)).length;
+
   const selectedCar = selectedCarId
     ? (filteredInventory.find((item) => item.id === selectedCarId) ?? null)
     : null;
@@ -247,9 +264,19 @@ export default async function InventoryPage({
   if (gearbox) currentParams.set("gearbox", gearbox);
   if (fuel) currentParams.set("fuel", fuel);
   if (status) currentParams.set("status", status);
+  if (activeTab === "customers") currentParams.set("tab", "customers");
   if (includeCross && !(ctx.isMuallimBranch && !ctx.isGeneralManager))
     currentParams.set("cross", "1");
   const baseQuery = currentParams.toString();
+
+  // روابط التبويبين
+  function tabHref(t: "showroom" | "customers") {
+    const p = new URLSearchParams(currentParams);
+    p.delete("status"); p.delete("car"); p.delete("tab");
+    if (t === "customers") p.set("tab", "customers");
+    const qs = p.toString();
+    return qs ? `/dashboard/inventory?${qs}` : "/dashboard/inventory";
+  }
   const closeHref = baseQuery ? `/dashboard/inventory?${baseQuery}` : "/dashboard/inventory";
 
   // مساعد لبناء رابط حبة الإحصاء
@@ -362,6 +389,36 @@ export default async function InventoryPage({
         <InventorySaveViewBtn />
       </div>
 
+      {/* ── تبويبات المخزون ── */}
+      <div className="flex gap-2 border-b border-slate-200 pb-0">
+        <Link
+          href={tabHref("showroom")}
+          className={`inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold rounded-t-xl border border-b-0 transition-colors ${
+            activeTab === "showroom"
+              ? "bg-white border-slate-200 text-blue-700 shadow-sm -mb-px"
+              : "bg-slate-50 border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          🏢 مخزون المعرض
+          <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+            activeTab === "showroom" ? "bg-blue-100 text-blue-700" : "bg-slate-200 text-slate-500"
+          }`}>{showroomCount}</span>
+        </Link>
+        <Link
+          href={tabHref("customers")}
+          className={`inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold rounded-t-xl border border-b-0 transition-colors ${
+            activeTab === "customers"
+              ? "bg-white border-slate-200 text-amber-700 shadow-sm -mb-px"
+              : "bg-slate-50 border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          👤 مخزون العملاء
+          <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+            activeTab === "customers" ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-500"
+          }`}>{customersCount}</span>
+        </Link>
+      </div>
+
       {/* ── جدول المخزون ── */}
       <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
         <table className="premium-table">
@@ -377,8 +434,8 @@ export default async function InventoryPage({
             </tr>
           </thead>
           <tbody>
-            {filteredInventory.length > 0 ? (
-              filteredInventory.map((item) => {
+            {tabInventory.length > 0 ? (
+              tabInventory.map((item) => {
                 const avatarColor = getAvatarColor(item.owner_name);
                 const initials = getInitials(item.owner_name);
                 const isUsed = normalize(item.condition_label).includes("مستعمل");
@@ -573,7 +630,11 @@ export default async function InventoryPage({
             ) : (
               <tr>
                 <td colSpan={7}>
-                  <div className="empty-state">لا توجد نتائج مطابقة للفلاتر الحالية.</div>
+                  <div className="empty-state">
+                    {activeTab === "customers"
+                      ? "لا توجد سيارات عملاء (برسم البيع أو استبدال) مطابقة للفلاتر."
+                      : "لا توجد سيارات معرض مطابقة للفلاتر الحالية."}
+                  </div>
                 </td>
               </tr>
             )}
