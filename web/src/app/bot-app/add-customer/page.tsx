@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
+import { PALESTINE_CITIES, CAR_MAKES } from "@/lib/suggestions";
 
 type TelegramWebApp = {
   initDataUnsafe: { user?: { id?: number } };
@@ -657,8 +658,13 @@ export default function AddCustomerMiniApp() {
             </div>
             <div style={field}>
               <span style={label}>المدينة / العنوان</span>
-              <input type="text" placeholder="اختياري" value={address}
-                onChange={(e) => setAddress(e.target.value)} style={input} />
+              <input type="text" placeholder="ابحث..." value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                list="cities-list" autoComplete="off"
+                style={input} />
+              <datalist id="cities-list">
+                {PALESTINE_CITIES.map(c => <option key={c} value={c} />)}
+              </datalist>
             </div>
           </div>
 
@@ -817,8 +823,15 @@ export default function AddCustomerMiniApp() {
 
             {rcUseCustom && (
               <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8 }}>
-                <input type="text" placeholder="نوع السيارة (مثال: كيا بيكانتو)" value={rcCustomType}
-                  onChange={e => setRcCustomType(e.target.value)} style={input} />
+                <div>
+                  <input type="text" placeholder="نوع السيارة..." value={rcCustomType}
+                    onChange={e => setRcCustomType(e.target.value)}
+                    list="cars-list" autoComplete="off"
+                    style={input} />
+                  <datalist id="cars-list">
+                    {CAR_MAKES.map(c => <option key={c} value={c} />)}
+                  </datalist>
+                </div>
                 <input type="number" placeholder="الموديل (سنة)" value={rcCustomYear}
                   onChange={e => setRcCustomYear(e.target.value)} style={{ ...input, direction: "ltr" }} />
               </div>

@@ -28,6 +28,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { StatusPill } from "@/components/status-pill";
 import { VoiceRecorder } from "@/components/voice-recorder";
 import type { CustomerAttachmentItem, CustomerDetail, CustomerFormOptions } from "@/lib/data";
+import { PALESTINE_CITIES, CAR_MAKES } from "@/lib/suggestions";
 import { formatCurrency, formatDate, toDateTimeLocalValue } from "@/lib/format";
 import { PAYMENT_METHODS, needsPaymentMethod } from "@/lib/payment";
 
@@ -1635,7 +1636,12 @@ export function CustomerProfileContent({
                   {detailUseCustomRequest && (
                     <div className="space-y-3 mb-3">
                       <div className="grid gap-2 md:grid-cols-[2fr_1fr]">
-                        <input value={detailCustomType} onChange={(e) => setDetailCustomType(e.target.value)} className="legacy-input" placeholder="نوع السيارة (طلب خاص)" />
+                        <div>
+                          <input value={detailCustomType} onChange={(e) => setDetailCustomType(e.target.value)} className="legacy-input" placeholder="ابحث أو اكتب نوع السيارة..." list="cars-datalist" autoComplete="off" />
+                          <datalist id="cars-datalist">
+                            {CAR_MAKES.map(c => <option key={c} value={c} />)}
+                          </datalist>
+                        </div>
                         <input value={detailCustomYear} onChange={(e) => setDetailCustomYear(e.target.value)} className="legacy-input" placeholder="الموديل (سنة)" />
                       </div>
                       {detailCustomType.trim() && (
@@ -2309,9 +2315,14 @@ export function CustomerProfileContent({
                   value={editBasicAddress}
                   onChange={(e) => setEditBasicAddress(e.target.value)}
                   className="legacy-input"
-                  placeholder="المدينة أو الحي..."
+                  placeholder="ابحث أو اكتب..."
+                  list="cities-datalist"
+                  autoComplete="off"
                   disabled={editBasicPending}
                 />
+                <datalist id="cities-datalist">
+                  {PALESTINE_CITIES.map(c => <option key={c} value={c} />)}
+                </datalist>
               </label>
 
               {editBasicError && (
