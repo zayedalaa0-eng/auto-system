@@ -1,9 +1,9 @@
 // formatter يدوي 100% deterministic لتجنّب hydration mismatch نهائياً
 // (Intl.DateTimeFormat ينتج نتائج مختلفة بين Node.js والمتصفح)
 
-const currencyFormatter = new Intl.NumberFormat("en-US", {
+const currencyFormatter = new Intl.NumberFormat("ar-IL", {
   style: "currency",
-  currency: "USD",
+  currency: "ILS",
   maximumFractionDigits: 0,
 });
 
