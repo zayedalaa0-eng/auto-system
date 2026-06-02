@@ -707,7 +707,22 @@ export default function CustomerPage() {
                           <span style={{fontSize:11,color:hint}}>{fmtDate(log.created_at)}</span>
                         </div>
                         <div style={{fontSize:12,color:hint,marginBottom:2}}>بواسطة: {log.actor_name}</div>
-                        {log.details&&<div style={{fontSize:13,color:text,lineHeight:1.5,wordBreak:"break-word"}}>{log.details}</div>}
+                        {log.details&&(
+                          <div style={{
+                            display:"block",
+                            marginTop:6,
+                            padding:"6px 10px",
+                            fontSize:13,
+                            fontWeight:500,
+                            color:isDark?"#93c5fd":"#1e40af",
+                            lineHeight:1.65,
+                            whiteSpace:"pre-wrap",
+                            wordBreak:"break-word",
+                            background:isDark?"rgba(59,130,246,0.1)":"#eff6ff",
+                            borderRight:`3px solid ${isDark?"#3b82f6":"#3b82f6"}`,
+                            borderRadius:"0 6px 6px 0",
+                          }}>{log.details}</div>
+                        )}
 
                         {/* التسجيلات الصوتية المرتبطة */}
                         {voices.length>0&&(
@@ -772,7 +787,16 @@ export default function CustomerPage() {
                                 <span style={{fontSize:12,fontWeight:700,color:text}}>{translateAction(log.action)}</span>
                                 <span style={{fontSize:10,color:hint,flexShrink:0}}>{fmtDateShort(log.created_at)}</span>
                               </div>
-                              {log.details&&<div style={{fontSize:11,color:hint,wordBreak:"break-word"}}>{log.details}</div>}
+                              {log.details&&(
+                                <div style={{
+                                  display:"block",marginTop:4,padding:"4px 8px",
+                                  fontSize:11,fontWeight:500,
+                                  color:isDark?"#93c5fd":"#1e40af",
+                                  lineHeight:1.6,whiteSpace:"pre-wrap",wordBreak:"break-word",
+                                  background:isDark?"rgba(59,130,246,0.1)":"#eff6ff",
+                                  borderRight:"2px solid #3b82f6",borderRadius:"0 4px 4px 0",
+                                }}>{log.details}</div>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -976,6 +1000,8 @@ export default function CustomerPage() {
                         {label:"السنة",val:tiYear},
                         {label:"السعر (₪)",val:tiPrice?Number(tiPrice).toLocaleString("ar"):null},
                         {label:"الممشى (كم)",val:tiMileage?Number(tiMileage).toLocaleString("ar"):null},
+                        {label:"ناقل الحركة",val:(data.tradeIn?.metadata as Record<string,unknown>|null)?.gear as string|null ?? null},
+                        {label:"نوع الوقود",val:(data.tradeIn?.metadata as Record<string,unknown>|null)?.fuel as string|null ?? null},
                         {label:"المواصفات",val:tiSpecs},
                         {label:"الفحص",val:tiInspection},
                         {label:"الرخصة",val:tiLicense?tiLicense.slice(0,10):null},
@@ -1034,15 +1060,6 @@ export default function CustomerPage() {
                     </div>
                   </div>
                 )}
-
-                {/* ── مرفقات داخل بطاقة السيارة ── */}
-                <AttachmentsSection
-                  imgs={imgAttachments} files={fileAttachments}
-                  albumIndex={albumIndex} showAlbum={showAlbum}
-                  setAlbumIndex={setAlbumIndex} setShowAlbum={setShowAlbum}
-                  show={showAttachments} toggle={()=>setShowAttachments(a=>!a)}
-                  border={border} cardBg={cardBg} text={text} hint={hint} isDark={isDark} sky={sky}
-                />
 
                 {/* ── رفع صور السيارة ── */}
                 {canEdit&&(
@@ -1142,6 +1159,15 @@ export default function CustomerPage() {
                 )}
               </div>
             )}
+
+            {/* ── مجلد الصور — دائماً مرئي داخل قسم سيارة العميل ── */}
+            <AttachmentsSection
+              imgs={imgAttachments} files={fileAttachments}
+              albumIndex={albumIndex} showAlbum={showAlbum}
+              setAlbumIndex={setAlbumIndex} setShowAlbum={setShowAlbum}
+              show={showAttachments} toggle={()=>setShowAttachments(a=>!a)}
+              border={border} cardBg={cardBg} text={text} hint={hint} isDark={isDark} sky={sky}
+            />
           </div>
         )}
 

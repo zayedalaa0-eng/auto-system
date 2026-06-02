@@ -1268,10 +1268,18 @@ select {
 }
 
 .profile-timeline__body {
-  margin-top: 4px;
-  font-size: 0.82rem;
-  color: #64748b;
-  line-height: 1.6;
+  display: block;
+  margin-top: 6px;
+  padding: 6px 10px;
+  font-size: 0.83rem;
+  font-weight: 500;
+  color: #1e40af;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #eff6ff;
+  border-right: 3px solid #3b82f6;
+  border-radius: 0 6px 6px 0;
 }
 
 /* ── Attachments panel ── */
