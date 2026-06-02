@@ -12,7 +12,9 @@ type TelegramWebApp = {
   };
   colorScheme?: "light" | "dark";
 };
-declare global { interface Window { Telegram?: { WebApp: TelegramWebApp } } }
+// نستخدم any لتجنب تعارض declare global مع الملفات الأخرى
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const getTelegramApp = (): TelegramWebApp | undefined => (window as any).Telegram?.WebApp;
 
 type Customer = {
   id: string;
@@ -64,7 +66,7 @@ export default function SearchPage() {
 
   /* ── Init ──────────────────────────────────────────────────── */
   useEffect(() => {
-    const app = window.Telegram?.WebApp;
+    const app = getTelegramApp();
     if (app) { app.ready(); app.expand(); setTg(app); setIsDark(app.colorScheme === "dark"); }
     const p = new URLSearchParams(window.location.search);
     const chat = p.get("chat_id") ?? String(app?.initDataUnsafe?.user?.id ?? "");
