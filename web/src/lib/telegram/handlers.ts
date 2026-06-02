@@ -375,6 +375,15 @@ async function handleMy(chatId: number, user: BotUser) {
 
 async function handleSearchPrompt(chatId: number, user: BotUser) {
   await setSession(String(chatId), "idle");
+  const appUrl = getAppUrl();
+  if (appUrl) {
+    return sendMessageWithWebApp(
+      chatId,
+      "🔍 <b>البحث عن عميل</b>\n\nاضغط الزر أدناه لفتح صفحة البحث التفاعلية:",
+      [{ text: "🔍 فتح صفحة البحث", url: `${appUrl}/bot-app/search?chat_id=${chatId}` }],
+    );
+  }
+  // fallback نصي إذا لم يكن APP_URL مضبوطاً
   return sendMessage(chatId, "🔍 <b>بحث عن عميل</b>\n\nاكتب الاسم أو رقم الهاتف:", {
     replyMarkup: forceReplySearch(),
   });
