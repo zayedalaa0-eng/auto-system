@@ -515,6 +515,15 @@ async function handleInventory(chatId: number, user: BotUser) {
     }
   }
 
+  // زر إضافة سيارة للمخزون عبر المني-آب
+  const appUrl = getAppUrl();
+  if (appUrl) {
+    return sendMessageWithWebApp(
+      chatId,
+      text.trimEnd(),
+      [{ text: "➕ إضافة سيارة للمخزون", url: `${appUrl}/bot-app/inventory-add?chat_id=${chatId}` }],
+    );
+  }
   return sendMessage(chatId, text.trimEnd(), { replyMarkup: menuKeyboard(user) });
 }
 

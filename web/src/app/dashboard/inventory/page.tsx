@@ -294,7 +294,13 @@ export default async function InventoryPage({
     <div className="legacy-grid gap-6">
       {/* ── شريط الفلاتر الذكي ── */}
       <div className="legacy-card">
-        <div className="flex items-center justify-end mb-3">
+        <div className="flex items-center justify-end gap-2 mb-3">
+          <Link
+            href="/dashboard/inventory/new"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+          >
+            + إضافة سيارة
+          </Link>
           <InventoryImportBtn
             isGeneralManager={ctx.isGeneralManager}
             branchId={ctx.branchId}
