@@ -760,6 +760,10 @@ export function CustomerProfileContent({
   const [allowEditClosed, setAllowEditClosed] = useState(false);
   const [isPendingNewCycle, setIsPendingNewCycle] = useState(false);
   const [isPendingReminder, startReminderTransition] = useTransition();
+  // نافذة معاينة الإشعار قبل الإرسال
+  const [showNotifyModal, setShowNotifyModal]   = useState(false);
+  const [notifyMessage,   setNotifyMessage]     = useState("");
+  const [notifySending,   setNotifySending]     = useState(false);
   // accordion الدورات السابقة — Set من IDs المفتوحة
   const [openAncestorIds, setOpenAncestorIds] = useState<Set<string>>(new Set());
 
@@ -778,12 +782,22 @@ export function CustomerProfileContent({
   }
 
   function handleSendReminder() {
+    // افتح نافذة المعاينة مع النص الافتراضي قابلاً للتعديل
+    setNotifyMessage(
+      `يرجى مراجعة ملف العميل ${customer.full_name} (${customer.phone}) — الحالة الحالية: ${currentStatus}`
+    );
+    setShowNotifyModal(true);
+  }
+
+  function handleConfirmNotify() {
+    if (!notifyMessage.trim()) return;
+    setNotifySending(true);
     const fd = new FormData();
     fd.append("recipient_user_id", customer.assigned_user_id ?? "");
     fd.append("recipient_branch_id", customer.branch_id ?? "");
     fd.append("recipient_label", customer.assigned_user_name ?? "");
     fd.append("title", `متابعة ملف: ${customer.full_name}`);
-    fd.append("message", `يرجى مراجعة ملف العميل ${customer.full_name} (${customer.phone}) — الحالة الحالية: ${currentStatus}`);
+    fd.append("message", notifyMessage.trim());
     fd.append("redirect_to", returnPath ?? "/dashboard/management");
     startReminderTransition(async () => {
       try {
@@ -792,6 +806,9 @@ export function CustomerProfileContent({
         const digest = (e as { digest?: string } | null)?.digest;
         if (digest && digest.startsWith("NEXT_REDIRECT")) return;
         console.error("[sendReminder] failed:", e);
+      } finally {
+        setNotifySending(false);
+        setShowNotifyModal(false);
       }
     });
   }
@@ -1966,17 +1983,17 @@ export function CustomerProfileContent({
             </button>
           )}
 
-          {/* زر إشعار الموظف عبر تيليغرام — يظهر فقط إذا كان هناك موظف مسؤول */}
-          {customer.assigned_user_id && (
+          {/* زر إشعار الموظف عبر تيليغرام — لجميع موظفي الفرع */}
+          {(customer.assigned_user_id || customer.branch_id) && (
             <button
               type="button"
               onClick={handleSendReminder}
               disabled={isPendingReminder}
               className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
-              title={`إشعار ${customer.assigned_user_name ?? "الموظف"} عبر تيليغرام`}
+              title={`إشعار ${customer.assigned_user_name ?? "الموظف المسؤول"} عبر تيليغرام`}
             >
               <Send className="h-4 w-4" />
-              {isPendingReminder ? "جاري الإرسال..." : "إشعار الموظف"}
+              {isPendingReminder ? "جاري الإرسال..." : `إشعار ${customer.assigned_user_name ?? "الموظف"}`}
             </button>
           )}
 
@@ -2002,6 +2019,67 @@ export function CustomerProfileContent({
         </div>
 
       </form>
+
+      {/* ── نافذة معاينة الإشعار قبل الإرسال ── */}
+      {showNotifyModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowNotifyModal(false); }}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-6 flex flex-col gap-4">
+            {/* رأس النافذة */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-800">📤 إشعار الموظف</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  سيُرسل إلى: <strong>{customer.assigned_user_name ?? "الموظف المسؤول"}</strong> عبر تيليغرام
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNotifyModal(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* نص الرسالة قابل للتعديل */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-slate-600">نص الرسالة</label>
+              <textarea
+                value={notifyMessage}
+                onChange={(e) => setNotifyMessage(e.target.value)}
+                rows={5}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 resize-none focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100"
+                dir="rtl"
+                placeholder="اكتب نص الرسالة..."
+              />
+              <p className="text-xs text-slate-400">{notifyMessage.length} حرف</p>
+            </div>
+
+            {/* أزرار */}
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowNotifyModal(false)}
+                className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmNotify}
+                disabled={!notifyMessage.trim() || notifySending || isPendingReminder}
+                className="flex-[2] inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 py-2.5 text-sm font-bold text-white transition hover:bg-sky-700 disabled:opacity-60"
+              >
+                <Send className="h-4 w-4" />
+                {notifySending ? "جاري الإرسال..." : "إرسال الإشعار"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Album overlay ── */}
       {showAlbum && imageAttachments.length > 0 && (
