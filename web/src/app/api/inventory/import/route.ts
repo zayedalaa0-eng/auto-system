@@ -18,6 +18,8 @@ type ImportRow = {
   availability_status: string;
   specs: string | null;
   inspection: string | null;
+  owner_name: string | null;
+  notes: string | null;
 };
 
 type ImportResult = {
@@ -48,14 +50,16 @@ function normalizeStatus(raw: string | null): string {
 }
 
 function parseRow(raw: Record<string, unknown>): ImportRow | { error: string } {
-  const model = parseStr(raw["اسم السيارة / الموديل *"] ?? raw["اسم السيارة"]);
+  // يقبل أسماء الأعمدة القديمة والجديدة معاً للتوافق
+  const model = parseStr(
+    raw["اسم السيارة *"] ?? raw["اسم السيارة / الموديل *"] ?? raw["اسم السيارة"]
+  );
   if (!model) return { error: "اسم السيارة مطلوب" };
 
-  const yearRaw = parseNum(raw["سنة الصنع *"] ?? raw["سنة الصنع"]);
-  const color = parseStr(raw["اللون *"] ?? raw["اللون"]);
+  const yearRaw = parseNum(raw["سنة الصنع"] ?? raw["سنة الصنع *"]);
+  const color = parseStr(raw["اللون"] ?? raw["اللون *"]);
   const chassisNo = parseStr(raw["رقم الشاصي *"] ?? raw["رقم الشاصي"]);
 
-  if (!color) return { error: `سيارة "${model}": اللون مطلوب` };
   if (!chassisNo) return { error: `سيارة "${model}": رقم الشاصي مطلوب` };
   if (yearRaw && (yearRaw < 1980 || yearRaw > 2030)) {
     return { error: `سيارة "${model}": سنة الصنع ${yearRaw} غير صحيحة` };
@@ -64,7 +68,7 @@ function parseRow(raw: Record<string, unknown>): ImportRow | { error: string } {
   return {
     model,
     production_year: yearRaw,
-    color,
+    color: color ?? null,
     chassis_no: chassisNo,
     price: parseNum(raw["السعر (شيكل)"] ?? raw["السعر"]),
     mileage: parseNum(raw["العداد (كم)"] ?? raw["العداد"]),
@@ -73,8 +77,10 @@ function parseRow(raw: Record<string, unknown>): ImportRow | { error: string } {
     condition_label: parseStr(raw["حالة السيارة"]),
     deal_type: parseStr(raw["نوع الصفقة"]),
     availability_status: normalizeStatus(parseStr(raw["حالة التوفر"])),
-    specs: parseStr(raw["مواصفات إضافية"] ?? raw["المواصفات"]),
-    inspection: parseStr(raw["ملاحظات الفحص"] ?? raw["الفحص"]),
+    specs: parseStr(raw["المواصفات"] ?? raw["مواصفات إضافية"]),
+    inspection: parseStr(raw["الفحص"] ?? raw["ملاحظات الفحص"]),
+    owner_name: parseStr(raw["اسم المالك"]),
+    notes: parseStr(raw["ملاحظات"]),
   };
 }
 
@@ -172,9 +178,10 @@ export async function POST(request: Request) {
       condition_label: parsed.condition_label ?? "مستعملة",
       deal_type: parsed.deal_type ?? "شراء",
       availability_status: parsed.availability_status,
-      owner_name: ownerName,
+      owner_name: parsed.owner_name ?? ownerName,
       specs: parsed.specs,
       inspection: parsed.inspection,
+      notes: parsed.notes,
     };
 
     try {
