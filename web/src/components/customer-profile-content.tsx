@@ -763,9 +763,10 @@ export function CustomerProfileContent({
   const [isPendingNewCycle, setIsPendingNewCycle] = useState(false);
   const [isPendingReminder, startReminderTransition] = useTransition();
   // نافذة معاينة الإشعار قبل الإرسال
-  const [showNotifyModal, setShowNotifyModal]   = useState(false);
-  const [notifyMessage,   setNotifyMessage]     = useState("");
-  const [notifySending,   setNotifySending]     = useState(false);
+  const [showNotifyModal,   setShowNotifyModal]   = useState(false);
+  const [notifyMessage,     setNotifyMessage]     = useState("");
+  const [notifySending,     setNotifySending]     = useState(false);
+  const [notifyTarget,      setNotifyTarget]      = useState<"employee" | "manager">("employee");
   // accordion الدورات السابقة — Set من IDs المفتوحة
   const [openAncestorIds, setOpenAncestorIds] = useState<Set<string>>(new Set());
 
@@ -784,7 +785,7 @@ export function CustomerProfileContent({
   }
 
   function handleSendReminder() {
-    // افتح نافذة المعاينة مع النص الافتراضي قابلاً للتعديل
+    setNotifyTarget("employee");
     setNotifyMessage(
       `يرجى مراجعة ملف العميل ${customer.full_name} (${customer.phone}) — الحالة الحالية: ${currentStatus}`
     );
@@ -792,7 +793,7 @@ export function CustomerProfileContent({
   }
 
   function handleNotifyManager() {
-    // الموظف يُشعر مدير الفرع بدلاً من الموظف المسؤول
+    setNotifyTarget("manager");
     setNotifyMessage(
       `يرجى مراجعة ملف العميل ${customer.full_name} (${customer.phone}) — الحالة الحالية: ${currentStatus}`
     );
@@ -803,14 +804,15 @@ export function CustomerProfileContent({
     if (!notifyMessage.trim()) return;
     setNotifySending(true);
     const fd = new FormData();
-    if (isManager) {
-      // المدير → يُشعر الموظف المسؤول
-      fd.append("recipient_user_id", customer.assigned_user_id ?? "");
-      fd.append("recipient_label", customer.assigned_user_name ?? "الموظف المسؤول");
-    } else {
-      // الموظف → يُشعر مدير الفرع عبر branch_id
+    if (notifyTarget === "manager") {
+      // إشعار مدير الفرع
       fd.append("recipient_branch_id", customer.branch_id ?? "");
       fd.append("recipient_label", "مدير الفرع");
+    } else {
+      // إشعار الموظف المسؤول
+      fd.append("recipient_user_id", customer.assigned_user_id ?? "");
+      fd.append("recipient_branch_id", customer.branch_id ?? "");
+      fd.append("recipient_label", customer.assigned_user_name ?? "الموظف المسؤول");
     }
     fd.append("title", `متابعة ملف: ${customer.full_name}`);
     fd.append("message", notifyMessage.trim());
@@ -2018,17 +2020,35 @@ export function CustomerProfileContent({
                   {isPendingReminder ? "جاري الإرسال..." : `إشعار ${customer.assigned_user_name ?? "الموظف"}`}
                 </button>
               )
-            : customer.branch_id && (
-                <button
-                  type="button"
-                  onClick={handleNotifyManager}
-                  disabled={isPendingReminder}
-                  className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
-                  title="إشعار مدير الفرع عبر تيليغرام"
-                >
-                  <Send className="h-4 w-4" />
-                  {isPendingReminder ? "جاري الإرسال..." : "إشعار المدير"}
-                </button>
+            : (
+                <>
+                  {/* إشعار الموظف المسؤول (صاحب الملف) */}
+                  {customer.assigned_user_id && (
+                    <button
+                      type="button"
+                      onClick={handleSendReminder}
+                      disabled={isPendingReminder}
+                      className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
+                      title={`إشعار ${customer.assigned_user_name ?? "الموظف المسؤول"} عبر تيليغرام`}
+                    >
+                      <Send className="h-4 w-4" />
+                      {isPendingReminder ? "جاري الإرسال..." : `إشعار ${customer.assigned_user_name ?? "الموظف"}`}
+                    </button>
+                  )}
+                  {/* إشعار مدير الفرع */}
+                  {customer.branch_id && (
+                    <button
+                      type="button"
+                      onClick={handleNotifyManager}
+                      disabled={isPendingReminder}
+                      className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-60"
+                      title="إشعار مدير الفرع عبر تيليغرام"
+                    >
+                      <Send className="h-4 w-4" />
+                      {isPendingReminder ? "جاري الإرسال..." : "إشعار المدير"}
+                    </button>
+                  )}
+                </>
               )
           }
 
@@ -2067,7 +2087,7 @@ export function CustomerProfileContent({
               <div>
                 <h3 className="text-base font-bold text-slate-800">📤 إشعار الموظف</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  سيُرسل إلى: <strong>{isManager ? (customer.assigned_user_name ?? "الموظف المسؤول") : "مدير الفرع"}</strong> عبر تيليغرام
+                  سيُرسل إلى: <strong>{notifyTarget === "manager" ? "مدير الفرع" : (customer.assigned_user_name ?? "الموظف المسؤول")}</strong> عبر تيليغرام
                 </p>
               </div>
               <button
