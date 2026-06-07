@@ -126,9 +126,10 @@ export default async function InventoryPage({
   const activeTab = tab === "customers" ? "customers" : "showroom";
   const ctx = await getInventoryFilterContext();
   const branchFilter = parseBranchFilter(branch);
+  // معرض المعلم: يجلب دائماً سيارات المعارض الأخرى (برسم البيع) — الفلتر يتحكم بما يُعرض
   const includeCross =
     ctx.isMuallimBranch && !ctx.isGeneralManager
-      ? branchFilter.mode === "all" || branchFilter.mode === "cross" || normalize(cross) === "1"
+      ? true
       : normalize(cross) === "1";
   const inventory = await getInventoryDirectory(120, { includeCrossBranchForMuallim: includeCross });
 
@@ -181,7 +182,11 @@ export default async function InventoryPage({
       if (branchFilter.mode === "legacy-branch" && branchFilter.branchName && itemBranch !== branchFilter.branchName)
         return false;
     } else if (ctx.isMuallimBranch) {
-      if (branchFilter.mode === "self") {
+      if (branchFilter.mode === "all") {
+        // كل المعارض: سيارات المعلم كلها + سيارات المعارض الأخرى برسم البيع فقط
+        const isOtherBranch = itemBranch !== normalize(ctx.branchName);
+        if (isOtherBranch && normalize(item.deal_type) !== "برسم البيع") return false;
+      } else if (branchFilter.mode === "self") {
         if (itemBranch !== normalize(ctx.branchName)) return false;
       } else if (branchFilter.mode === "cross") {
         if (!branchFilter.branchName || itemBranch !== branchFilter.branchName) return false;
