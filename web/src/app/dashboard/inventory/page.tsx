@@ -239,13 +239,7 @@ export default async function InventoryPage({
   // ── تقسيم المخزون: معرض vs عملاء ───────────────────────────────────────────
   const isCustomerCar = (item: InventoryItem) => {
     const deal = normalize(item.deal_type);
-    // سيارات من معارض أخرى → دائماً مخزون المعرض (وليس العملاء)
-    if (ctx.isMuallimBranch && !ctx.isGeneralManager) {
-      const itemBranch = normalize(item.branch_name);
-      const ownBranch  = normalize(ctx.branchName);
-      if (itemBranch && ownBranch && itemBranch !== ownBranch) return false;
-    }
-    // سيارة برسم البيع: المالك شخص وليس معرضاً
+    // سيارة برسم البيع: المالك شخص وليس معرضاً (ينطبق على كل المعارض)
     if (deal.includes("برسم البيع")) {
       const ownerNorm = normalize(item.owner_name);
       return !branchNamesSet.has(ownerNorm);
