@@ -636,6 +636,15 @@ export default async function InventoryPage({
                         >
                           ✏️
                         </Link>
+                        {/* حذف */}
+                        <Link
+                          href={`/dashboard/inventory/${item.id}/edit?delete=1`}
+                          className="legacy-table-btn legacy-table-btn--sm"
+                          style={{ color: "#dc2626" }}
+                          title="حذف السيارة"
+                        >
+                          🗑
+                        </Link>
                       </div>
                     </td>
                   </tr>

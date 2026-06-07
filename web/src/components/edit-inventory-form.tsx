@@ -38,11 +38,27 @@ export function EditInventoryForm({ car, branches }: { car: Car; branches: Branc
   const [inspection, setInspection] = useState(car.inspection ?? "");
   const [notes,      setNotes]      = useState(car.notes ?? "");
 
-  const [saving, setSaving] = useState(false);
-  const [error,  setError]  = useState<string | null>(null);
+  const [saving,   setSaving]   = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
 
   const consign = dealType === "برسم البيع";
   const isValid = model.trim() && chassis.trim() && (!consign || ownerName.trim());
+
+  async function handleDelete() {
+    setDeleting(true); setError(null);
+    const res = await fetch("/api/inventory/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: car.id }),
+    });
+    const json = await res.json();
+    setDeleting(false);
+    if (!res.ok) { setError(json.error ?? "تعذر الحذف"); setConfirmDel(false); return; }
+    router.push("/dashboard/inventory");
+    router.refresh();
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -120,6 +136,30 @@ export function EditInventoryForm({ car, branches }: { car: Car; branches: Branc
         <button type="submit" disabled={saving || !isValid} className="legacy-btn legacy-btn-primary flex-[2]">
           {saving ? "⏳ جاري الحفظ..." : "💾 حفظ التعديلات"}
         </button>
+      </div>
+
+      {/* زر الحذف */}
+      <div className="border-t border-slate-200 pt-4 mt-2">
+        {!confirmDel ? (
+          <button type="button" onClick={() => setConfirmDel(true)}
+            className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 w-full justify-center">
+            🗑 حذف هذه السيارة نهائياً
+          </button>
+        ) : (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 flex flex-col gap-3">
+            <p className="text-sm font-bold text-rose-800 text-center">
+              ⚠️ هل أنت متأكد من حذف <strong>{car.model}</strong> نهائياً؟ لا يمكن التراجع.
+            </p>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setConfirmDel(false)}
+                className="legacy-btn border flex-1">إلغاء</button>
+              <button type="button" onClick={handleDelete} disabled={deleting}
+                className="flex-[2] rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700 transition disabled:opacity-60">
+                {deleting ? "⏳ جاري الحذف..." : "🗑 تأكيد الحذف"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </form>
   );
