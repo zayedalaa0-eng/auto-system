@@ -235,9 +235,25 @@ export default async function InventoryPage({
   });
 
   // ── تقسيم المخزون: معرض vs عملاء ───────────────────────────────────────────
-  const CUSTOMER_DEALS = ["برسم البيع", "استبدال"];
-  const isCustomerCar = (item: InventoryItem) =>
-    CUSTOMER_DEALS.some((d) => normalize(item.deal_type).includes(normalize(d)));
+  const isCustomerCar = (item: InventoryItem) => {
+    const deal = normalize(item.deal_type);
+    // سيارات من معارض أخرى → دائماً مخزون المعرض (وليس العملاء)
+    if (ctx.isMuallimBranch && !ctx.isGeneralManager) {
+      const itemBranch = normalize(item.branch_name);
+      const ownBranch  = normalize(ctx.branchName);
+      if (itemBranch && ownBranch && itemBranch !== ownBranch) return false;
+    }
+    // سيارة برسم البيع: المالك شخص وليس معرضاً
+    if (deal.includes("برسم البيع")) {
+      const ownerNorm = normalize(item.owner_name);
+      return !branchNamesSet.has(ownerNorm);
+    }
+    // استبدال: فقط إذا جاءت من عميل (source_customer_id)
+    if (deal.includes("استبدال")) {
+      return Boolean(item.source_customer_id);
+    }
+    return false;
+  };
 
   const tabInventory = filteredInventory.filter((item) =>
     activeTab === "customers" ? isCustomerCar(item) : !isCustomerCar(item),
