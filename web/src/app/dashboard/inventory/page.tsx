@@ -194,7 +194,9 @@ export default async function InventoryPage({
       } else if (branchFilter.mode === "legacy-branch") {
         if (branchFilter.branchName && itemBranch !== branchFilter.branchName) return false;
       } else if (branchFilter.mode === "default") {
-        if (itemBranch !== normalize(ctx.branchName)) return false;
+        // معرض المعلم: الافتراضي = كل المعارض (سياراتهم + برسم البيع من غيرهم)
+        const isOtherBranch = itemBranch !== normalize(ctx.branchName);
+        if (isOtherBranch && normalize(item.deal_type) !== "برسم البيع") return false;
       }
     } else {
       if (itemBranch !== normalize(ctx.branchName)) return false;
