@@ -3301,7 +3301,7 @@ export async function updateCustomerBasicInfoAction(formData: FormData) {
   return { ok: true };
 }
 
-// ─── حذف عميل — المدير العام ومدير المعرض فقط ───────────────────────────────
+// ─── حذف عميل — جميع الموظفين (ضمن فرعهم) ──────────────────────────────────
 export async function deleteCustomerAction(formData: FormData) {
   if (!hasSupabaseEnv()) return;
 
@@ -3310,15 +3310,12 @@ export async function deleteCustomerAction(formData: FormData) {
   if (!profile) redirect("/login");
 
   const capabilities = getRoleCapabilities(profile.role);
-  if (!capabilities.isManager) {
-    redirect("/dashboard/customers");
-  }
 
   const customerId = getText(formData, "customer_id");
   const returnTo = getNullableText(formData, "return_to") ?? "/dashboard/customers";
   if (!customerId) return;
 
-  // ── فحص ملكية الفرع: مدير المعرض يحذف عملاء فرعه فقط ──
+  // ── فحص ملكية الفرع: الجميع يحذف فقط عملاء فرعه ──
   if (!capabilities.isGeneralManager) {
     const { data: target } = await supabase
       .from("customers")

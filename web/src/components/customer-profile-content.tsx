@@ -791,13 +791,27 @@ export function CustomerProfileContent({
     setShowNotifyModal(true);
   }
 
+  function handleNotifyManager() {
+    // الموظف يُشعر مدير الفرع بدلاً من الموظف المسؤول
+    setNotifyMessage(
+      `يرجى مراجعة ملف العميل ${customer.full_name} (${customer.phone}) — الحالة الحالية: ${currentStatus}`
+    );
+    setShowNotifyModal(true);
+  }
+
   function handleConfirmNotify() {
     if (!notifyMessage.trim()) return;
     setNotifySending(true);
     const fd = new FormData();
-    fd.append("recipient_user_id", customer.assigned_user_id ?? "");
-    fd.append("recipient_branch_id", customer.branch_id ?? "");
-    fd.append("recipient_label", customer.assigned_user_name ?? "");
+    if (isManager) {
+      // المدير → يُشعر الموظف المسؤول
+      fd.append("recipient_user_id", customer.assigned_user_id ?? "");
+      fd.append("recipient_label", customer.assigned_user_name ?? "الموظف المسؤول");
+    } else {
+      // الموظف → يُشعر مدير الفرع عبر branch_id
+      fd.append("recipient_branch_id", customer.branch_id ?? "");
+      fd.append("recipient_label", "مدير الفرع");
+    }
     fd.append("title", `متابعة ملف: ${customer.full_name}`);
     fd.append("message", notifyMessage.trim());
     fd.append("redirect_to", returnPath ?? "/dashboard/management");
@@ -1968,41 +1982,55 @@ export function CustomerProfileContent({
             <Link href={returnPath} className="profile-footer-cancel">إغلاق</Link>
           )}
 
-          {/* زر حذف العميل — للمديرين فقط */}
-          {isManager && (
-            <button
-              type="button"
-              onClick={() => requireConfirm({
-                title: "حذف ملف العميل نهائياً",
-                description: `سيتم حذف ملف "${customer.full_name}" وجميع بياناته بشكل نهائي ولا يمكن التراجع عن هذا الإجراء.`,
-                confirmLabel: "حذف نهائي",
-                variant: "danger",
-                onConfirm: () => {
-                  const fd = new FormData();
-                  fd.append("customer_id", customer.id);
-                  fd.append("return_to", returnPath ?? "/dashboard/customers");
-                  deleteCustomerAction(fd);
-                },
-              })}
-              className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
-            >
-              🗑 حذف العميل
-            </button>
-          )}
+          {/* زر حذف العميل — للجميع */}
+          <button
+            type="button"
+            onClick={() => requireConfirm({
+              title: "حذف ملف العميل نهائياً",
+              description: `سيتم حذف ملف "${customer.full_name}" وجميع بياناته بشكل نهائي ولا يمكن التراجع عن هذا الإجراء.`,
+              confirmLabel: "حذف نهائي",
+              variant: "danger",
+              onConfirm: () => {
+                const fd = new FormData();
+                fd.append("customer_id", customer.id);
+                fd.append("return_to", returnPath ?? "/dashboard/customers");
+                deleteCustomerAction(fd);
+              },
+            })}
+            className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+          >
+            🗑 حذف العميل
+          </button>
 
-          {/* زر إشعار الموظف عبر تيليغرام — لجميع موظفي الفرع */}
-          {(customer.assigned_user_id || customer.branch_id) && (
-            <button
-              type="button"
-              onClick={handleSendReminder}
-              disabled={isPendingReminder}
-              className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
-              title={`إشعار ${customer.assigned_user_name ?? "الموظف المسؤول"} عبر تيليغرام`}
-            >
-              <Send className="h-4 w-4" />
-              {isPendingReminder ? "جاري الإرسال..." : `إشعار ${customer.assigned_user_name ?? "الموظف"}`}
-            </button>
-          )}
+          {/* زر الإشعار:
+              المدير → يُشعر الموظف المسؤول
+              الموظف → يُشعر مدير الفرع */}
+          {isManager
+            ? (customer.assigned_user_id || customer.branch_id) && (
+                <button
+                  type="button"
+                  onClick={handleSendReminder}
+                  disabled={isPendingReminder}
+                  className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
+                  title={`إشعار ${customer.assigned_user_name ?? "الموظف المسؤول"} عبر تيليغرام`}
+                >
+                  <Send className="h-4 w-4" />
+                  {isPendingReminder ? "جاري الإرسال..." : `إشعار ${customer.assigned_user_name ?? "الموظف"}`}
+                </button>
+              )
+            : customer.branch_id && (
+                <button
+                  type="button"
+                  onClick={handleNotifyManager}
+                  disabled={isPendingReminder}
+                  className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
+                  title="إشعار مدير الفرع عبر تيليغرام"
+                >
+                  <Send className="h-4 w-4" />
+                  {isPendingReminder ? "جاري الإرسال..." : "إشعار المدير"}
+                </button>
+              )
+          }
 
           {showNewCycleForm ? (
             <div className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-700">
@@ -2039,7 +2067,7 @@ export function CustomerProfileContent({
               <div>
                 <h3 className="text-base font-bold text-slate-800">📤 إشعار الموظف</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  سيُرسل إلى: <strong>{customer.assigned_user_name ?? "الموظف المسؤول"}</strong> عبر تيليغرام
+                  سيُرسل إلى: <strong>{isManager ? (customer.assigned_user_name ?? "الموظف المسؤول") : "مدير الفرع"}</strong> عبر تيليغرام
                 </p>
               </div>
               <button
