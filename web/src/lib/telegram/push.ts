@@ -34,10 +34,8 @@ async function buildCustomerLogSection(customerId: string, limit = 5): Promise<s
     let section = `\n${SEP}\n📋 <b>السجل التاريخي</b>\n`;
     for (const log of logs) {
       const label = ACTION_LABELS[log.action] ?? log.action;
-      const date = new Date(log.created_at).toLocaleDateString("ar-SA", {
-        day: "numeric", month: "short", year: "numeric",
-        timeZone: "Asia/Jerusalem",
-      });
+      const ld = new Date(log.created_at);
+      const date = `${String(ld.getUTCDate()).padStart(2,"0")}/${String(ld.getUTCMonth()+1).padStart(2,"0")}/${ld.getUTCFullYear()}`;
       section += `\n🔹 <b>${escapeHtml(label)}</b> — ${date}\n`;
       section += `   👤 ${escapeHtml(log.actor_name ?? "—")}\n`;
       if (log.details) {
@@ -170,7 +168,7 @@ function buildNewCustomerText(params: {
 
   if (nextFollowUp) {
     try {
-      const d = new Date(nextFollowUp).toLocaleDateString("ar-EG", { day: "numeric", month: "long", year: "numeric" });
+      const d = (() => { const _d = new Date(nextFollowUp); return `${String(_d.getUTCDate()).padStart(2,"0")}/${String(_d.getUTCMonth()+1).padStart(2,"0")}/${_d.getUTCFullYear()}`; })();
       text += `📅 <b>موعد المتابعة:</b> ${d}\n`;
     } catch { /* ignore */ }
   }
@@ -203,7 +201,7 @@ function buildUpdateCustomerText(params: {
 
   if (nextFollowUp) {
     try {
-      const d = new Date(nextFollowUp).toLocaleDateString("ar-EG", { day: "numeric", month: "long", year: "numeric" });
+      const d = (() => { const _d = new Date(nextFollowUp); return `${String(_d.getUTCDate()).padStart(2,"0")}/${String(_d.getUTCMonth()+1).padStart(2,"0")}/${_d.getUTCFullYear()}`; })();
       text += `📅 <b>موعد المتابعة:</b> ${d}\n`;
     } catch { /* ignore */ }
   }

@@ -164,7 +164,7 @@ function WhatsAppEvalButton({ item }: { item: PendingEvaluationItem }) {
           item.trade_in_model      ? `▪️ *الموديل:* ${item.trade_in_model}`                                    : null,
           item.trade_in_color      ? `▪️ *اللون:* ${item.trade_in_color}`                                      : null,
           item.trade_in_year       ? `▪️ *سنة الصنع:* ${item.trade_in_year}`                                   : null,
-          item.trade_in_mileage    ? `▪️ *الممشى:* ${item.trade_in_mileage.toLocaleString("ar-SA")} كم`        : null,
+          item.trade_in_mileage    ? `▪️ *الممشى:* ${item.trade_in_mileage.toLocaleString("en-US")} كم`        : null,
           item.trade_in_chassis    ? `▪️ *رقم الشاصي:* ${item.trade_in_chassis}`                              : null,
           item.trade_in_inspection ? `▪️ *تقرير الفحص:* ${item.trade_in_inspection}`                         : null,
           item.trade_in_status     ? `▪️ *الحالة الراهنة:* ${item.trade_in_status}`                           : null,

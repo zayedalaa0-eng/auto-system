@@ -98,12 +98,18 @@ function isVoice(att: Attachment) {
   return att.file_category === "voice_note" || (att.mime_type?.startsWith("audio/") ?? false);
 }
 function fmtDate(iso: string) {
-  const d = new Date(iso);
-  return `${d.toLocaleDateString("ar-SA",{year:"numeric",month:"short",day:"numeric"})} ${d.toLocaleTimeString("ar-SA",{hour:"2-digit",minute:"2-digit"})}`;
+  const local = new Date(new Date(iso).getTime() + 3*60*60*1000);
+  const d = String(local.getUTCDate()).padStart(2,"0");
+  const m = String(local.getUTCMonth()+1).padStart(2,"0");
+  const y = local.getUTCFullYear();
+  const h = String(local.getUTCHours()).padStart(2,"0");
+  const min = String(local.getUTCMinutes()).padStart(2,"0");
+  return `${d}/${m}/${y} ${h}:${min}`;
 }
 function fmtDateShort(iso: string | null | undefined) {
   if (!iso) return null;
-  return new Date(iso).toLocaleDateString("ar-SA",{year:"numeric",month:"short",day:"numeric"});
+  const d = new Date(iso);
+  return `${String(d.getUTCDate()).padStart(2,"0")}/${String(d.getUTCMonth()+1).padStart(2,"0")}/${d.getUTCFullYear()}`;
 }
 function toDateInput(iso: string | null) { return iso ? iso.slice(0,10) : ""; }
 function initials(name: string) {

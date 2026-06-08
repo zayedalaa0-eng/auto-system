@@ -45,7 +45,8 @@ function opBadge(op: string | null): string {
 
 function fmtDate(iso: string | null | undefined): string | null {
   if (!iso) return null;
-  return new Date(iso).toLocaleDateString("ar-SA", { month: "short", day: "numeric" });
+  const d = new Date(iso);
+  return `${String(d.getUTCDate()).padStart(2,"0")}/${String(d.getUTCMonth()+1).padStart(2,"0")}`;
 }
 
 export default function SearchPage() {

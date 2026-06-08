@@ -216,10 +216,8 @@ export async function POST(req: NextRequest) {
     const noteText = (note ?? "").trim();
     if (noteText) {
       const existing = (customer.notes ?? "").trim();
-      const timestamp = new Date().toLocaleDateString("ar-SA", {
-        year: "numeric", month: "numeric", day: "numeric",
-        hour: "2-digit", minute: "2-digit",
-      });
+      const _now = new Date(Date.now() + 3*60*60*1000);
+      const timestamp = `${String(_now.getUTCDate()).padStart(2,"0")}/${String(_now.getUTCMonth()+1).padStart(2,"0")}/${_now.getUTCFullYear()} ${String(_now.getUTCHours()).padStart(2,"0")}:${String(_now.getUTCMinutes()).padStart(2,"0")}`;
       const prefix = `[${timestamp} - ${user.full_name}]: `;
       updates.notes = existing ? `${existing}\n${prefix}${noteText}` : `${prefix}${noteText}`;
     }

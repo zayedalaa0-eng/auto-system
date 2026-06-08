@@ -54,12 +54,14 @@ type AgendaData = {
 function formatDate(iso: string | null): string {
   if (!iso) return "";
   try {
-    return new Date(iso).toLocaleDateString("ar-EG", { day: "numeric", month: "short", year: "numeric" });
+    const d = new Date(iso);
+    return `${String(d.getUTCDate()).padStart(2,"0")}/${String(d.getUTCMonth()+1).padStart(2,"0")}/${d.getUTCFullYear()}`;
   } catch { return ""; }
 }
 
 function arabicDate(): string {
-  return new Date().toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const now = new Date(Date.now() + 3*60*60*1000);
+  return `${String(now.getUTCDate()).padStart(2,"0")}/${String(now.getUTCMonth()+1).padStart(2,"0")}/${now.getUTCFullYear()}`;
 }
 
 /* ── Section Component ────────────────────────────────────────────────────── */

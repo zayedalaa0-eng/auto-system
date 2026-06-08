@@ -52,7 +52,7 @@ const categoryLabel: Record<string, string> = {
 
 function fmt(n: number | null | undefined) {
   if (n == null) return "—";
-  return n.toLocaleString("ar-EG");
+  return n.toLocaleString("en-US");
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────

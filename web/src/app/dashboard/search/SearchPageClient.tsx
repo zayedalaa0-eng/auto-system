@@ -53,7 +53,8 @@ function initials(name: string) {
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return null;
-  return new Date(iso).toLocaleDateString("ar-SA", { month: "short", day: "numeric" });
+  const d = new Date(iso);
+  return `${String(d.getUTCDate()).padStart(2,"0")}/${String(d.getUTCMonth()+1).padStart(2,"0")}`;
 }
 
 function isOverdue(iso: string | null | undefined) {

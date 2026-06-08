@@ -40,13 +40,8 @@ async function handler(req: NextRequest) {
     );
     const todayRiyadhEnd = new Date(todayRiyadhStart.getTime() + 24 * 60 * 60 * 1000 - 1);
 
-    const dateLabel = now.toLocaleDateString("ar-SA", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      timeZone: "Asia/Riyadh",
-    });
+    const nowLocal = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+    const dateLabel = `${String(nowLocal.getUTCDate()).padStart(2,"0")}/${String(nowLocal.getUTCMonth()+1).padStart(2,"0")}/${nowLocal.getUTCFullYear()}`;
 
     // ── جلب المدراء ───────────────────────────────────────────────────────
     const { data: managers } = await admin
@@ -192,11 +187,9 @@ async function handler(req: NextRequest) {
         msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
         msg += `📞 <b>متابعات اليوم (${followupsToday.length})</b>\n`;
         followupsToday.slice(0, 10).forEach((c, i) => {
-          const timeStr = new Date(c.next_follow_up_at!).toLocaleTimeString("ar-SA", {
-            hour: "2-digit",
-            minute: "2-digit",
-            timeZone: "Asia/Riyadh",
-          });
+          const _td = new Date(c.next_follow_up_at!);
+          const _tl = new Date(_td.getTime() + 3*60*60*1000);
+          const timeStr = `${String(_tl.getUTCHours()).padStart(2,"0")}:${String(_tl.getUTCMinutes()).padStart(2,"0")}`;
           const display = c.nickname ? `${c.full_name} (${c.nickname})` : c.full_name;
           msg += `${i + 1}. ${display} — ${timeStr}\n`;
           msg += `   📱 ${c.phone}\n`;
@@ -324,11 +317,9 @@ async function handler(req: NextRequest) {
         msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
         msg += `📞 <b>متابعاتك لليوم (${myFollowupsToday.length})</b>\n`;
         myFollowupsToday.slice(0, 10).forEach((c, i) => {
-          const timeStr = new Date(c.next_follow_up_at!).toLocaleTimeString("ar-SA", {
-            hour: "2-digit",
-            minute: "2-digit",
-            timeZone: "Asia/Riyadh",
-          });
+          const _td = new Date(c.next_follow_up_at!);
+          const _tl = new Date(_td.getTime() + 3*60*60*1000);
+          const timeStr = `${String(_tl.getUTCHours()).padStart(2,"0")}:${String(_tl.getUTCMinutes()).padStart(2,"0")}`;
           const display = c.nickname ? `${c.full_name} (${c.nickname})` : c.full_name;
           msg += `${i + 1}. ${display} — ${timeStr}\n`;
           msg += `   📱 ${c.phone}\n`;
@@ -360,11 +351,9 @@ async function handler(req: NextRequest) {
         msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
         msg += `🔔 <b>تذكيراتك المعلقة (${myReminders.length})</b>\n`;
         myReminders.slice(0, 5).forEach((r, i) => {
-          const timeStr = new Date(r.due_at).toLocaleTimeString("ar-SA", {
-            hour: "2-digit",
-            minute: "2-digit",
-            timeZone: "Asia/Riyadh",
-          });
+          const _rd = new Date(r.due_at);
+          const _rl = new Date(_rd.getTime() + 3*60*60*1000);
+          const timeStr = `${String(_rl.getUTCHours()).padStart(2,"0")}:${String(_rl.getUTCMinutes()).padStart(2,"0")}`;
           msg += `${i + 1}. ${r.title ?? r.message ?? "تذكير"} — ${timeStr}\n`;
         });
         if (myReminders.length > 5)

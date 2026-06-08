@@ -63,12 +63,12 @@ export type TelegramUpdate = {
   };
 };
 
-function arabicDate() {
-  return new Date().toLocaleDateString("ar-EG", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+function todayLabel() {
+  const now = new Date(Date.now() + 3 * 60 * 60 * 1000); // UTC+3
+  const d = String(now.getUTCDate()).padStart(2, "0");
+  const m = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const y = now.getUTCFullYear();
+  return `${d}/${m}/${y}`;
 }
 
 function roleLabel(user: BotUser) {
@@ -192,7 +192,11 @@ async function handleCancel(chatId: number, user: BotUser) {
 function formatFollowupDate(iso: string | null): string {
   if (!iso) return "";
   try {
-    return new Date(iso).toLocaleDateString("ar-EG", { day: "numeric", month: "short" });
+    const d = new Date(iso);
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    const mon = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const yr  = d.getUTCFullYear();
+    return `${day}/${mon}/${yr}`;
   } catch { return ""; }
 }
 
@@ -211,7 +215,7 @@ async function handleToday(chatId: number, user: BotUser) {
     );
   }
 
-  const date = arabicDate();
+  const date = todayLabel();
 
   const scopeNote = user.capabilities.isGeneralManager
     ? "<i>النطاق: جميع الفروع</i>"
@@ -591,7 +595,7 @@ async function handleReport(chatId: number, user: BotUser) {
   }
 
   await sendChatAction(chatId);
-  const date = arabicDate();
+  const date = todayLabel();
 
   if (user.capabilities.isGeneralManager) {
     const report = await getGeneralManagerReport();

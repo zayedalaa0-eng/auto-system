@@ -89,15 +89,13 @@ function normalizeRequestedCarsText(value: string | null | undefined) {
  * يُعيد التاريخ والوقت بالعربية بتوقيت غرينيتش+3 (توقيت السعودية/فلسطين)
  */
 function arabicDateTime(date: Date = new Date()): string {
-  return date.toLocaleString("ar-SA", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Riyadh",
-  });
+  const local = new Date(date.getTime() + 3 * 60 * 60 * 1000);
+  const d = String(local.getUTCDate()).padStart(2, "0");
+  const m = String(local.getUTCMonth() + 1).padStart(2, "0");
+  const y = local.getUTCFullYear();
+  const h = String(local.getUTCHours()).padStart(2, "0");
+  const min = String(local.getUTCMinutes()).padStart(2, "0");
+  return `${d}/${m}/${y} ${h}:${min}`;
 }
 
 /**

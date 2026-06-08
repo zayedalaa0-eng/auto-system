@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
         item.production_year ? `موديل:${item.production_year}` : null,
         item.chassis_no ? `شاصي:${item.chassis_no}` : null,
         item.color ?? null,
-        item.price ? `${Number(item.price).toLocaleString("ar-EG")} ₪` : null,
+        item.price ? `${Number(item.price).toLocaleString("en-US")} ₪` : null,
       ]
         .filter(Boolean)
         .join(" — "),

@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
 
   // إشعار Telegram للموظف المُدخِل
   if (staffChatId) {
-    const priceFormatted = price.toLocaleString("ar-EG");
+    const priceFormatted = price.toLocaleString("en-US");
     const SEP = "━━━━━━━━━━━━━━━━━━━━";
     const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
 
@@ -162,7 +162,7 @@ export async function POST(req: NextRequest) {
     await admin.from("notifications").insert({
       recipient_user_id: custRow.assigned_user_id,
       title: "تم تقييم السيارة",
-      message: `سيارة العميل ${custRow.full_name ?? ""} قُيِّمت بـ ${price.toLocaleString("ar-EG")} شيقل — بواسطة ${user.full_name}`,
+      message: `سيارة العميل ${custRow.full_name ?? ""} قُيِّمت بـ ${price.toLocaleString("en-US")} شيقل — بواسطة ${user.full_name}`,
       notification_type: "evaluation",
       status: "unread",
       created_by_user_id: user.id,
