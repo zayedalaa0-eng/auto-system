@@ -5,6 +5,52 @@ import { sendMediaGroup, sendPhoto, sendVoice, escapeHtml, getAppUrl } from "./a
 const SEP = "━━━━━━━━━━━━━━━━━━━━";
 const token = () => process.env.TELEGRAM_BOT_TOKEN ?? "";
 
+// ─── أسماء الأحداث بالعربية ──────────────────────────────────────────────────
+const ACTION_LABELS: Record<string, string> = {
+  customer_created:         "إنشاء ملف",
+  customer_updated:         "تحديث البيانات",
+  status_updated:           "تغيير الحالة",
+  manual_reminder_created:  "إضافة تذكير",
+  trade_in_saved:           "حفظ سيارة العميل",
+  trade_in_archived:        "إيقاف سيارة العميل",
+  sell_inventory_created:   "ربط مخزون",
+  customer_reactivated:     "فتح دورة جديدة",
+  customer_deleted:         "حذف الملف",
+};
+
+/** جلب آخر سجلات العميل وتنسيقها */
+async function buildCustomerLogSection(customerId: string, limit = 5): Promise<string> {
+  try {
+    const admin = createAdminClient();
+    const { data: logs } = await admin
+      .from("customer_logs")
+      .select("action, details, actor_name, created_at")
+      .eq("customer_id", customerId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (!logs || logs.length === 0) return "";
+
+    let section = `\n${SEP}\n📋 <b>السجل التاريخي</b>\n`;
+    for (const log of logs) {
+      const label = ACTION_LABELS[log.action] ?? log.action;
+      const date = new Date(log.created_at).toLocaleDateString("ar-SA", {
+        day: "numeric", month: "short", year: "numeric",
+        timeZone: "Asia/Jerusalem",
+      });
+      section += `\n🔹 <b>${escapeHtml(label)}</b> — ${date}\n`;
+      section += `   👤 ${escapeHtml(log.actor_name ?? "—")}\n`;
+      if (log.details) {
+        const details = escapeHtml(log.details).slice(0, 120);
+        section += `   📝 ${details}${log.details.length > 120 ? "…" : ""}\n`;
+      }
+    }
+    return section;
+  } catch {
+    return "";
+  }
+}
+
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 /** جلب قائمة المديرين المستحقين لتلقي الإشعار */
@@ -178,7 +224,8 @@ export async function pushNewCustomerToManagers(params: {
 }) {
   try {
     const managers = await getManagerRecipients(params.branchId);
-    const text = buildNewCustomerText(params);
+    const logSection = await buildCustomerLogSection(params.customerId, 3);
+    const text = buildNewCustomerText(params) + logSection;
     await Promise.allSettled(
       managers.map((m) => sendWithButtons(m.chat_id, text, params.customerId)),
     );
@@ -201,7 +248,8 @@ export async function pushCustomerUpdateToManagers(params: {
 }) {
   try {
     const managers = await getManagerRecipients(params.branchId);
-    const text = buildUpdateCustomerText(params);
+    const logSection = await buildCustomerLogSection(params.customerId, 5);
+    const text = buildUpdateCustomerText(params) + logSection;
     await Promise.allSettled(
       managers.map((m) => sendWithButtons(m.chat_id, text, params.customerId)),
     );
