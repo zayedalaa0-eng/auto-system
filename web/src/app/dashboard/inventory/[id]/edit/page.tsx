@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { redirect, notFound } from "next/navigation";
+import { Suspense } from "react";
 import Link from "next/link";
 import { EditInventoryForm } from "@/components/edit-inventory-form";
 import { createClient } from "@/lib/supabase/server";
@@ -33,7 +34,9 @@ export default async function EditInventoryPage({ params }: { params: Promise<{ 
         <Link href="/dashboard/inventory" className="legacy-btn border text-sm">← رجوع</Link>
         <h1 className="text-xl font-bold text-slate-800">تعديل سيارة: {car.model}</h1>
       </div>
-      <EditInventoryForm car={car} branches={branches ?? []} />
+      <Suspense fallback={<div className="legacy-card text-center text-slate-400 py-8">جارٍ التحميل...</div>}>
+        <EditInventoryForm car={car} branches={branches ?? []} />
+      </Suspense>
     </div>
   );
 }

@@ -456,13 +456,12 @@ export default async function InventoryPage({
         <table className="premium-table">
           <thead className="legacy-standard-head">
             <tr>
-              <th style={{ width: "170px" }}>المالك / الشاصي</th>
-              <th style={{ width: "140px" }}>السيارة</th>
-              <th style={{ width: "100px" }}>السعر</th>
-              <th style={{ width: "130px" }}>الصفقة والحالة</th>
-              <th style={{ width: "110px" }}>اللون والعداد</th>
-              <th style={{ width: "110px" }}>القير / الوقود</th>
-              <th style={{ width: "86px" }}>الإجراءات</th>
+              <th style={{ width: "180px" }}>المالك / الشاصي</th>
+              <th style={{ width: "150px" }}>السيارة</th>
+              <th style={{ width: "150px" }}>السعر والصفقة</th>
+              <th style={{ width: "120px" }}>اللون والعداد</th>
+              <th style={{ width: "120px" }}>القير / الوقود</th>
+              <th style={{ width: "96px" }}>الإجراءات</th>
             </tr>
           </thead>
           <tbody>
@@ -542,19 +541,33 @@ export default async function InventoryPage({
                       </div>
                     </td>
 
-                    {/* السعر */}
+                    {/* السعر والصفقة والحالة — مدمجة */}
                     <td>
-                      <InventoryPriceCellNew itemId={item.id} price={item.price ?? null} />
-                    </td>
-
-                    {/* الصفقة والحالة */}
-                    <td>
-                      {item.deal_type ? (
-                        <div className={getDealBadgeClass(item.deal_type)}>{item.deal_type}</div>
-                      ) : <span className="text-xs text-slate-400">—</span>}
-                      {item.availability_status ? (
-                        <div className="mt-1.5 text-xs text-slate-500">{item.availability_status}</div>
-                      ) : null}
+                      <div className="flex flex-col gap-1.5">
+                        {/* السعر */}
+                        <div className="flex items-center gap-1.5">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 flex-shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                          <InventoryPriceCellNew itemId={item.id} price={item.price ?? null} />
+                        </div>
+                        {/* الصفقة */}
+                        <div className="flex items-center gap-1.5">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 flex-shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                          {item.deal_type ? (
+                            <span className={getDealBadgeClass(item.deal_type)}>{item.deal_type}</span>
+                          ) : <span className="text-xs text-slate-400">—</span>}
+                        </div>
+                        {/* الحالة */}
+                        {item.availability_status ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className={`h-2 w-2 rounded-full flex-shrink-0 ${
+                              normalize(item.availability_status) === "متوفرة" ? "bg-emerald-500" :
+                              normalize(item.availability_status) === "محجوزة" ? "bg-amber-400" :
+                              normalize(item.availability_status) === "مباعة"  ? "bg-slate-400" : "bg-rose-400"
+                            }`} />
+                            <span className="text-xs font-medium text-slate-500">{item.availability_status}</span>
+                          </div>
+                        ) : null}
+                      </div>
                     </td>
 
                     {/* اللون والعداد */}
@@ -645,7 +658,7 @@ export default async function InventoryPage({
               })
             ) : (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={6}>
                   <div className="empty-state">
                     {activeTab === "customers"
                       ? "لا توجد سيارات عملاء (برسم البيع أو استبدال) مطابقة للفلاتر."
@@ -792,6 +805,24 @@ export default async function InventoryPage({
                   .map((item) => ({ url: item.url, fileName: item.fileName }))}
                 carLabel={selectedCar.model}
               />
+            </div>
+
+            {/* ══ أزرار التعديل والحذف ══ */}
+            <div className="flex gap-3 px-4 pb-4 pt-2">
+              <Link
+                href={`/dashboard/inventory/${selectedCar.id}/edit`}
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                تعديل بيانات السيارة
+              </Link>
+              <Link
+                href={`/dashboard/inventory/${selectedCar.id}/edit?delete=1`}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-5 py-3 text-sm font-bold text-rose-700 transition hover:bg-rose-100"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                حذف
+              </Link>
             </div>
 
           </div>

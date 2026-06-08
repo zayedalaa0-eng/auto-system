@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CAR_MAKES } from "@/lib/suggestions";
 
 type Branch = { id: string; name: string };
@@ -42,6 +42,15 @@ export function EditInventoryForm({ car, branches }: { car: Car; branches: Branc
   const [deleting, setDeleting] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const [error,    setError]    = useState<string | null>(null);
+
+  const searchParams = useSearchParams();
+  // فتح تأكيد الحذف تلقائياً عند ?delete=1
+  useEffect(() => {
+    if (searchParams.get("delete") === "1") {
+      setConfirmDel(true);
+      setTimeout(() => document.querySelector("[data-delete-section]")?.scrollIntoView({ behavior: "smooth", block: "center" }), 200);
+    }
+  }, [searchParams]);
 
   const consign = dealType === "برسم البيع";
   const isValid = model.trim() && chassis.trim() && (!consign || ownerName.trim());
@@ -139,7 +148,7 @@ export function EditInventoryForm({ car, branches }: { car: Car; branches: Branc
       </div>
 
       {/* زر الحذف */}
-      <div className="border-t border-slate-200 pt-4 mt-2">
+      <div className="border-t border-slate-200 pt-4 mt-2" data-delete-section>
         {!confirmDel ? (
           <button type="button" onClick={() => setConfirmDel(true)}
             className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 w-full justify-center">
