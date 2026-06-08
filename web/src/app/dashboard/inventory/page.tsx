@@ -6,8 +6,7 @@ import { CustomerModalShell } from "@/components/customer-modal-shell";
 import { InventoryExportBtn } from "@/components/inventory-export-btn";
 import { InventoryFilterBar } from "@/components/inventory-filter-bar";
 import { InventoryImportBtn } from "@/components/inventory-import-btn";
-import { InventoryChassisCell, InventoryColorMileageCell, InventoryGearFuelCell } from "@/components/inventory-inline-edit";
-import { InventoryPriceCell } from "@/components/inventory-price-cell";
+import { EditableCell, InventoryPriceCellNew, GEARBOX_OPTIONS, FUEL_OPTIONS, STATUS_OPTIONS, DEAL_OPTIONS } from "@/components/inventory-inline-edit";
 import { InventorySaveViewBtn } from "@/components/inventory-save-view-btn";
 import { sendQuickReminderAction } from "@/app/dashboard/actions";
 import { getInventoryCarAttachments, getInventoryDirectory, getInventoryFilterContext } from "@/lib/data";
@@ -59,7 +58,7 @@ const COLOR_MAP: Array<[string[], string, string]> = [
   [["اسود", "سوداء", "black"],              "#1c1917", "#1c1917"],
   [["رمادي", "رصاصي", "grey", "gray"],      "#9ca3af", "#9ca3af"],
   [["فضي", "سيلفر", "silver"],              "#cbd5e1", "#94a3b8"],
-  [["احمر", "حمراء", "red"],               "#ef4444", "#ef4444"],
+  [["احمر", "حمراء", "فيراني", "red"],      "#ef4444", "#ef4444"],
   [["كحلي", "نيلي", "navy"],               "#1e3a8a", "#1e3a8a"],
   [["ازرق", "زرقاء", "blue"],              "#3b82f6", "#3b82f6"],
   [["سماوي", "تركواز", "تيفاني", "tiffany", "turquoise"], "#2dd4bf", "#2dd4bf"],
@@ -482,26 +481,23 @@ export default async function InventoryPage({
                     {/* المالك / الشاصي */}
                     <td>
                       <div className="flex items-center gap-2">
-                        <span
-                          className="flex-shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white select-none"
-                          style={{ backgroundColor: avatarColor }}
-                          title={item.owner_name ?? undefined}
-                        >
+                        <span className="flex-shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white select-none"
+                          style={{ backgroundColor: avatarColor }} title={item.owner_name ?? undefined}>
                           {initials}
                         </span>
-                        <div className="min-w-0">
-                          <div className="font-bold text-slate-900 leading-tight truncate">
-                            {item.owner_name ?? "—"}
-                          </div>
+                        <div className="min-w-0 flex flex-col gap-0.5">
+                          <EditableCell itemId={item.id} field="owner_name"
+                            value={item.owner_name ?? null} placeholder="اسم المالك"
+                            emptyLabel="أضف المالك" displayClass="font-bold text-slate-900 text-sm" />
                           {ownerIsPerson && item.branch_name ? (
-                            <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-500 truncate">
-                              <Building2 className="h-3 w-3 flex-shrink-0 text-slate-400" />
-                              {item.branch_name}
+                            <div className="flex items-center gap-1 text-xs text-slate-500">
+                              <Building2 className="h-3 w-3 flex-shrink-0 text-slate-400" />{item.branch_name}
                             </div>
                           ) : null}
-                          <div className="mt-0.5 font-mono text-xs text-slate-400 tracking-wide">
-                            <InventoryChassisCell itemId={item.id} chassis={item.chassis_no ?? null} />
-                          </div>
+                          <EditableCell itemId={item.id} field="chassis_no"
+                            value={item.chassis_no ?? null} dir="ltr"
+                            placeholder="رقم الشاصي" emptyLabel="أضف رقم الشاصي"
+                            displayClass="font-mono text-xs text-slate-400 tracking-wide" />
                         </div>
                       </div>
                     </td>
@@ -510,55 +506,60 @@ export default async function InventoryPage({
                     <td>
                       <div className="flex items-start gap-1.5">
                         <Car className="h-4 w-4 flex-shrink-0 text-slate-300 mt-0.5" />
-                        <div className="min-w-0">
-                          <div className="font-bold text-blue-700 leading-tight truncate">
-                            {item.model || "—"}
-                          </div>
-                          {item.production_year ? (
-                            <div className="mt-0.5 text-xs text-slate-400">{item.production_year}</div>
-                          ) : null}
-                          {item.condition_label ? (
-                            <div className="mt-1 inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
-                              {item.condition_label}
-                            </div>
-                          ) : null}
+                        <div className="min-w-0 flex flex-col gap-0.5">
+                          <EditableCell itemId={item.id} field="model"
+                            value={item.model ?? null} placeholder="نوع السيارة"
+                            displayClass="font-bold text-blue-700 text-sm" />
+                          <EditableCell itemId={item.id} field="production_year"
+                            value={item.production_year ?? null} type="number" dir="ltr"
+                            placeholder="سنة الصنع" emptyLabel="أضف السنة"
+                            displayClass="text-xs text-slate-400" />
                         </div>
                       </div>
                     </td>
 
                     {/* السعر */}
                     <td>
-                      <InventoryPriceCell itemId={item.id} price={item.price ?? null} />
+                      <InventoryPriceCellNew itemId={item.id} price={item.price ?? null} />
                     </td>
 
                     {/* الصفقة والحالة */}
                     <td>
-                      {item.deal_type ? (
-                        <div className={getDealBadgeClass(item.deal_type)}>{item.deal_type}</div>
-                      ) : (
-                        <span className="text-xs text-slate-400">—</span>
-                      )}
-                      {item.availability_status ? (
-                        <div className="mt-1.5 text-xs text-slate-500">{item.availability_status}</div>
-                      ) : null}
+                      <div className="flex flex-col gap-1">
+                        <EditableCell itemId={item.id} field="deal_type"
+                          value={item.deal_type ?? null} type="select" options={DEAL_OPTIONS}
+                          placeholder="نوع الصفقة" emptyLabel="أضف الصفقة" />
+                        <EditableCell itemId={item.id} field="availability_status"
+                          value={item.availability_status ?? null} type="select" options={STATUS_OPTIONS}
+                          placeholder="حالة التوفر" displayClass="text-xs text-slate-500" />
+                      </div>
                     </td>
 
                     {/* اللون والعداد */}
                     <td>
-                      <InventoryColorMileageCell
-                        itemId={item.id}
-                        color={item.color ?? null}
-                        mileage={typeof item.mileage === "number" ? item.mileage : null}
-                      />
+                      <div className="flex flex-col gap-1">
+                        <EditableCell itemId={item.id} field="color"
+                          value={item.color ?? null} placeholder="اللون"
+                          emptyLabel="أضف اللون" />
+                        <EditableCell itemId={item.id} field="mileage"
+                          value={typeof item.mileage === "number" ? item.mileage : null}
+                          type="number" dir="ltr" placeholder="العداد (كم)"
+                          emptyLabel="أضف العداد" suffix="كم"
+                          displayClass="text-xs text-slate-500" />
+                      </div>
                     </td>
 
                     {/* القير والوقود */}
                     <td>
-                      <InventoryGearFuelCell
-                        itemId={item.id}
-                        gearbox={item.gearbox ?? null}
-                        fuelType={item.fuel_type ?? null}
-                      />
+                      <div className="flex flex-col gap-1">
+                        <EditableCell itemId={item.id} field="gearbox"
+                          value={item.gearbox ?? null} type="select" options={GEARBOX_OPTIONS}
+                          placeholder="ناقل الحركة" emptyLabel="أضف القير" />
+                        <EditableCell itemId={item.id} field="fuel_type"
+                          value={item.fuel_type ?? null} type="select" options={FUEL_OPTIONS}
+                          placeholder="نوع الوقود" emptyLabel="أضف الوقود"
+                          displayClass="text-xs text-slate-500" />
+                      </div>
                     </td>
 
                     {/* الإجراءات */}
