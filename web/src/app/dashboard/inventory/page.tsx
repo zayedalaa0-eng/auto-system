@@ -6,7 +6,7 @@ import { CustomerModalShell } from "@/components/customer-modal-shell";
 import { InventoryExportBtn } from "@/components/inventory-export-btn";
 import { InventoryFilterBar } from "@/components/inventory-filter-bar";
 import { InventoryImportBtn } from "@/components/inventory-import-btn";
-import { EditableCell, InventoryPriceCellNew, GEARBOX_OPTIONS, FUEL_OPTIONS, STATUS_OPTIONS, DEAL_OPTIONS } from "@/components/inventory-inline-edit";
+import { EditableCell, InventoryPriceCellNew, GEARBOX_OPTIONS, FUEL_OPTIONS } from "@/components/inventory-inline-edit";
 import { InventorySaveViewBtn } from "@/components/inventory-save-view-btn";
 import { sendQuickReminderAction } from "@/app/dashboard/actions";
 import { getInventoryCarAttachments, getInventoryDirectory, getInventoryFilterContext } from "@/lib/data";
@@ -485,19 +485,19 @@ export default async function InventoryPage({
                           style={{ backgroundColor: avatarColor }} title={item.owner_name ?? undefined}>
                           {initials}
                         </span>
-                        <div className="min-w-0 flex flex-col gap-0.5">
-                          <EditableCell itemId={item.id} field="owner_name"
-                            value={item.owner_name ?? null} placeholder="اسم المالك"
-                            emptyLabel="أضف المالك" displayClass="font-bold text-slate-900 text-sm" />
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-900 leading-tight truncate">{item.owner_name ?? "—"}</div>
                           {ownerIsPerson && item.branch_name ? (
-                            <div className="flex items-center gap-1 text-xs text-slate-500">
+                            <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-500 truncate">
                               <Building2 className="h-3 w-3 flex-shrink-0 text-slate-400" />{item.branch_name}
                             </div>
                           ) : null}
-                          <EditableCell itemId={item.id} field="chassis_no"
-                            value={item.chassis_no ?? null} dir="ltr"
-                            placeholder="رقم الشاصي" emptyLabel="أضف رقم الشاصي"
-                            displayClass="font-mono text-xs text-slate-400 tracking-wide" />
+                          <div className="mt-0.5">
+                            <EditableCell itemId={item.id} field="chassis_no"
+                              value={item.chassis_no ?? null} dir="ltr"
+                              placeholder="رقم الشاصي" emptyLabel="أضف رقم الشاصي"
+                              displayClass="font-mono text-xs text-slate-400 tracking-wide" />
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -506,14 +506,10 @@ export default async function InventoryPage({
                     <td>
                       <div className="flex items-start gap-1.5">
                         <Car className="h-4 w-4 flex-shrink-0 text-slate-300 mt-0.5" />
-                        <div className="min-w-0 flex flex-col gap-0.5">
-                          <EditableCell itemId={item.id} field="model"
-                            value={item.model ?? null} placeholder="نوع السيارة"
-                            displayClass="font-bold text-blue-700 text-sm" />
-                          <EditableCell itemId={item.id} field="production_year"
-                            value={item.production_year ?? null} type="number" dir="ltr"
-                            placeholder="سنة الصنع" emptyLabel="أضف السنة"
-                            displayClass="text-xs text-slate-400" />
+                        <div className="min-w-0">
+                          <div className="font-bold text-blue-700 leading-tight truncate">{item.model || "—"}</div>
+                          {item.production_year ? <div className="mt-0.5 text-xs text-slate-400">{item.production_year}</div> : null}
+                          {item.condition_label ? <div className="mt-1 inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{item.condition_label}</div> : null}
                         </div>
                       </div>
                     </td>
@@ -525,14 +521,12 @@ export default async function InventoryPage({
 
                     {/* الصفقة والحالة */}
                     <td>
-                      <div className="flex flex-col gap-1">
-                        <EditableCell itemId={item.id} field="deal_type"
-                          value={item.deal_type ?? null} type="select" options={DEAL_OPTIONS}
-                          placeholder="نوع الصفقة" emptyLabel="أضف الصفقة" />
-                        <EditableCell itemId={item.id} field="availability_status"
-                          value={item.availability_status ?? null} type="select" options={STATUS_OPTIONS}
-                          placeholder="حالة التوفر" displayClass="text-xs text-slate-500" />
-                      </div>
+                      {item.deal_type ? (
+                        <div className={getDealBadgeClass(item.deal_type)}>{item.deal_type}</div>
+                      ) : <span className="text-xs text-slate-400">—</span>}
+                      {item.availability_status ? (
+                        <div className="mt-1.5 text-xs text-slate-500">{item.availability_status}</div>
+                      ) : null}
                     </td>
 
                     {/* اللون والعداد */}
