@@ -3,8 +3,10 @@ import { Building2, Car, Fuel, GaugeCircle, Send, Settings2 } from "lucide-react
 
 import { CarGalleryViewer } from "@/components/car-gallery-viewer";
 import { CustomerModalShell } from "@/components/customer-modal-shell";
+import { InventoryExportBtn } from "@/components/inventory-export-btn";
 import { InventoryFilterBar } from "@/components/inventory-filter-bar";
 import { InventoryImportBtn } from "@/components/inventory-import-btn";
+import { InventoryPriceCell } from "@/components/inventory-price-cell";
 import { InventorySaveViewBtn } from "@/components/inventory-save-view-btn";
 import { sendQuickReminderAction } from "@/app/dashboard/actions";
 import { getInventoryCarAttachments, getInventoryDirectory, getInventoryFilterContext } from "@/lib/data";
@@ -323,6 +325,7 @@ export default async function InventoryPage({
           >
             + إضافة سيارة
           </Link>
+          <InventoryExportBtn filters={{ status: status ?? "", deal: deal ?? "", branch: branch ?? "", tab: activeTab, q: q ?? "" }} />
           <InventoryImportBtn
             isGeneralManager={ctx.isGeneralManager}
             branchId={ctx.branchId}
@@ -528,13 +531,7 @@ export default async function InventoryPage({
 
                     {/* السعر */}
                     <td>
-                      {item.price ? (
-                        <span className="font-extrabold text-emerald-700">
-                          {formatCurrency(item.price)}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-amber-600 font-semibold">+ أضف السعر</span>
-                      )}
+                      <InventoryPriceCell itemId={item.id} price={item.price ?? null} />
                     </td>
 
                     {/* الصفقة والحالة */}

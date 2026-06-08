@@ -1,4 +1,5 @@
 import { List } from "lucide-react";
+import { CustomersExportBtn } from "@/components/customers-export-btn";
 
 import { getRoleCapabilities } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/server";
@@ -78,11 +79,14 @@ export default async function CustomersPage({
   return (
     <div className="legacy-grid gap-6">
       <div className="legacy-card space-y-3">
-        <div className="flex items-center gap-2 text-xl font-bold text-sky-700 whitespace-nowrap">
-          <List className="h-5 w-5 flex-shrink-0" />
-          {isFollowupScope
-            ? `عملاء بحاجة لتواصل (${filteredCustomers.length})`
-            : `تقرير عملائي (${filteredCustomers.length})`}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xl font-bold text-sky-700 whitespace-nowrap">
+            <List className="h-5 w-5 flex-shrink-0" />
+            {isFollowupScope
+              ? `عملاء بحاجة لتواصل (${filteredCustomers.length})`
+              : `تقرير عملائي (${filteredCustomers.length})`}
+          </div>
+          <CustomersExportBtn filters={{ q: (params.q as string) ?? "", status: (params.status as string) ?? "", op_type: (params.op_type as string) ?? "" }} />
         </div>
 
         <ReportSmartFilters
