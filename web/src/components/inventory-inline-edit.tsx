@@ -100,9 +100,9 @@ export function EditableCell({
   if (!edit) {
     if (!cur) return (
       <button onClick={() => { setVal(""); setEdit(true); }}
-        className="text-xs font-semibold text-orange-500 hover:text-orange-700 transition whitespace-nowrap"
+        className="text-[10px] font-medium text-orange-400 hover:text-orange-600 transition leading-tight"
         title={`اضغط لإضافة ${placeholder ?? field}`}>
-        ⚠️ {emptyLabel ?? `أضف ${placeholder ?? field}`}
+        + {emptyLabel ?? `أضف ${placeholder ?? field}`}
       </button>
     );
     const display = suffix ? `${Number(cur).toLocaleString("en-US")} ${suffix}` : cur;
@@ -175,7 +175,7 @@ export function InventoryPriceCellNew({ itemId, price }: { itemId: string; price
 
   if (!cur) return (
     <button onClick={() => { setVal(""); setEdit(true); }}
-      className="text-xs font-semibold text-amber-600 hover:text-amber-700 transition">
+      className="text-[10px] font-medium text-amber-500 hover:text-amber-700 transition">
       + أضف السعر
     </button>
   );
