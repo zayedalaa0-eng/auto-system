@@ -233,7 +233,7 @@ select {
   padding: 14px 14px;
   vertical-align: middle;
   border-bottom: 1px solid #f1f5f9;
-  text-align: center;
+  text-align: start;
   line-height: 1.4;
   min-height: 86px;
 }
@@ -245,23 +245,15 @@ select {
 }
 
 .premium-table tbody tr {
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
-/* صفوف فردية — خلفية بيضاء */
-.premium-table tbody tr:nth-child(odd) {
-  background-color: #ffffff;
-}
-
-/* صفوف زوجية — خلفية رمادية فاتحة واضحة للتمييز */
-.premium-table tbody tr:nth-child(even) {
-  background-color: #f1f5f9;
-}
-
-/* عند المرور — أزرق فاتح يطغى على الكل */
 .premium-table tbody tr:hover {
-  background-color: #e0f2fe !important;
-  box-shadow: inset 3px 0 0 0 #2563eb;
+  background-color: #f8fbff;
+}
+
+.premium-table tbody tr:nth-child(even) {
+  background-color: #fcfdff;
 }
 
 .status-badge {
