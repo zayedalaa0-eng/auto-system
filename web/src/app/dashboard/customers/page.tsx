@@ -86,7 +86,7 @@ export default async function CustomersPage({
               ? `عملاء بحاجة لتواصل (${filteredCustomers.length})`
               : `تقرير عملائي (${filteredCustomers.length})`}
           </div>
-          <CustomersExportBtn filters={{ q: (params.q as string) ?? "", status: (params.status as string) ?? "", op_type: (params.op_type as string) ?? "" }} />
+          <CustomersExportBtn filters={{ q: q ?? "", status: status ?? "" }} />
         </div>
 
         <ReportSmartFilters
