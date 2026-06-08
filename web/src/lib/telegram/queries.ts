@@ -9,6 +9,7 @@ export type BotUser = {
   full_name: string;
   role: string;
   branch_id: string | null;
+  branch_name: string | null;
   capabilities: RoleCapabilities;
 };
 
@@ -23,18 +24,22 @@ export async function getBotUser(chatId: string): Promise<BotUser | null> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("app_users")
-    .select("id, full_name, role, branch_id")
+    .select("id, full_name, role, branch_id, branches(name)")
     .eq("telegram_chat_id", chatId)
     .eq("is_active", true)
     .maybeSingle();
 
   if (!data) return null;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const branchName = unwrap((data as any).branches as RelationOrArray<{ name: string }>)?.name ?? null;
+
   return {
     id: data.id,
     full_name: data.full_name,
     role: data.role,
     branch_id: data.branch_id ?? null,
+    branch_name: branchName,
     capabilities: getRoleCapabilities(data.role, data.full_name),
   };
 }

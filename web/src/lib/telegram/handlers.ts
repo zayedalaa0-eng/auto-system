@@ -161,11 +161,22 @@ async function handleStart(chatId: number, user: BotUser | null) {
 
   await clearSession(String(chatId));
   const isMaalam = await checkIsMaalamMgr(user.id);
-  return sendMessage(
-    chatId,
-    `أهلاً <b>${escapeHtml(user.full_name)}</b> 👋\n${roleLabel(user)}\n\nاختر من القائمة أدناه:`,
-    { replyMarkup: menuKeyboard(user, isMaalam) },
-  );
+
+  const SEP = "━━━━━━━━━━━━━━━━━━━━";
+  const role = user.capabilities.isGeneralManager
+    ? "مدير عام 👑"
+    : user.capabilities.isManager
+      ? "مدير معرض 🏢"
+      : "موظف مبيعات 👤";
+
+  let welcome = `أهلاً وسهلاً، <b>${escapeHtml(user.full_name)}</b> 👋\n${SEP}\n\n`;
+  welcome += `🪪 <b>الصلاحية:</b> ${role}\n`;
+  if (user.branch_name) {
+    welcome += `🏢 <b>المعرض:</b> ${escapeHtml(user.branch_name)}\n`;
+  }
+  welcome += `\n${SEP}\nاختر من القائمة أدناه:`;
+
+  return sendMessage(chatId, welcome, { replyMarkup: menuKeyboard(user, isMaalam) });
 }
 
 // ─── Cancel ─────────────────────────────────────────────────────────────────
