@@ -6,6 +6,7 @@ import { CustomerModalShell } from "@/components/customer-modal-shell";
 import { InventoryExportBtn } from "@/components/inventory-export-btn";
 import { InventoryFilterBar } from "@/components/inventory-filter-bar";
 import { InventoryImportBtn } from "@/components/inventory-import-btn";
+import { InventoryChassisCell, InventoryColorMileageCell, InventoryGearFuelCell } from "@/components/inventory-inline-edit";
 import { InventoryPriceCell } from "@/components/inventory-price-cell";
 import { InventorySaveViewBtn } from "@/components/inventory-save-view-btn";
 import { sendQuickReminderAction } from "@/app/dashboard/actions";
@@ -498,13 +499,9 @@ export default async function InventoryPage({
                               {item.branch_name}
                             </div>
                           ) : null}
-                          {item.chassis_no ? (
-                            <div className="mt-0.5 font-mono text-xs text-slate-400 tracking-wide truncate">
-                              {item.chassis_no}
-                            </div>
-                          ) : (
-                            <div className="mt-0.5 text-xs text-orange-500 font-medium">⚠️ أضف رقم الشاصي</div>
-                          )}
+                          <div className="mt-0.5 font-mono text-xs text-slate-400 tracking-wide">
+                            <InventoryChassisCell itemId={item.id} chassis={item.chassis_no ?? null} />
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -548,59 +545,20 @@ export default async function InventoryPage({
 
                     {/* اللون والعداد */}
                     <td>
-                      {missingColorMileage ? (
-                        <div className="text-xs text-orange-500 font-medium">⚠️ أكمل اللون والعداد</div>
-                      ) : (
-                        <>
-                          {item.color ? (() => {
-                            const swatch = getColorSwatch(item.color);
-                            return (
-                              <div className="flex items-center gap-1.5">
-                                {swatch ? (
-                                  <span
-                                    className="inv-color-dot"
-                                    style={{ background: swatch.bg, borderColor: swatch.border }}
-                                    title={item.color}
-                                  />
-                                ) : null}
-                                <span className="text-sm font-semibold text-slate-700">{item.color}</span>
-                              </div>
-                            );
-                          })() : (
-                            <div className="text-xs text-slate-400">—</div>
-                          )}
-                          {typeof item.mileage === "number" ? (
-                            <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
-                              <GaugeCircle className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
-                              {item.mileage.toLocaleString("en-US")} كم
-                            </div>
-                          ) : null}
-                        </>
-                      )}
+                      <InventoryColorMileageCell
+                        itemId={item.id}
+                        color={item.color ?? null}
+                        mileage={typeof item.mileage === "number" ? item.mileage : null}
+                      />
                     </td>
 
                     {/* القير والوقود */}
                     <td>
-                      {missingGearFuel ? (
-                        <div className="text-xs text-orange-500 font-medium">⚠️ أكمل القير والوقود</div>
-                      ) : (
-                        <>
-                          {item.gearbox ? (
-                            <div className="flex items-center gap-1 text-sm font-semibold text-slate-700">
-                              <Settings2 className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
-                              {item.gearbox}
-                            </div>
-                          ) : (
-                            <div className="text-xs text-slate-400">—</div>
-                          )}
-                          {item.fuel_type ? (
-                            <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
-                              <Fuel className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
-                              {item.fuel_type}
-                            </div>
-                          ) : null}
-                        </>
-                      )}
+                      <InventoryGearFuelCell
+                        itemId={item.id}
+                        gearbox={item.gearbox ?? null}
+                        fuelType={item.fuel_type ?? null}
+                      />
                     </td>
 
                     {/* الإجراءات */}
