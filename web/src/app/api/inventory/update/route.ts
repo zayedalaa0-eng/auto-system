@@ -17,17 +17,14 @@ export async function POST(req: NextRequest) {
   if (!profile) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
 
   const body = await req.json();
-  const { id, model, production_year, color, price, chassis_no, mileage,
-    gearbox, fuel_type, condition_label, deal_type, availability_status,
-    specs, inspection, notes, owner_name } = body;
+  const { id, ...fields } = body;
 
   if (!id) return NextResponse.json({ error: "معرّف السيارة مطلوب" }, { status: 400 });
-  if (!model?.trim()) return NextResponse.json({ error: "نوع السيارة مطلوب" }, { status: 400 });
 
   const caps = getRoleCapabilities(profile.role);
-
-  // التحقق من الملكية — الموظف يعدّل فقط سيارات فرعه
   const admin = createAdminClient();
+
+  // التحقق من الملكية
   if (!caps.isGeneralManager) {
     const { data: car } = await admin.from("inventory").select("branch_id").eq("id", id).maybeSingle();
     if (car?.branch_id && car.branch_id !== profile.branch_id) {
@@ -35,24 +32,32 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const { error } = await admin.from("inventory").update({
-    model: model.trim(),
-    production_year: production_year ? Number(production_year) : null,
-    color: color?.trim() || null,
-    price: price ? Number(price) : null,
-    chassis_no: chassis_no?.trim() || null,
-    mileage: mileage ? Number(mileage) : null,
-    gearbox: gearbox?.trim() || null,
-    fuel_type: fuel_type?.trim() || null,
-    condition_label: condition_label?.trim() || null,
-    deal_type: deal_type?.trim() || null,
-    availability_status: availability_status?.trim() || "متوفرة",
-    specs: specs?.trim() || null,
-    inspection: inspection?.trim() || null,
-    notes: notes?.trim() || null,
-    owner_name: owner_name?.trim() || null,
-    updated_at: new Date().toISOString(),
-  }).eq("id", id);
+  // بناء payload من الحقول المُرسَلة فقط (partial update)
+  const ALLOWED = ["model","production_year","color","price","chassis_no","mileage",
+    "gearbox","fuel_type","condition_label","deal_type","availability_status",
+    "specs","inspection","notes","owner_name"];
+
+  const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+  for (const key of ALLOWED) {
+    if (key in fields) {
+      const v = fields[key];
+      if (key === "production_year" || key === "price" || key === "mileage") {
+        payload[key] = v ? Number(v) : null;
+      } else if (typeof v === "string") {
+        payload[key] = v.trim() || null;
+      } else {
+        payload[key] = v ?? null;
+      }
+    }
+  }
+
+  // إذا أُرسل model تأكد أنه غير فارغ
+  if ("model" in payload && !payload.model) {
+    return NextResponse.json({ error: "نوع السيارة لا يمكن أن يكون فارغاً" }, { status: 400 });
+  }
+
+  const { error } = await admin.from("inventory").update(payload).eq("id", id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
