@@ -89,11 +89,12 @@ type CellProps = {
   emptyLabel?: string;
   displayClass?: string;
   suffix?: string;
+  icon?: React.ReactNode;
 };
 
 export function EditableCell({
   itemId, field, value, type = "text",
-  options, dir, placeholder, emptyLabel, displayClass, suffix,
+  options, dir, placeholder, emptyLabel, displayClass, suffix, icon,
 }: CellProps) {
   const raw     = value != null ? String(value) : "";
   const [cur,   setCur]   = useState(raw);
@@ -124,6 +125,7 @@ export function EditableCell({
     const display = suffix ? `${Number(cur).toLocaleString("en-US")} ${suffix}` : cur;
     return (
       <div className="group flex items-center gap-1">
+        {icon && <span className="flex-shrink-0 text-slate-400">{icon}</span>}
         {isColor
           ? <ColorLabel color={cur} />
           : <span className={displayClass ?? "text-sm font-semibold text-slate-700"}>{display}</span>

@@ -497,7 +497,8 @@ export default async function InventoryPage({
                             <EditableCell itemId={item.id} field="chassis_no"
                               value={item.chassis_no ?? null} dir="ltr"
                               placeholder="رقم الشاصي" emptyLabel="أضف رقم الشاصي"
-                              displayClass="font-mono text-xs text-slate-400 tracking-wide" />
+                              displayClass="font-mono text-xs text-slate-400 tracking-wide"
+                              icon={<span className="text-[9px] font-bold text-slate-300">#</span>} />
                           </div>
                         </div>
                       </div>
@@ -532,7 +533,7 @@ export default async function InventoryPage({
 
                     {/* اللون والعداد */}
                     <td>
-                      <div className="flex flex-col gap-1">
+                      <div className="flex flex-col gap-1.5">
                         <EditableCell itemId={item.id} field="color"
                           value={item.color ?? null} placeholder="اللون"
                           emptyLabel="أضف اللون" />
@@ -540,20 +541,23 @@ export default async function InventoryPage({
                           value={typeof item.mileage === "number" ? item.mileage : null}
                           type="number" dir="ltr" placeholder="العداد (كم)"
                           emptyLabel="أضف العداد" suffix="كم"
-                          displayClass="text-xs text-slate-500" />
+                          displayClass="text-xs text-slate-500"
+                          icon={<GaugeCircle className="h-3 w-3" />} />
                       </div>
                     </td>
 
                     {/* القير والوقود */}
                     <td>
-                      <div className="flex flex-col gap-1">
+                      <div className="flex flex-col gap-1.5">
                         <EditableCell itemId={item.id} field="gearbox"
                           value={item.gearbox ?? null} type="select" options={GEARBOX_OPTIONS}
-                          placeholder="ناقل الحركة" emptyLabel="أضف القير" />
+                          placeholder="ناقل الحركة" emptyLabel="أضف القير"
+                          icon={<Settings2 className="h-3 w-3" />} />
                         <EditableCell itemId={item.id} field="fuel_type"
                           value={item.fuel_type ?? null} type="select" options={FUEL_OPTIONS}
                           placeholder="نوع الوقود" emptyLabel="أضف الوقود"
-                          displayClass="text-xs text-slate-500" />
+                          displayClass="text-xs text-slate-500"
+                          icon={<Fuel className="h-3 w-3" />} />
                       </div>
                     </td>
 
