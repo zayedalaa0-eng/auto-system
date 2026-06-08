@@ -27,6 +27,14 @@ export default async function DashboardLayout({
 }>) {
   const envReady = hasSupabaseEnv();
   const { session, profile } = await getDashboardContext();
+  // جلب اسم المعرض للعرض في الشريط الجانبي
+  let profileBranchName: string | null = null;
+  if (envReady && profile?.branch_id) {
+    const { createClient: _c } = await import("@/lib/supabase/server");
+    const _sb = await _c();
+    const { data: _b } = await _sb.from("branches").select("name").eq("id", profile.branch_id).maybeSingle();
+    profileBranchName = _b?.name ?? null;
+  }
   const capabilities = getRoleCapabilities(profile?.role, profile?.full_name);
 
   if (envReady && !session) redirect("/login");
@@ -61,6 +69,7 @@ export default async function DashboardLayout({
         userRole={profile?.role ?? "لوحة التشغيل"}
         isManager={capabilities.isManager}
         isGeneralManager={capabilities.isGeneralManager}
+        branchName={profileBranchName}
         unreadCount={unreadCount}
         signOutAction={signOutAction}
       />

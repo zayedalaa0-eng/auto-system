@@ -35,6 +35,7 @@ type SidebarNavProps = {
   userRole: string;
   isManager: boolean;
   isGeneralManager?: boolean;
+  branchName?: string | null;
   unreadCount: number;
   signOutAction: () => Promise<void>;
 };
@@ -44,9 +45,14 @@ export function SidebarNav({
   userRole,
   isManager,
   isGeneralManager = false,
+  branchName,
   unreadCount,
   signOutAction,
 }: SidebarNavProps) {
+  // اسم العلامة: المدير العام يرى "مجموعة المعلم للسيارات"، البقية يرون اسم معرضهم
+  const brandName = isGeneralManager || !branchName
+    ? "مجموعة المعلم للسيارات"
+    : branchName;
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -82,7 +88,7 @@ export function SidebarNav({
           <CarFront className="h-5 w-5 text-white" />
         </div>
         <div>
-          <div className="sidebar-brand-name">مجموعة المعلم للسيارات</div>
+          <div className="sidebar-brand-name">{brandName}</div>
           <div className="sidebar-brand-role">{userRole}</div>
         </div>
       </div>
@@ -133,7 +139,7 @@ export function SidebarNav({
       <header className="mobile-topbar">
         <div className="mobile-brand">
           <CarFront className="h-5 w-5 text-sky-400" />
-          <span>مجموعة المعلم للسيارات</span>
+          <span>{brandName}</span>
         </div>
         <button className="mobile-menu-btn" onClick={() => setOpen(true)} aria-label="القائمة">
           <Menu className="h-5 w-5" />
