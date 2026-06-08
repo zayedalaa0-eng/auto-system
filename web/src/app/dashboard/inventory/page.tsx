@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, Car, Fuel, GaugeCircle, Send, Settings2 } from "lucide-react";
+import { Building2, Calendar, Car, Fuel, GaugeCircle, Palette, Send, Settings2, Tag } from "lucide-react";
 
 import { CarGalleryViewer } from "@/components/car-gallery-viewer";
 import { CustomerModalShell } from "@/components/customer-modal-shell";
@@ -506,13 +506,30 @@ export default async function InventoryPage({
 
                     {/* السيارة */}
                     <td>
-                      <div className="flex items-start gap-1.5">
-                        <Car className="h-4 w-4 flex-shrink-0 text-slate-300 mt-0.5" />
-                        <div className="min-w-0">
-                          <div className="font-bold text-blue-700 leading-tight truncate">{item.model || "—"}</div>
-                          {item.production_year ? <div className="mt-0.5 text-xs text-slate-400">{item.production_year}</div> : null}
-                          {item.condition_label ? <div className="mt-1 inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{item.condition_label}</div> : null}
+                      <div className="flex flex-col gap-1">
+                        {/* اسم السيارة */}
+                        <div className="flex items-center gap-1.5">
+                          <Car className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" />
+                          <span className="font-bold text-blue-700 text-sm leading-tight truncate">{item.model || "—"}</span>
                         </div>
+                        {/* سنة الصنع */}
+                        {item.production_year ? (
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="h-3 w-3 flex-shrink-0 text-slate-400" />
+                            <span className="text-xs text-slate-500 font-medium">{item.production_year}</span>
+                          </div>
+                        ) : null}
+                        {/* الحالة */}
+                        {item.condition_label ? (
+                          <div className="flex items-center gap-1.5">
+                            <Tag className="h-3 w-3 flex-shrink-0 text-slate-400" />
+                            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
+                              item.condition_label.includes("جديد")
+                                ? "bg-emerald-50 text-emerald-700"
+                                : "bg-slate-100 text-slate-500"
+                            }`}>{item.condition_label}</span>
+                          </div>
+                        ) : null}
                       </div>
                     </td>
 
@@ -536,7 +553,8 @@ export default async function InventoryPage({
                       <div className="flex flex-col gap-1.5">
                         <EditableCell itemId={item.id} field="color"
                           value={item.color ?? null} placeholder="اللون"
-                          emptyLabel="أضف اللون" />
+                          emptyLabel="أضف اللون"
+                          icon={<Palette className="h-3.5 w-3.5" />} />
                         <EditableCell itemId={item.id} field="mileage"
                           value={typeof item.mileage === "number" ? item.mileage : null}
                           type="number" dir="ltr" placeholder="العداد (كم)"
