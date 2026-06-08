@@ -2,46 +2,62 @@
 
 import { useState, useRef, useEffect } from "react";
 
-// ── دائرة اللون ──────────────────────────────────────────────────────────────
-const COLOR_MAP: Array<[string[], string, string]> = [
-  [["ابيض","بيضاء","white"],                  "#ffffff","#d1d5db"],
-  [["اسود","سوداء","black"],                  "#1c1917","#1c1917"],
-  [["رمادي","رصاصي","grey","gray"],            "#9ca3af","#9ca3af"],
-  [["فضي","سيلفر","silver"],                  "#cbd5e1","#94a3b8"],
-  [["احمر","حمراء","فيراني","red"],            "#ef4444","#ef4444"],
-  [["كحلي","نيلي","navy"],                    "#1e3a8a","#1e3a8a"],
-  [["ازرق","زرقاء","blue"],                   "#3b82f6","#3b82f6"],
-  [["سماوي","تركواز","تيفاني","turquoise"],    "#2dd4bf","#2dd4bf"],
-  [["اخضر","خضراء","green"],                  "#22c55e","#22c55e"],
-  [["زيتي","olive"],                          "#84cc16","#84cc16"],
-  [["اصفر","صفراء","yellow"],                 "#eab308","#eab308"],
-  [["ذهبي","ذهبيه","gold"],                   "#f59e0b","#d97706"],
-  [["شمبانيا","شامبين","شمباني","champagne"], "#f3e0b5","#d4b896"],
-  [["بيج","كريمي","beige","cream"],           "#e8dcc8","#c9b99a"],
-  [["نهدي","لبني","عاجي","ivory"],            "#f5f0e8","#d6c9b0"],
-  [["باطوني","اسمنتي","سيمنتي","concrete"],   "#b0b8c1","#8a9099"],
-  [["تيتانيوم","titanium"],                   "#8d9299","#6b7280"],
-  [["برتقالي","برتقاليه","orange"],           "#f97316","#f97316"],
-  [["بني","بنيه","كافيه","brown"],            "#92400e","#92400e"],
-  [["خمري","بورجندي","burgundy","wine"],       "#881337","#881337"],
-  [["بنفسجي","بنفسجيه","purple"],             "#a855f7","#a855f7"],
-  [["وردي","ورديه","pink"],                   "#ec4899","#ec4899"],
-  [["عسلي","قهوائي","mocha","hazel"],         "#c8956c","#a07040"],
-  [["رصاصي غامق","انثراسيت","anthracite"],    "#4b5563","#374151"],
+// ── ألوان ─────────────────────────────────────────────────────────────────────
+const COLOR_MAP: Array<[string[], string]> = [
+  [["ابيض","بيضاء","white"],                  "#e8e8e8"],
+  [["اسود","سوداء","black"],                  "#1c1917"],
+  [["رمادي","رصاصي","grey","gray"],            "#9ca3af"],
+  [["فضي","سيلفر","silver"],                  "#c0c8d0"],
+  [["احمر","حمراء","red"],                    "#ef4444"],
+  [["فيراني"],                                "#7a8a7a"], // لون الفأر — رمادي مخضر
+  [["كحلي","نيلي","navy"],                    "#1e3a8a"],
+  [["ازرق","زرقاء","blue"],                   "#3b82f6"],
+  [["سماوي","تركواز","تيفاني","turquoise"],    "#2dd4bf"],
+  [["اخضر","خضراء","green"],                  "#22c55e"],
+  [["زيتي","olive"],                          "#6b7c3e"],
+  [["اصفر","صفراء","yellow"],                 "#eab308"],
+  [["ذهبي","ذهبيه","gold"],                   "#d4a017"],
+  [["شمبانيا","شامبين","شمباني","champagne"], "#c8a96e"],
+  [["بيج","كريمي","beige","cream"],           "#c9b99a"],
+  [["نهدي","لبني","عاجي","ivory"],            "#d4c9b0"],
+  [["باطوني","اسمنتي","سيمنتي","concrete"],   "#8a9099"],
+  [["تيتانيوم","titanium"],                   "#6b7280"],
+  [["برتقالي","برتقاليه","orange"],           "#f97316"],
+  [["بني","بنيه","كافيه","brown"],            "#7c4d2a"],
+  [["خمري","بورجندي","burgundy","wine"],       "#7f1d3a"],
+  [["بنفسجي","بنفسجيه","purple"],             "#a855f7"],
+  [["وردي","ورديه","pink"],                   "#ec4899"],
+  [["عسلي","قهوائي","mocha","hazel"],         "#a07040"],
+  [["رصاصي غامق","انثراسيت","anthracite"],    "#374151"],
 ];
 function normalizeAr(t: string) {
   return t.replace(/[ً-ٟؐ-ؚۖ-ۭ]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ة/g,"ه").replace(/ى/g,"ي").toLowerCase().trim();
 }
-function getColorSwatch(v: string | null | undefined) {
+function getColorBg(v: string | null | undefined): string | null {
   if (!v) return null;
   const n = normalizeAr(v);
-  for (const [kws,bg,border] of COLOR_MAP) if (kws.some(k=>n.includes(normalizeAr(k)))) return {bg,border};
+  for (const [kws,bg] of COLOR_MAP) if (kws.some(k=>n.includes(normalizeAr(k)))) return bg;
   return null;
 }
-function ColorDot({ color }: { color: string }) {
-  const s = getColorSwatch(color);
-  if (!s) return null;
-  return <span style={{display:"inline-block",width:11,height:11,borderRadius:"50%",border:`1.5px solid ${s.border}`,background:s.bg,flexShrink:0,verticalAlign:"middle"}} title={color}/>;
+/** يُحدد لون النص (أبيض أو أسود) بناءً على سطوع الخلفية */
+function textColor(hex: string): string {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return (r*299 + g*587 + b*114) / 1000 > 128 ? "#1c1917" : "#ffffff";
+}
+/** Label كامل يغطي نص اللون بخلفية ملونة */
+function ColorLabel({ color }: { color: string }) {
+  const bg = getColorBg(color);
+  if (!bg) return <span className="text-sm font-semibold text-slate-700">{color}</span>;
+  const tc = textColor(bg);
+  return (
+    <span style={{
+      display:"inline-block", background:bg, color:tc,
+      borderRadius:6, padding:"1px 8px", fontSize:11, fontWeight:600,
+      border:"1px solid rgba(0,0,0,0.12)", letterSpacing:"0.2px",
+    }}>{color}</span>
+  );
 }
 
 // ── حفظ حقل واحد ─────────────────────────────────────────────────────────────
@@ -108,8 +124,10 @@ export function EditableCell({
     const display = suffix ? `${Number(cur).toLocaleString("en-US")} ${suffix}` : cur;
     return (
       <div className="group flex items-center gap-1">
-        {isColor && <ColorDot color={cur} />}
-        <span className={displayClass ?? "text-sm font-semibold text-slate-700"}>{display}</span>
+        {isColor
+          ? <ColorLabel color={cur} />
+          : <span className={displayClass ?? "text-sm font-semibold text-slate-700"}>{display}</span>
+        }
         <button onClick={() => { setVal(cur); setEdit(true); }}
           className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 rounded p-0.5 hover:bg-blue-100 text-slate-400 hover:text-blue-600"
           title="اضغط هنا للتعديل">
