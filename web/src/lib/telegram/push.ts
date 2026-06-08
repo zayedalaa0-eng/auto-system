@@ -36,11 +36,10 @@ async function buildCustomerLogSection(customerId: string, limit = 5): Promise<s
       const label = ACTION_LABELS[log.action] ?? log.action;
       const ld = new Date(log.created_at);
       const date = `${String(ld.getUTCDate()).padStart(2,"0")}/${String(ld.getUTCMonth()+1).padStart(2,"0")}/${ld.getUTCFullYear()}`;
-      section += `\n🔹 <b>${escapeHtml(label)}</b> — ${date}\n`;
-      section += `   👤 ${escapeHtml(log.actor_name ?? "—")}\n`;
+      section += `🔸 <b>${escapeHtml(label)}</b> · ${date} · ${escapeHtml(log.actor_name ?? "—")}\n`;
       if (log.details) {
-        const details = escapeHtml(log.details).slice(0, 120);
-        section += `   📝 ${details}${log.details.length > 120 ? "…" : ""}\n`;
+        const details = escapeHtml(log.details).slice(0, 100);
+        section += `   ↳ ${details}${log.details.length > 100 ? "…" : ""}\n`;
       }
     }
     return section;
@@ -92,10 +91,10 @@ function buildButtons(
     }]);
   }
 
-  // زر إرسال رسالة للموظف — يفتح صفحة إرسال رسالة مباشرة
+  // زر إرسال رسالة للموظف — يظهر فقط إذا كان للموظف chat_id مربوط
   if (staffChatId && appUrl) {
     rows.push([{
-      text: "💬 إرسال رسالة للموظف",
+      text: "💬 مراسلة الموظف",
       web_app: { url: `${appUrl}/bot-app/send-message?to_chat_id=${staffChatId}&chat_id=${chatId}&customer_id=${customerId ?? ""}` },
     }]);
   }
@@ -125,6 +124,11 @@ async function sendWithButtons(
 
 // ─── بناء نصوص الرسائل ──────────────────────────────────────────────────────
 
+function fmtD(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getUTCDate()).padStart(2,"0")}/${String(d.getUTCMonth()+1).padStart(2,"0")}/${d.getUTCFullYear()}`;
+}
+
 function buildNewCustomerText(params: {
   opCode: string;
   customerName: string;
@@ -143,18 +147,17 @@ function buildNewCustomerText(params: {
 
   let icon = "🛒";
   let opTitle = "مشتري جديد";
-  if (opCode === "buyer_tradein_pending") { icon = "🔄"; opTitle = "مشتري جديد — مع استبدال"; }
-  else if (opCode === "sell_on_behalf")   { icon = "🤝"; opTitle = "ملف بيع بالوكالة جديد"; }
+  if (opCode === "buyer_tradein_pending") { icon = "🔄"; opTitle = "مشتري جديد + استبدال"; }
+  else if (opCode === "sell_on_behalf")   { icon = "🤝"; opTitle = "بيع بالوكالة — جديد"; }
 
-  let text =
-    `${icon} <b>${opTitle}</b>\n${SEP}\n\n` +
-    `👤 <b>الاسم:</b> ${escapeHtml(customerName)}\n`;
+  let text = `${icon} <b>${escapeHtml(opTitle)}</b>\n${SEP}\n`;
+  text += `👤 <b>${escapeHtml(customerName)}</b>`;
+  if (customerPhone) text += `  |  📱 ${escapeHtml(customerPhone)}`;
+  text += "\n";
+  if (branchName) text += `🏢 ${escapeHtml(branchName)}\n`;
 
-  if (customerPhone) text += `📱 <b>الهاتف:</b> ${escapeHtml(customerPhone)}\n`;
-  if (branchName)    text += `🏢 <b>الفرع:</b> ${escapeHtml(branchName)}\n`;
-
-  text += `\n${SEP}\n`;
-
+  // تفاصيل الطلب
+  text += `${SEP}\n`;
   if (opCode === "buyer_tradein_pending") {
     if (requestedCar)  text += `🚗 <b>السيارة المطلوبة:</b> ${escapeHtml(requestedCar)}\n`;
     if (tradeInModel)  text += `🔁 <b>سيارة الاستبدال:</b> ${escapeHtml(tradeInModel)}\n`;
@@ -163,18 +166,12 @@ function buildNewCustomerText(params: {
   } else {
     if (requestedCar)  text += `🚗 <b>السيارة المطلوبة:</b> ${escapeHtml(requestedCar)}\n`;
   }
-
   text += `📌 <b>الحالة:</b> ${escapeHtml(status)}\n`;
-
   if (nextFollowUp) {
-    try {
-      const d = (() => { const _d = new Date(nextFollowUp); return `${String(_d.getUTCDate()).padStart(2,"0")}/${String(_d.getUTCMonth()+1).padStart(2,"0")}/${_d.getUTCFullYear()}`; })();
-      text += `📅 <b>موعد المتابعة:</b> ${d}\n`;
-    } catch { /* ignore */ }
+    try { text += `📅 <b>المتابعة:</b> ${fmtD(nextFollowUp)}\n`; } catch { /**/ }
   }
 
-  text += `\n${SEP}\n👨‍💼 <b>الموظف المسؤول:</b> ${escapeHtml(staffName)}`;
-
+  text += `${SEP}\n👨‍💼 <b>الموظف:</b> ${escapeHtml(staffName)}`;
   return text;
 }
 
@@ -190,26 +187,18 @@ function buildUpdateCustomerText(params: {
   const { opCode, customerName, staffName, oldStatus, newStatus, nextFollowUp, note } = params;
 
   let icon = "🔄";
-  let opTitle = "تحديث ملف مشتري";
+  let opTitle = "تحديث ملف";
   if (opCode === "buyer_tradein_pending") { icon = "🔁"; opTitle = "تحديث ملف استبدال"; }
-  else if (opCode === "sell_on_behalf")   { icon = "📝"; opTitle = "تحديث ملف بيع بالوكالة"; }
+  else if (opCode === "sell_on_behalf")   { icon = "📝"; opTitle = "تحديث بيع بالوكالة"; }
 
-  let text =
-    `${icon} <b>${opTitle}</b>\n${SEP}\n\n` +
-    `👤 <b>العميل:</b> ${escapeHtml(customerName)}\n` +
-    `📌 <b>الحالة:</b> ${escapeHtml(oldStatus)} ← <b>${escapeHtml(newStatus)}</b>\n`;
-
+  let text = `${icon} <b>${escapeHtml(opTitle)}</b>\n${SEP}\n`;
+  text += `👤 <b>${escapeHtml(customerName)}</b>\n`;
+  text += `📌 ${escapeHtml(oldStatus)} ➜ <b>${escapeHtml(newStatus)}</b>\n`;
   if (nextFollowUp) {
-    try {
-      const d = (() => { const _d = new Date(nextFollowUp); return `${String(_d.getUTCDate()).padStart(2,"0")}/${String(_d.getUTCMonth()+1).padStart(2,"0")}/${_d.getUTCFullYear()}`; })();
-      text += `📅 <b>موعد المتابعة:</b> ${d}\n`;
-    } catch { /* ignore */ }
+    try { text += `📅 <b>المتابعة:</b> ${fmtD(nextFollowUp)}\n`; } catch { /**/ }
   }
-
-  if (note) text += `📝 <b>ملاحظة:</b> ${escapeHtml(note)}\n`;
-
-  text += `\n${SEP}\n👨‍💼 <b>بواسطة:</b> ${escapeHtml(staffName)}`;
-
+  if (note) text += `📝 ${escapeHtml(note)}\n`;
+  text += `${SEP}\n👨‍💼 <b>الموظف:</b> ${escapeHtml(staffName)}`;
   return text;
 }
 
