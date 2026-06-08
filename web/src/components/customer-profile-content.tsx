@@ -216,7 +216,7 @@ function TradeInEditor({ primaryTrade }: { primaryTrade: CustomerDetail["tradeIn
           <span className="legacy-field__label">نوع الوقود</span>
           <select name="trade_in_fuel" defaultValue={typeof primaryTrade?.metadata?.fuel === "string" ? primaryTrade.metadata.fuel : "بنزين"} className="legacy-select">
             <option value="بنزين">بنزين</option>
-            <option value="سولار">سولار</option>
+            <option value="ديزل">ديزل</option>
             <option value="هايبرد">هايبرد</option>
             <option value="كهربائية بالكامل">كهربائية بالكامل</option>
           </select>

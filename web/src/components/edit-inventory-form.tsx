@@ -17,7 +17,7 @@ type Car = {
 const DEAL_TYPES    = ["شراء", "استبدال", "برسم البيع"];
 const CONDITIONS    = ["مستعملة", "جديدة", "شبه جديدة"];
 const GEARBOX_OPTS  = ["اتوماتيك", "يدوي"];
-const FUEL_OPTS     = ["بنزين", "سولار", "هايبرد", "كهربائية بالكامل", "بلك أن"];
+const FUEL_OPTS     = ["بنزين", "ديزل", "هايبرد", "كهربائية بالكامل", "بلك أن"];
 const STATUS_OPTS   = ["متوفرة", "محجوزة", "مباعة", "مسحوبة من المعرض"];
 
 export function EditInventoryForm({ car, branches }: { car: Car; branches: Branch[] }) {

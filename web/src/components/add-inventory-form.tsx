@@ -9,7 +9,7 @@ type Branch = { id: string; name: string };
 const DEAL_TYPES = ["شراء", "استبدال", "برسم البيع"];
 const CONDITION_LABELS = ["جديدة", "مستعملة", "شبه جديدة"];
 const GEARBOX_OPTIONS = ["اتوماتيك", "يدوي"];
-const FUEL_OPTIONS = ["بنزين", "سولار", "هايبرد", "كهربائية بالكامل", "بلك أن"];
+const FUEL_OPTIONS = ["بنزين", "ديزل", "هايبرد", "كهربائية بالكامل", "بلك أن"];
 const STATUS_OPTIONS = ["متوفرة", "محجوزة", "مباعة"];
 
 export function AddInventoryForm({

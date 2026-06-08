@@ -1088,7 +1088,7 @@ export default function CustomerPage() {
                         <span style={css.label}>نوع الوقود</span>
                         <select value={tiFuel} onChange={e=>setTiFuel(e.target.value)} style={css.input}>
                           <option value="بنزين">بنزين</option>
-                          <option value="سولار">سولار</option>
+                          <option value="ديزل">ديزل</option>
                           <option value="هايبرد">هايبرد</option>
                           <option value="كهربائية بالكامل">كهربائية بالكامل</option>
                           <option value="بلك أن">بلك أن</option>

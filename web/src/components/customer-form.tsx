@@ -360,7 +360,7 @@ export function CustomerForm({ customer, options, returnPath }: CustomerFormProp
                   className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-slate-900 outline-none transition focus:border-sky-300"
                 >
                   <option value="بنزين">بنزين</option>
-                  <option value="سولار">سولار</option>
+                  <option value="ديزل">ديزل</option>
                   <option value="هايبرد">هايبرد</option>
                   <option value="كهربائية بالكامل">كهربائية بالكامل</option>
                   <option value="بلك أن">بلك أن</option>

@@ -959,7 +959,7 @@ export default function AddCustomerMiniApp() {
               <span style={label}>نوع الوقود</span>
               <select value={tradeInFuel} onChange={(e) => setTradeInFuel(e.target.value)} style={input}>
                 <option value="بنزين">بنزين</option>
-                <option value="سولار">سولار</option>
+                <option value="ديزل">ديزل</option>
                 <option value="هايبرد">هايبرد</option>
                 <option value="كهربائية بالكامل">كهربائية بالكامل</option>
                 <option value="بلك أن">بلك أن</option>

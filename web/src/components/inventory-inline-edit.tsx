@@ -54,8 +54,8 @@ function ColorLabel({ color }: { color: string }) {
   return (
     <span style={{
       display:"inline-block", background:bg, color:tc,
-      borderRadius:6, padding:"1px 8px", fontSize:11, fontWeight:600,
-      border:"1px solid rgba(0,0,0,0.12)", letterSpacing:"0.2px",
+      borderRadius:6, padding:"2px 10px", fontSize:13, fontWeight:700,
+      border:"1px solid rgba(0,0,0,0.15)", letterSpacing:"0.3px",
     }}>{color}</span>
   );
 }
@@ -216,7 +216,7 @@ export function InventoryPriceCellNew({ itemId, price }: { itemId: string; price
 
 // ── الثوابت ──────────────────────────────────────────────────────────────────
 export const GEARBOX_OPTIONS  = ["اتوماتيك","يدوي"];
-export const FUEL_OPTIONS     = ["بنزين","سولار","هايبرد","كهربائية بالكامل","بلك أن"];
+export const FUEL_OPTIONS     = ["بنزين","ديزل","هايبرد","كهربائية بالكامل","بلك أن"];
 export const STATUS_OPTIONS   = ["متوفرة","محجوزة","مباعة","مسحوبة من المعرض"];
 export const DEAL_OPTIONS     = ["شراء","استبدال","برسم البيع"];
 export const CONDITION_OPTIONS = ["مستعملة","جديدة","شبه جديدة"];

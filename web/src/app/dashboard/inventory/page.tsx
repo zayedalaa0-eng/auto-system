@@ -541,8 +541,8 @@ export default async function InventoryPage({
                           value={typeof item.mileage === "number" ? item.mileage : null}
                           type="number" dir="ltr" placeholder="العداد (كم)"
                           emptyLabel="أضف العداد" suffix="كم"
-                          displayClass="text-xs text-slate-500"
-                          icon={<GaugeCircle className="h-3 w-3" />} />
+                          displayClass="text-sm font-semibold text-slate-600"
+                          icon={<GaugeCircle className="h-3.5 w-3.5" />} />
                       </div>
                     </td>
 
@@ -552,12 +552,12 @@ export default async function InventoryPage({
                         <EditableCell itemId={item.id} field="gearbox"
                           value={item.gearbox ?? null} type="select" options={GEARBOX_OPTIONS}
                           placeholder="ناقل الحركة" emptyLabel="أضف القير"
-                          icon={<Settings2 className="h-3 w-3" />} />
+                          icon={<Settings2 className="h-3.5 w-3.5" />} />
                         <EditableCell itemId={item.id} field="fuel_type"
                           value={item.fuel_type ?? null} type="select" options={FUEL_OPTIONS}
                           placeholder="نوع الوقود" emptyLabel="أضف الوقود"
-                          displayClass="text-xs text-slate-500"
-                          icon={<Fuel className="h-3 w-3" />} />
+                          displayClass="text-sm font-semibold text-slate-600"
+                          icon={<Fuel className="h-3.5 w-3.5" />} />
                       </div>
                     </td>
 
