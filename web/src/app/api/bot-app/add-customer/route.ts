@@ -284,6 +284,7 @@ export async function POST(req: NextRequest) {
         customerName: full_name.trim(),
         customerPhone: normalizedPhone,
         staffName: user.full_name,
+        staffUserId: user.id,
         branchName: notifBranchName,
         status: resolvedStatus,
         requestedCar: requested_car?.trim() ?? null,

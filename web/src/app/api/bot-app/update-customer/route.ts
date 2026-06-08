@@ -568,6 +568,7 @@ export async function POST(req: NextRequest) {
         opCode,
         customerName: customerDisplayName,
         staffName: user.full_name,
+        staffUserId: user.id,
         oldStatus: String(customer.status ?? ""),
         newStatus,
         nextFollowUp: updates.next_follow_up_at ?? customer.next_follow_up_at ?? null,

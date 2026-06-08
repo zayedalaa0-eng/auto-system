@@ -82,6 +82,7 @@ async function getManagerRecipients(
 function buildButtons(
   chatId: string,
   customerId: string | null,
+  staffChatId?: string | null,
 ): Array<Array<{ text: string; callback_data?: string; web_app?: { url: string } }>> {
   const appUrl = getAppUrl();
   const rows: Array<Array<{ text: string; callback_data?: string; web_app?: { url: string } }>> = [];
@@ -92,6 +93,15 @@ function buildButtons(
       web_app: { url: `${appUrl}/bot-app/customer?id=${customerId}&chat_id=${chatId}` },
     }]);
   }
+
+  // زر إرسال رسالة للموظف — يفتح صفحة إرسال رسالة مباشرة
+  if (staffChatId && appUrl) {
+    rows.push([{
+      text: "💬 إرسال رسالة للموظف",
+      web_app: { url: `${appUrl}/bot-app/send-message?to_chat_id=${staffChatId}&chat_id=${chatId}&customer_id=${customerId ?? ""}` },
+    }]);
+  }
+
   rows.push([{ text: "🏠 القائمة الرئيسية", callback_data: "main_menu" }]);
   return rows;
 }
@@ -101,6 +111,7 @@ async function sendWithButtons(
   chatId: string,
   text: string,
   customerId: string | null,
+  staffChatId?: string | null,
 ): Promise<void> {
   await fetch(`https://api.telegram.org/bot${token()}/sendMessage`, {
     method: "POST",
@@ -109,7 +120,7 @@ async function sendWithButtons(
       chat_id: chatId,
       text,
       parse_mode: "HTML",
-      reply_markup: { inline_keyboard: buildButtons(chatId, customerId) },
+      reply_markup: { inline_keyboard: buildButtons(chatId, customerId, staffChatId) },
     }),
   });
 }
@@ -216,6 +227,7 @@ export async function pushNewCustomerToManagers(params: {
   customerName: string;
   customerPhone: string | null;
   staffName: string;
+  staffUserId?: string | null;
   branchName: string | null;
   status: string;
   requestedCar: string | null;
@@ -226,8 +238,17 @@ export async function pushNewCustomerToManagers(params: {
     const managers = await getManagerRecipients(params.branchId);
     const logSection = await buildCustomerLogSection(params.customerId, 3);
     const text = buildNewCustomerText(params) + logSection;
+    // جلب chat_id الموظف المُدخِل لإضافة زر الرسالة
+    let staffChatId: string | null = null;
+    if (params.staffUserId) {
+      const admin = createAdminClient();
+      const { data } = await admin
+        .from("app_users").select("telegram_chat_id")
+        .eq("id", params.staffUserId).maybeSingle();
+      staffChatId = (data?.telegram_chat_id as string | null) ?? null;
+    }
     await Promise.allSettled(
-      managers.map((m) => sendWithButtons(m.chat_id, text, params.customerId)),
+      managers.map((m) => sendWithButtons(m.chat_id, text, params.customerId, staffChatId)),
     );
   } catch { /* best-effort */ }
 }
@@ -241,6 +262,7 @@ export async function pushCustomerUpdateToManagers(params: {
   opCode: string;
   customerName: string;
   staffName: string;
+  staffUserId?: string | null;
   oldStatus: string;
   newStatus: string;
   nextFollowUp: string | null;
@@ -250,8 +272,16 @@ export async function pushCustomerUpdateToManagers(params: {
     const managers = await getManagerRecipients(params.branchId);
     const logSection = await buildCustomerLogSection(params.customerId, 5);
     const text = buildUpdateCustomerText(params) + logSection;
+    let staffChatId: string | null = null;
+    if (params.staffUserId) {
+      const admin = createAdminClient();
+      const { data } = await admin
+        .from("app_users").select("telegram_chat_id")
+        .eq("id", params.staffUserId).maybeSingle();
+      staffChatId = (data?.telegram_chat_id as string | null) ?? null;
+    }
     await Promise.allSettled(
-      managers.map((m) => sendWithButtons(m.chat_id, text, params.customerId)),
+      managers.map((m) => sendWithButtons(m.chat_id, text, params.customerId, staffChatId)),
     );
   } catch { /* best-effort */ }
 }
