@@ -245,15 +245,23 @@ select {
 }
 
 .premium-table tbody tr {
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
-.premium-table tbody tr:hover {
-  background-color: #f8fbff;
+/* صفوف فردية — خلفية بيضاء */
+.premium-table tbody tr:nth-child(odd) {
+  background-color: #ffffff;
 }
 
+/* صفوف زوجية — خلفية رمادية فاتحة واضحة للتمييز */
 .premium-table tbody tr:nth-child(even) {
-  background-color: #fcfdff;
+  background-color: #f1f5f9;
+}
+
+/* عند المرور — أزرق فاتح يطغى على الكل */
+.premium-table tbody tr:hover {
+  background-color: #e0f2fe !important;
+  box-shadow: inset 3px 0 0 0 #2563eb;
 }
 
 .status-badge {
