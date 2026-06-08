@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, Calendar, Car, Fuel, GaugeCircle, Palette, Send, Settings2, Tag } from "lucide-react";
+import { Building2, Calendar, Car, Fuel, GaugeCircle, Palette, Send, Settings2, Store, Tag, User } from "lucide-react";
 
 import { CarGalleryViewer } from "@/components/car-gallery-viewer";
 import { CustomerModalShell } from "@/components/customer-modal-shell";
@@ -97,22 +97,6 @@ function getDealBadgeClass(value: string | null | undefined) {
   if (label.includes("شراء")) return "inv-deal-badge inv-deal-badge--purchase";
   if (label.includes("حيازة")) return "inv-deal-badge inv-deal-badge--owned";
   return "inv-deal-badge inv-deal-badge--default";
-}
-
-// ── مساعدات الأفاتار ──────────────────────────────────────────────────────────
-const AVATAR_COLORS = ["#ef4444","#f97316","#eab308","#22c55e","#3b82f6","#8b5cf6","#ec4899","#14b8a6"];
-
-function getAvatarColor(name: string | null): string {
-  if (!name) return "#94a3b8";
-  let h = 0;
-  for (const c of name) h = (h * 31 + c.charCodeAt(0)) & 0x7fffffff;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length];
-}
-
-function getInitials(name: string | null): string {
-  if (!name) return "—";
-  const p = name.trim().split(/\s+/);
-  return p.length >= 2 ? (p[0][0] + p[1][0]).toUpperCase() : (p[0][0] ?? "—").toUpperCase();
 }
 
 // ── كشف البيانات الناقصة ──────────────────────────────────────────────────────
@@ -467,11 +451,6 @@ export default async function InventoryPage({
           <tbody>
             {tabInventory.length > 0 ? (
               tabInventory.map((item) => {
-                const avatarColor = getAvatarColor(item.owner_name);
-                const initials = getInitials(item.owner_name);
-                const isUsed = normalize(item.condition_label).includes("مستعمل");
-                const missingColorMileage = isUsed && !item.color && typeof item.mileage !== "number";
-                const missingGearFuel = !item.gearbox && !item.fuel_type;
                 // المالك شخص (وليس معرضاً) → نُظهر اسم المعرض الذي أُدخل العميل من خلاله
                 const ownerIsPerson =
                   Boolean(item.owner_name) && !branchNamesSet.has(normalize(item.owner_name));
@@ -480,57 +459,53 @@ export default async function InventoryPage({
                   <tr key={item.id}>
                     {/* المالك / الشاصي */}
                     <td>
-                      <div className="flex items-center gap-2">
-                        {/* أفاتار */}
-                        <span className="flex-shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white select-none"
-                          style={{ backgroundColor: avatarColor }} title={item.owner_name ?? undefined}>
-                          {initials}
-                        </span>
-                        {/* تفاصيل المالك والشاصي — كل سطر يبدأ من نفس الخط */}
-                        <div className="min-w-0 flex flex-col gap-1">
-                          {/* اسم المالك */}
+                      <div className="flex flex-col gap-1.5">
+                        {/* اسم المالك — معرض أو شخص */}
+                        <div className="flex items-center gap-1.5">
+                          {ownerIsPerson ? (
+                            <User className="h-4 w-4 flex-shrink-0 text-slate-400" />
+                          ) : (
+                            <Store className="h-4 w-4 flex-shrink-0 text-amber-500" />
+                          )}
+                          <span className="font-bold text-slate-900 text-[15px] leading-tight truncate">{item.owner_name ?? "—"}</span>
+                        </div>
+                        {/* اسم المعرض (للأشخاص فقط) */}
+                        {ownerIsPerson && item.branch_name ? (
                           <div className="flex items-center gap-1.5">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-                            <span className="font-bold text-slate-900 text-sm leading-tight truncate">{item.owner_name ?? "—"}</span>
+                            <Building2 className="h-3.5 w-3.5 flex-shrink-0 text-slate-300" />
+                            <span className="text-xs text-slate-400 truncate">{item.branch_name}</span>
                           </div>
-                          {/* اسم المعرض */}
-                          {ownerIsPerson && item.branch_name ? (
-                            <div className="flex items-center gap-1.5">
-                              <Building2 className="h-3 w-3 flex-shrink-0 text-slate-300" />
-                              <span className="text-xs text-slate-400 truncate">{item.branch_name}</span>
-                            </div>
-                          ) : null}
-                          {/* رقم الشاصي */}
-                          <div className="flex items-center gap-0.5">
-                            <EditableCell itemId={item.id} field="chassis_no"
-                              value={item.chassis_no ?? null} dir="ltr"
-                              placeholder="رقم الشاصي" emptyLabel="أضف رقم الشاصي"
-                              displayClass="font-mono text-xs text-slate-400 tracking-wide"
-                              icon={<span className="text-[9px] font-bold text-slate-300 mr-0.5">#</span>} />
-                          </div>
+                        ) : null}
+                        {/* رقم الشاصي */}
+                        <div className="flex items-center gap-1">
+                          <EditableCell itemId={item.id} field="chassis_no"
+                            value={item.chassis_no ?? null} dir="ltr"
+                            placeholder="رقم الشاصي" emptyLabel="أضف رقم الشاصي"
+                            displayClass="font-mono text-xs text-slate-400 tracking-wide"
+                            icon={<span className="text-[10px] font-bold text-slate-300">#</span>} />
                         </div>
                       </div>
                     </td>
 
                     {/* السيارة */}
                     <td>
-                      <div className="flex flex-col gap-1">
+                      <div className="flex flex-col gap-1.5">
                         {/* اسم السيارة */}
                         <div className="flex items-center gap-1.5">
-                          <Car className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" />
-                          <span className="font-bold text-blue-700 text-sm leading-tight truncate">{item.model || "—"}</span>
+                          <Car className="h-4 w-4 flex-shrink-0 text-blue-400" />
+                          <span className="font-bold text-blue-700 text-[15px] leading-tight truncate">{item.model || "—"}</span>
                         </div>
                         {/* سنة الصنع */}
                         {item.production_year ? (
                           <div className="flex items-center gap-1.5">
-                            <Calendar className="h-3 w-3 flex-shrink-0 text-slate-400" />
-                            <span className="text-xs text-slate-500 font-medium">{item.production_year}</span>
+                            <Calendar className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+                            <span className="text-[13px] text-slate-500 font-medium">{item.production_year}</span>
                           </div>
                         ) : null}
                         {/* الحالة */}
                         {item.condition_label ? (
                           <div className="flex items-center gap-1.5">
-                            <Tag className="h-3 w-3 flex-shrink-0 text-slate-400" />
+                            <Tag className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
                             <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
                               item.condition_label.includes("جديد")
                                 ? "bg-emerald-50 text-emerald-700"
