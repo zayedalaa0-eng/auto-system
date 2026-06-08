@@ -482,23 +482,32 @@ export default async function InventoryPage({
                     {/* المالك / الشاصي */}
                     <td>
                       <div className="flex items-center gap-2">
+                        {/* أفاتار */}
                         <span className="flex-shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white select-none"
                           style={{ backgroundColor: avatarColor }} title={item.owner_name ?? undefined}>
                           {initials}
                         </span>
-                        <div className="min-w-0">
-                          <div className="font-bold text-slate-900 leading-tight truncate">{item.owner_name ?? "—"}</div>
+                        {/* تفاصيل المالك والشاصي — كل سطر يبدأ من نفس الخط */}
+                        <div className="min-w-0 flex flex-col gap-1">
+                          {/* اسم المالك */}
+                          <div className="flex items-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                            <span className="font-bold text-slate-900 text-sm leading-tight truncate">{item.owner_name ?? "—"}</span>
+                          </div>
+                          {/* اسم المعرض */}
                           {ownerIsPerson && item.branch_name ? (
-                            <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-500 truncate">
-                              <Building2 className="h-3 w-3 flex-shrink-0 text-slate-400" />{item.branch_name}
+                            <div className="flex items-center gap-1.5">
+                              <Building2 className="h-3 w-3 flex-shrink-0 text-slate-300" />
+                              <span className="text-xs text-slate-400 truncate">{item.branch_name}</span>
                             </div>
                           ) : null}
-                          <div className="mt-0.5">
+                          {/* رقم الشاصي */}
+                          <div className="flex items-center gap-0.5">
                             <EditableCell itemId={item.id} field="chassis_no"
                               value={item.chassis_no ?? null} dir="ltr"
                               placeholder="رقم الشاصي" emptyLabel="أضف رقم الشاصي"
                               displayClass="font-mono text-xs text-slate-400 tracking-wide"
-                              icon={<span className="text-[9px] font-bold text-slate-300">#</span>} />
+                              icon={<span className="text-[9px] font-bold text-slate-300 mr-0.5">#</span>} />
                           </div>
                         </div>
                       </div>
@@ -611,34 +620,31 @@ export default async function InventoryPage({
                           </button>
                         </form>
 
-                        {/* بطاقة السيارة */}
-                        <Link
-                          href={
-                            baseQuery
-                              ? `/dashboard/inventory?${baseQuery}&car=${item.id}`
-                              : `/dashboard/inventory?car=${item.id}`
-                          }
-                          className="legacy-table-btn legacy-table-btn--view legacy-table-btn--sm"
-                          title="عرض بطاقة السيارة"
-                        >
-                          بطاقة
-                        </Link>
-                        {/* تعديل */}
-                        <Link
-                          href={`/dashboard/inventory/${item.id}/edit`}
-                          className="legacy-table-btn legacy-table-btn--sm"
-                          title="تعديل بيانات السيارة"
-                        >
-                          ✏️
-                        </Link>
+                        {/* بطاقة + تعديل — مجمّعَان */}
+                        <div className="flex rounded-lg overflow-hidden border border-slate-200 shadow-sm">
+                          <Link
+                            href={baseQuery ? `/dashboard/inventory?${baseQuery}&car=${item.id}` : `/dashboard/inventory?car=${item.id}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-slate-600 bg-white hover:bg-blue-50 hover:text-blue-700 transition border-l border-slate-200"
+                            title="عرض البطاقة"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                            بطاقة
+                          </Link>
+                          <Link
+                            href={`/dashboard/inventory/${item.id}/edit`}
+                            className="inline-flex items-center px-2 py-1.5 text-xs text-slate-500 bg-white hover:bg-amber-50 hover:text-amber-600 transition"
+                            title="تعديل بيانات السيارة"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          </Link>
+                        </div>
                         {/* حذف */}
                         <Link
                           href={`/dashboard/inventory/${item.id}/edit?delete=1`}
-                          className="legacy-table-btn legacy-table-btn--sm"
-                          style={{ color: "#dc2626" }}
+                          className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-rose-100 bg-white text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition"
                           title="حذف السيارة"
                         >
-                          🗑
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                         </Link>
                       </div>
                     </td>
