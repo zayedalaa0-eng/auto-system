@@ -77,12 +77,12 @@ export function CustomersReportTable({
       <table className="premium-table">
         <thead className="legacy-standard-head">
           <tr>
-            <th style={{ width: "150px" }}>المعرض / الموظف</th>
+            <th style={{ width: "145px" }}>المعرض / الموظف</th>
             <th style={{ width: "150px" }}>العميل والهاتف</th>
-            <th style={{ width: "230px" }}>السيارة</th>
-            <th style={{ width: "140px" }}>الحالة</th>
-            <th style={{ width: "120px" }}>آخر تواصل</th>
-            <th style={{ width: "120px" }}>الإجراءات</th>
+            <th style={{ width: "250px" }}>السيارة</th>
+            <th style={{ width: "175px" }}>الحالة</th>
+            <th style={{ width: "95px" }}>آخر تواصل</th>
+            <th style={{ width: "115px" }}>الإجراءات</th>
           </tr>
         </thead>
         <tbody>
@@ -217,11 +217,13 @@ export function CustomersReportTable({
 
                   {/* آخر تواصل */}
                   <td>
-                    <div className="text-xs font-semibold text-emerald-700">
-                      {formatDate(customer.last_contact_at ?? customer.updated_at ?? null)}
-                    </div>
-                    <div className="mt-1 inline-flex items-center gap-1 rounded-md bg-cyan-500 px-2 py-0.5 text-xs font-bold text-white">
-                      تفاعلات: {customer.visit_count ?? 0}
+                    <div className="flex flex-col gap-1 items-center">
+                      <span className="text-xs font-semibold text-emerald-700 whitespace-nowrap">
+                        {formatDate(customer.last_contact_at ?? customer.updated_at ?? null)}
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-md bg-cyan-500 px-2 py-0.5 text-[11px] font-bold text-white whitespace-nowrap">
+                        تفاعلات: {customer.visit_count ?? 0}
+                      </span>
                     </div>
                   </td>
 
