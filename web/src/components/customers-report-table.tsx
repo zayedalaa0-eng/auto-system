@@ -24,23 +24,39 @@ function isBuyerTradeIn(opType: string | null | undefined) {
   return opType === "buyer_tradein_pending" || opType === "buyer_tradein_evaluated" || opType === "مشتري + استبدال";
 }
 
-function carNameOnly(value: string | null) {
-  if (!value) return null;
-  const cleaned = value
-    .split("|")
-    .map((part) =>
-      part
-        .replace(/\(?\s*طلب\s+خاص\s*\)?/gi, "")
-        .replace(/\s*-\s*موديل\s*:?\s*[^|]+/gi, "")
-        .replace(/\s*-\s*model\s*:?\s*[^|]+/gi, "")
-        .replace(/\s*-\s*شاصي\s*:\s*[^|]+/gi, "")
-        .replace(/\s*-\s*chassis\s*:\s*[^|]+/gi, "")
-        .trim(),
-    )
-    .filter(Boolean)
-    .join(" | ")
+function cleanCarPart(part: string): string {
+  return part
+    .replace(/\(?\s*طلب\s+خاص\s*\)?/gi, "")
+    .replace(/\s*-\s*موديل\s*:?\s*[^|]+/gi, "")
+    .replace(/\s*-\s*model\s*:?\s*[^|]+/gi, "")
+    .replace(/\s*-\s*شاصي\s*:\s*[^|]+/gi, "")
+    .replace(/\s*-\s*chassis\s*:\s*[^|]+/gi, "")
     .trim();
-  return cleaned || null;
+}
+
+/** يُرجع مصفوفة سيارات مطلوبة — كل سيارة باسمها وعلم "طلب خاص" */
+function parseRequestedCars(
+  value: string | null,
+  tradeInModel?: string | null,
+): Array<{ name: string; special: boolean }> {
+  if (!value) return [];
+  const tradeNorm = (tradeInModel ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+  return value
+    .split("|")
+    .map((raw) => {
+      const special = /طلب\s+خاص/i.test(raw);
+      const name = cleanCarPart(raw);
+      return { name, special };
+    })
+    .filter((c) => {
+      if (!c.name) return false;
+      // إزالة سيارة الاستبدال من القائمة لتفادي التكرار
+      if (tradeNorm) {
+        const n = c.name.replace(/\s+/g, " ").trim().toLowerCase();
+        if (n === tradeNorm || n.includes(tradeNorm) || tradeNorm.includes(n)) return false;
+      }
+      return true;
+    });
 }
 
 export function CustomersReportTable({
@@ -72,18 +88,11 @@ export function CustomersReportTable({
         <tbody>
           {customers.length > 0 ? (
             customers.map((customer) => {
-              let carName = carNameOnly(customer.requested_car_report ?? customer.requested_car);
-              const hasSpecialRequest = (customer.requested_car_report ?? customer.requested_car ?? "").includes("طلب خاص");
-
-              // إزالة اسم سيارة الاستبدال من السيارة المطلوبة لتفادي التكرار
-              if (carName && isBuyerTradeIn(customer.operation_type) && customer.trade_in_model) {
-                const tradeNorm = customer.trade_in_model.replace(/\s+/g, " ").trim().toLowerCase();
-                const parts = carName.split("|").map(p => p.trim()).filter(p => {
-                  const pn = p.replace(/\s+/g, " ").trim().toLowerCase();
-                  return pn !== tradeNorm && !pn.includes(tradeNorm) && !tradeNorm.includes(pn);
-                });
-                carName = parts.length > 0 ? parts.join(" | ") : null;
-              }
+              // قائمة السيارات المطلوبة — كل سيارة في عنصر (مع إزالة الاستبدال)
+              const requestedCars = parseRequestedCars(
+                customer.requested_car_report ?? customer.requested_car,
+                isBuyerTradeIn(customer.operation_type) ? customer.trade_in_model : null,
+              );
 
               return (
                 <tr key={customer.id}>
@@ -144,7 +153,7 @@ export function CustomersReportTable({
                       {/* بيع بالوكالة: سيارة العميل المعروضة للبيع */}
                       {isSellOnBehalf(customer.operation_type) ? (
                         customer.trade_in_model ? (
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <Car className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
                             <span className="text-sm font-semibold text-slate-700 leading-tight">{customer.trade_in_model}</span>
                             <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-600">معروضة للبيع</span>
@@ -154,15 +163,17 @@ export function CustomersReportTable({
                         )
                       ) : (
                         <>
-                          {/* السيارة المطلوبة (مشتري / مشتري + استبدال) */}
-                          {carName ? (
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <Car className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
-                              <span className="text-sm font-semibold text-slate-700 leading-tight">{carName}</span>
-                              {hasSpecialRequest ? (
-                                <span className="inline-flex items-center rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-semibold text-rose-600">غير متوفرة بالمعرض</span>
-                              ) : null}
-                            </div>
+                          {/* السيارات المطلوبة — كل سيارة في سطر مع شارتها */}
+                          {requestedCars.length > 0 ? (
+                            requestedCars.map((rc, i) => (
+                              <div key={i} className="flex items-center gap-1.5 flex-wrap">
+                                <Car className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
+                                <span className="text-sm font-semibold text-slate-700 leading-tight">{rc.name}</span>
+                                {rc.special ? (
+                                  <span className="inline-flex items-center rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-semibold text-rose-600">غير متوفرة بالمعرض</span>
+                                ) : null}
+                              </div>
+                            ))
                           ) : (
                             <span className="text-xs text-slate-300">— لم تُحدَّد —</span>
                           )}
@@ -227,7 +238,7 @@ export function CustomersReportTable({
                           <input
                             type="hidden"
                             name="message"
-                            value={`يرجى متابعة ملف ${customer.full_name}${carName ? ` بخصوص ${carName}` : ""}. الحالة: ${customer.status ?? "غير محددة"}`}
+                            value={`يرجى متابعة ملف ${customer.full_name}${requestedCars.length > 0 ? ` بخصوص ${requestedCars.map(c => c.name).join("، ")}` : ""}. الحالة: ${customer.status ?? "غير محددة"}`}
                           />
                           <input type="hidden" name="redirect_to" value={basePath} />
                           <button type="submit" className="legacy-table-icon-btn" title={`تذكير ${customer.assigned_user_name ?? "الموظف"} عبر تيليغرام`}>
