@@ -31,6 +31,7 @@ export type DashboardMetric = {
 export type CustomerItem = {
   id: string;
   full_name: string;
+  nickname?: string | null;
   phone: string;
   operation_type?: string | null;
   requested_car: string | null;
@@ -378,6 +379,7 @@ function mapCustomerRow(item: Record<string, unknown>): CustomerItem {
   return {
     id: String(item.id),
     full_name: String(item.full_name ?? ""),
+    nickname: (item.nickname as string | null) ?? null,
     phone: String(item.phone ?? ""),
     // نُفضّل الكود الإنجليزي من metadata (يُخزَّن دائماً بواسطة الويب والبوت)
     // لأن دوال الإثراء والمكونات تقارن بالكود وليس بالتسمية العربية
@@ -792,7 +794,7 @@ export async function getRecentCustomers(limit = 8): Promise<CustomerItem[]> {
   const recentCustomersQuery = supabase
     .from("customers")
     .select(
-      "id, full_name, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, operation_type, metadata, branches(name), app_users(full_name)",
+      "id, full_name, nickname, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, operation_type, metadata, branches(name), app_users(full_name)",
     );
   const { data } = await (applyBranchScope(
     recentCustomersQuery,
@@ -820,7 +822,7 @@ export async function getCustomersDirectory(
   const customersDirectoryQuery = supabase
     .from("customers")
     .select(
-      "id, full_name, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, operation_type, metadata, branches(name), app_users(full_name)",
+      "id, full_name, nickname, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, operation_type, metadata, branches(name), app_users(full_name)",
     );
   const branchScoped = applyBranchScope(
     customersDirectoryQuery,
@@ -850,7 +852,7 @@ export async function getCustomersSearchResults(query: string, limit = 120): Pro
   const customersSearchQuery = supabase
     .from("customers")
     .select(
-      "id, full_name, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, operation_type, metadata, branches(name), app_users(full_name)",
+      "id, full_name, nickname, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, operation_type, metadata, branches(name), app_users(full_name)",
     );
 
   const scoped = applyBranchScope(
@@ -1280,7 +1282,7 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
   const dashboardFollowUpsQuery = supabase
     .from("customers")
     .select(
-      "id, full_name, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, operation_type, metadata, branches(name), app_users(full_name)",
+      "id, full_name, nickname, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, operation_type, metadata, branches(name), app_users(full_name)",
     )
     .not("next_follow_up_at", "is", null)
     .lte("next_follow_up_at", todayEndIso)
