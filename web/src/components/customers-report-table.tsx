@@ -85,16 +85,6 @@ export function CustomersReportTable({
               const carName = carNameOnly(customer.requested_car_report ?? customer.requested_car);
               const hasSpecialRequest = (customer.requested_car_report ?? customer.requested_car ?? "").includes("طلب خاص");
 
-              // كشف تطابق السيارة المطلوبة مع سيارة الاستبدال (لتفادي التكرار)
-              const normCar = (carName ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-              const normTrade = (customer.trade_in_model ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-              const carDuplicatesTradeIn =
-                isBuyerTradeIn(customer.operation_type) &&
-                normCar.length > 0 && normTrade.length > 0 &&
-                (normCar === normTrade || normCar.includes(normTrade) || normTrade.includes(normCar));
-              // نُظهر السيارة المطلوبة في الأعلى فقط إذا لم تكن مكررة مع الاستبدال
-              const showRequestedCar = Boolean(carName) && !carDuplicatesTradeIn;
-
               return (
                 <tr key={customer.id}>
                   {/* المعرض / التاريخ / الموظف */}
@@ -142,16 +132,16 @@ export function CustomersReportTable({
                   {/* السيارة المطلوبة */}
                   <td>
                     <div className="flex flex-col gap-1.5">
-                      {/* السيارة المطلوبة — تُخفى إذا تطابقت مع الاستبدال */}
-                      {showRequestedCar ? (
+                      {/* السيارة المطلوبة */}
+                      {carName ? (
                         <div className="flex items-center gap-1.5">
                           <Car className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
                           <span className="text-sm font-semibold text-slate-700 leading-tight">{carName}</span>
                         </div>
-                      ) : !isBuyerTradeIn(customer.operation_type) && !carName ? (
+                      ) : (
                         <span className="text-xs text-slate-300">— لم تُحدَّد —</span>
-                      ) : null}
-                      {hasSpecialRequest && showRequestedCar ? (
+                      )}
+                      {hasSpecialRequest ? (
                         <span className="inline-flex w-fit items-center rounded bg-rose-50 px-1.5 py-0.5 text-xs font-semibold text-rose-600">
                           ⚠️ غير متوفرة بالمعرض
                         </span>
@@ -163,8 +153,6 @@ export function CustomersReportTable({
                           <span className="text-xs font-semibold text-violet-700">{customer.trade_in_model}</span>
                           <span className="text-[10px] text-violet-400">(استبدال)</span>
                         </div>
-                      ) : isBuyerTradeIn(customer.operation_type) && !carName ? (
-                        <span className="text-xs text-slate-300">— لم تُحدَّد —</span>
                       ) : null}
                       {(() => {
                         const badge = tradeInStatusBadge(customer.trade_in_status, customer.operation_type);
