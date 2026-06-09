@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
 
@@ -586,7 +586,7 @@ export default function CustomerPage() {
   const lastStatusLog = [...data.logs].find(l=>l.action==="status_updated");
 
   return(
-    <div style={{minHeight:"100vh",background:bg,color:text,fontFamily:"system-ui,sans-serif",direction:"rtl",paddingBottom:canEdit?100:72}}>
+    <div style={{minHeight:"100vh",background:bg,color:text,fontFamily:"system-ui,sans-serif",direction:"rtl",paddingBottom:canEdit?160:110}}>
 
       {/* ════ هيدر العميل ═════════════════════════════════════════════════════ */}
       <div style={{background:cardBg,padding:"16px 16px 14px",borderBottom:`1px solid ${border}`,position:"sticky",top:0,zIndex:10}}>

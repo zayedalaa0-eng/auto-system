@@ -28,7 +28,10 @@ export async function POST(req: NextRequest) {
   if (!recipient) return NextResponse.json({ error: "الموظف غير موجود" }, { status: 404 });
 
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
-  const SEP = "━━━━━━━━━━━━━━━━━━━━";
+  const text =
+    `💬 <b>رسالة من ${sender.full_name}:</b>\n` +
+    `<blockquote>${message.trim()}</blockquote>\n\n` +
+    `<i>يمكنك الرد مباشرة بالضغط على الأزرار الشفافة أدناه 👇</i>`;
 
   const rows: Array<Array<{ text: string; web_app?: { url: string }; callback_data?: string }>> = [];
   if (customer_id && appUrl) {
@@ -43,11 +46,6 @@ export async function POST(req: NextRequest) {
     }]);
   }
   rows.push([{ text: "🏠 القائمة الرئيسية", callback_data: "main_menu" }]);
-
-  const text =
-    `💬 <b>رسالة من ${sender.full_name}</b>\n${SEP}\n\n` +
-    `${message.trim()}\n\n${SEP}\n` +
-    `<i>يمكنك الرد مباشرة عبر الزر أدناه</i>`;
 
   const res = await fetch(
     `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,

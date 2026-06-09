@@ -1,4 +1,4 @@
-﻿import { PAYMENT_METHOD_VALUES, needsPaymentMethod } from "@/lib/payment";
+import { PAYMENT_METHOD_VALUES, needsPaymentMethod } from "@/lib/payment";
 import {
   BTN,
   answerCallbackQuery,
@@ -162,19 +162,18 @@ async function handleStart(chatId: number, user: BotUser | null) {
   await clearSession(String(chatId));
   const isMaalam = await checkIsMaalamMgr(user.id);
 
-  const SEP = "━━━━━━━━━━━━━━━━━━━━";
   const role = user.capabilities.isGeneralManager
     ? "مدير عام 👑"
     : user.capabilities.isManager
       ? "مدير معرض 🏢"
       : "موظف مبيعات 👤";
 
-  let welcome = `أهلاً وسهلاً، <b>${escapeHtml(user.full_name)}</b> 👋\n${SEP}\n\n`;
-  welcome += `🪪 <b>الصلاحية:</b> ${role}\n`;
+  let welcome = `أهلاً وسهلاً، <b>${escapeHtml(user.full_name)}</b> 👋\n\n`;
+  welcome += `<blockquote>🪪 <b>الصلاحية:</b> ${role}\n`;
   if (user.branch_name) {
     welcome += `🏢 <b>المعرض:</b> ${escapeHtml(user.branch_name)}\n`;
   }
-  welcome += `\n${SEP}\nاختر من القائمة أدناه:`;
+  welcome += `</blockquote>\nاختر من القائمة أدناه:`;
 
   return sendMessage(chatId, welcome, { replyMarkup: menuKeyboard(user, isMaalam) });
 }
@@ -223,8 +222,6 @@ async function handleToday(chatId: number, user: BotUser) {
       ? "<i>النطاق: فرعك</i>"
       : "<i>النطاق: ملفاتك</i>";
 
-  const SEP = "━━━━━━━━━━━━━━━━━━━━━━";
-
   let text = `📅 <b>الأجندة — ${date}</b>\n${scopeNote}\n\n`;
 
   // ── ملخص سريع ──────────────────────────────────────────────────────────
@@ -257,7 +254,7 @@ async function handleToday(chatId: number, user: BotUser) {
   if (agenda.pendingEvaluations.length > 0) summaryParts.push(`🔍 تقييم: <b>${agenda.pendingEvaluations.length}</b>`);
   if (agenda.incompleteTrades.length > 0)  summaryParts.push(`📋 بيانات ناقصة: <b>${agenda.incompleteTrades.length}</b>`);
   if (agenda.licenseDue.length > 0)        summaryParts.push(`📄 رخص: <b>${agenda.licenseDue.length}</b>`);
-  text += summaryParts.join(" | ") + `\n\n${SEP}\n\n`;
+  text += summaryParts.join(" | ") + `\n\n`;
 
   // ── 1. متابعات اليوم ────────────────────────────────────────────────────
   if (agenda.followupsToday.length > 0) {
@@ -340,7 +337,7 @@ async function handleToday(chatId: number, user: BotUser) {
 
   // ── تذييل ────────────────────────────────────────────────────────────────
   text = text.trimEnd();
-  const footer = `\n\n${SEP}\n<i>اضغط الزر أدناه لفتح الأجندة التفاعلية 👇</i>`;
+  const footer = `\n\n<i>اضغط الزر أدناه لفتح الأجندة التفاعلية 👇</i>`;
 
   // Telegram limit: 4096 chars — truncate body if needed before appending footer
   const MAX_LEN = 4096;
@@ -700,26 +697,27 @@ async function handleEvalRequests(chatId: number, user: BotUser) {
   for (const [i, e] of items.entries()) {
     await sendChatAction(chatId);
 
-    const SEP = "━━━━━━━━━━━━━━━━━━━━";
-
     // ── النص الكامل للرسالة النصية (بدون حد) ───────────────────────────────
     let fullText =
-      `🚘 <b>بطاقة تقييم #${i + 1}</b>\n${SEP}\n\n` +
-      `👤 <b>صاحب السيارة:</b> ${escapeHtml(e.customer_name)}\n`;
-    if (e.customer_phone) fullText += `📱 ${escapeHtml(e.customer_phone)}\n`;
-    if (e.branch_name)    fullText += `🏢 ${escapeHtml(e.branch_name)}\n`;
-    if (e.staff_name)     fullText += `👨‍💼 المُدخِل: ${escapeHtml(e.staff_name)}\n`;
-    fullText += `\n${SEP}\n`;
-    fullText += `🚗 <b>الموديل:</b> ${escapeHtml(e.model)}\n`;
-    if (e.color)           fullText += `🎨 <b>اللون:</b> ${escapeHtml(e.color)}\n`;
-    if (e.production_year) fullText += `📅 <b>سنة الصنع:</b> ${e.production_year}\n`;
-    if (e.mileage)         fullText += `🛣 <b>الكيلومترات:</b> ${e.mileage.toLocaleString("en-US")} كم\n`;
-    if (e.chassis_no)      fullText += `🔢 <b>رقم الشاصي:</b> ${escapeHtml(e.chassis_no)}\n`;
-    if (e.inspection)      fullText += `🔍 <b>الفحص:</b> ${escapeHtml(e.inspection)}\n`;
-    if (e.specs)           fullText += `⚙️ <b>المواصفات:</b> ${escapeHtml(e.specs)}\n`;
-    if (e.notes)           fullText += `📝 <b>ملاحظات:</b> ${escapeHtml(e.notes)}\n`;
-    if (e.status)          fullText += `\n📌 <b>الحالة:</b> ${escapeHtml(e.status)}\n`;
-    fullText += `\n${SEP}\n<i>اضغط الزر أدناه لإرسال قيمة التقييم للموظف 👇</i>`;
+      `🚘 <b>بطاقة تقييم #${i + 1}</b>\n\n` +
+      `👤 <b>صاحب السيارة:</b>\n` +
+      `<blockquote><b>الاسم:</b> ${escapeHtml(e.customer_name)}\n` +
+      (e.customer_phone ? `<b>الهاتف:</b> <code>${escapeHtml(e.customer_phone)}</code>\n` : "") +
+      (e.branch_name ? `<b>الفرع:</b> ${escapeHtml(e.branch_name)}\n` : "") +
+      (e.staff_name ? `<b>المُدخِل:</b> ${escapeHtml(e.staff_name)}` : "") +
+      `</blockquote>\n\n` +
+      `🚗 <b>تفاصيل السيارة:</b>\n` +
+      `<blockquote><b>الموديل:</b> ${escapeHtml(e.model)}\n` +
+      (e.color ? `<b>اللون:</b> ${escapeHtml(e.color)}\n` : "") +
+      (e.production_year ? `<b>سنة الصنع:</b> ${e.production_year}\n` : "") +
+      (e.mileage ? `<b>الكيلومترات:</b> ${e.mileage.toLocaleString("en-US")} كم\n` : "") +
+      (e.chassis_no ? `<b>رقم الشاصي:</b> <code>${escapeHtml(e.chassis_no)}</code>\n` : "") +
+      (e.inspection ? `<b>الفحص:</b> ${escapeHtml(e.inspection)}\n` : "") +
+      (e.specs ? `<b>المواصفات:</b> ${escapeHtml(e.specs)}\n` : "") +
+      (e.notes ? `<b>ملاحظات:</b> ${escapeHtml(e.notes)}\n` : "") +
+      (e.status ? `<b>الحالة:</b> ${escapeHtml(e.status)}\n` : "") +
+      `</blockquote>\n\n` +
+      `<i>اضغط الزر أدناه لإرسال قيمة التقييم للموظف 👇</i>`;
 
     // ── caption مختصر للصور (حد تيليجرام 1024 حرف) ─────────────────────────
     let photoCaption =
@@ -895,16 +893,15 @@ async function handleEvalReplyPrice(chatId: number, user: BotUser, input: string
 
   const priceFormatted = price.toLocaleString("en-US");
 
-  const SEP_E = "━━━━━━━━━━━━━━━━━━━━";
-
   // تأكيد للمُقيِّم مع زر القائمة
   await sendMessage(
     chatId,
-    `✅ <b>تم إرسال قيمة التقييم بنجاح</b>\n${SEP_E}\n\n` +
-    `👤 <b>العميل:</b> ${escapeHtml(customerName)}\n` +
-    (tradeModel ? `🚗 <b>السيارة:</b> ${escapeHtml(tradeModel)}\n` : "") +
-    `💰 <b>قيمة التقييم:</b> ${priceFormatted} ₪\n\n` +
-    `${SEP_E}\n<i>سيتلقّى الموظف المعني إشعاراً فورياً بهذه القيمة.</i>`,
+    `✅ <b>تم إرسال قيمة التقييم بنجاح</b>\n\n` +
+    `👤 <b>بيانات التقييم:</b>\n` +
+    `<blockquote><b>العميل:</b> ${escapeHtml(customerName)}\n` +
+    (tradeModel ? `<b>السيارة:</b> ${escapeHtml(tradeModel)}\n` : "") +
+    `<b>قيمة التقييم:</b> <b>${priceFormatted} ₪</b></blockquote>\n\n` +
+    `<i>سيتلقّى الموظف المسؤول إشعاراً فورياً بهذه القيمة.</i>`,
     { replyMarkup: menuKeyboard(user, true) },
   );
 
@@ -912,12 +909,13 @@ async function handleEvalReplyPrice(chatId: number, user: BotUser, input: string
   const notifyTarget = submitterChatId || null;
   if (notifyTarget) {
     const evalMsg =
-      `💰 <b>تم تقييم سيارتك</b>\n${SEP_E}\n\n` +
-      `👤 <b>العميل:</b> ${escapeHtml(customerName)}\n` +
-      (tradeModel ? `🚗 <b>الموديل:</b> ${escapeHtml(tradeModel)}\n` : "") +
-      `✅ <b>قيمة التقييم:</b> <b>${priceFormatted} ₪</b>\n` +
-      `👨‍💼 <b>المُقيِّم:</b> ${escapeHtml(user.full_name)}\n\n` +
-      `${SEP_E}\n<i>تمّ تحديث الملف. يمكنك فتح البطاقة للاطلاع على التفاصيل.</i>`;
+      `💰 <b>تم تقييم سيارة العميل بنجاح</b>\n\n` +
+      `👤 <b>تفاصيل التقييم المستلم:</b>\n` +
+      `<blockquote><b>العميل:</b> ${escapeHtml(customerName)}\n` +
+      (tradeModel ? `<b>الموديل:</b> ${escapeHtml(tradeModel)}\n` : "") +
+      `<b>قيمة التقييم:</b> <b>${priceFormatted} ₪</b>\n` +
+      `<b>المُقيِّم:</b> ${escapeHtml(user.full_name)}</blockquote>\n\n` +
+      `<i>تمّ تحديث الملف تلقائياً. يمكنك فتح البطاقة للاطلاع على كامل التفاصيل.</i>`;
 
     // جلب customer_id من trade_in لبناء رابط البطاقة
     const { data: tiForCard } = await admin

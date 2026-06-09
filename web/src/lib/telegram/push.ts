@@ -2,7 +2,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getRoleCapabilities } from "@/lib/roles";
 import { sendMediaGroup, sendPhoto, sendVoice, escapeHtml, getAppUrl } from "./api";
 
-const SEP = "━━━━━━━━━━━━━━━━━━━━";
 const token = () => process.env.TELEGRAM_BOT_TOKEN ?? "";
 
 // ─── أسماء الأحداث بالعربية ──────────────────────────────────────────────────
@@ -18,7 +17,7 @@ const ACTION_LABELS: Record<string, string> = {
   customer_deleted:         "حذف الملف",
 };
 
-/** جلب آخر سجلات العميل وتنسيقها */
+/** جلب آخر سجلات العميل وتنسيقها بشكل نظيف كشكل اقتباس */
 async function buildCustomerLogSection(customerId: string, limit = 5): Promise<string> {
   try {
     const admin = createAdminClient();
@@ -31,17 +30,18 @@ async function buildCustomerLogSection(customerId: string, limit = 5): Promise<s
 
     if (!logs || logs.length === 0) return "";
 
-    let section = `\n${SEP}\n📋 <b>السجل التاريخي</b>\n`;
+    let section = `\n📜 <b>السجل التاريخي للملف:</b>\n<blockquote>`;
     for (const log of logs) {
       const label = ACTION_LABELS[log.action] ?? log.action;
       const ld = new Date(log.created_at);
       const date = `${String(ld.getUTCDate()).padStart(2,"0")}/${String(ld.getUTCMonth()+1).padStart(2,"0")}/${ld.getUTCFullYear()}`;
-      section += `🔸 <b>${escapeHtml(label)}</b> · ${date} · ${escapeHtml(log.actor_name ?? "—")}\n`;
+      section += `🔹 <b>${escapeHtml(label)}</b> · ${date} · ${escapeHtml(log.actor_name ?? "—")}\n`;
       if (log.details) {
         const details = escapeHtml(log.details).slice(0, 100);
         section += `   ↳ ${details}${log.details.length > 100 ? "…" : ""}\n`;
       }
     }
+    section += `</blockquote>`;
     return section;
   } catch {
     return "";
@@ -75,18 +75,25 @@ async function getManagerRecipients(
     }));
 }
 
-/** بناء أزرار inline لكل رسالة push */
+/** بناء أزرار inline لكل رسالة push مخصصة حسب نوع العملية */
 function buildButtons(
   chatId: string,
   customerId: string | null,
   staffChatId?: string | null,
+  opCode?: string,
 ): Array<Array<{ text: string; callback_data?: string; web_app?: { url: string } }>> {
   const appUrl = getAppUrl();
   const rows: Array<Array<{ text: string; callback_data?: string; web_app?: { url: string } }>> = [];
 
   if (customerId && appUrl) {
+    let cardText = "📋 فتح بطاقة العميل";
+    if (opCode === "sell_on_behalf") {
+      cardText = "📋 بطاقة سيارة برسم البيع";
+    } else if (opCode === "buyer_tradein_pending") {
+      cardText = "📋 فتح تفاصيل الاستبدال";
+    }
     rows.push([{
-      text: "📋 فتح بطاقة العميل",
+      text: cardText,
       web_app: { url: `${appUrl}/bot-app/customer?id=${customerId}&chat_id=${chatId}` },
     }]);
   }
@@ -94,7 +101,7 @@ function buildButtons(
   // زر إرسال رسالة للموظف — يظهر فقط إذا كان للموظف chat_id مربوط
   if (staffChatId && appUrl) {
     rows.push([{
-      text: "💬 مراسلة الموظف",
+      text: "💬 مراسلة الموظف المسجل",
       web_app: { url: `${appUrl}/bot-app/send-message?to_chat_id=${staffChatId}&chat_id=${chatId}&customer_id=${customerId ?? ""}` },
     }]);
   }
@@ -109,6 +116,7 @@ async function sendWithButtons(
   text: string,
   customerId: string | null,
   staffChatId?: string | null,
+  opCode?: string,
 ): Promise<void> {
   await fetch(`https://api.telegram.org/bot${token()}/sendMessage`, {
     method: "POST",
@@ -117,7 +125,7 @@ async function sendWithButtons(
       chat_id: chatId,
       text,
       parse_mode: "HTML",
-      reply_markup: { inline_keyboard: buildButtons(chatId, customerId, staffChatId) },
+      reply_markup: { inline_keyboard: buildButtons(chatId, customerId, staffChatId, opCode) },
     }),
   });
 }
@@ -147,31 +155,45 @@ function buildNewCustomerText(params: {
 
   let icon = "🛒";
   let opTitle = "مشتري جديد";
-  if (opCode === "buyer_tradein_pending") { icon = "🔄"; opTitle = "مشتري جديد + استبدال"; }
-  else if (opCode === "sell_on_behalf")   { icon = "🤝"; opTitle = "بيع بالوكالة — جديد"; }
-
-  let text = `${icon} <b>${escapeHtml(opTitle)}</b>\n${SEP}\n`;
-  text += `👤 <b>${escapeHtml(customerName)}</b>`;
-  if (customerPhone) text += `  |  📱 ${escapeHtml(customerPhone)}`;
-  text += "\n";
-  if (branchName) text += `🏢 ${escapeHtml(branchName)}\n`;
-
-  // تفاصيل الطلب
-  text += `${SEP}\n`;
+  let carSectionTitle = "السيارة المطلوبة";
   if (opCode === "buyer_tradein_pending") {
-    if (requestedCar)  text += `🚗 <b>السيارة المطلوبة:</b> ${escapeHtml(requestedCar)}\n`;
-    if (tradeInModel)  text += `🔁 <b>سيارة الاستبدال:</b> ${escapeHtml(tradeInModel)}\n`;
+    icon = "🔄";
+    opTitle = "مشتري جديد + استبدال";
   } else if (opCode === "sell_on_behalf") {
-    if (tradeInModel)  text += `🚗 <b>موديل السيارة:</b> ${escapeHtml(tradeInModel)}\n`;
-  } else {
-    if (requestedCar)  text += `🚗 <b>السيارة المطلوبة:</b> ${escapeHtml(requestedCar)}\n`;
-  }
-  text += `📌 <b>الحالة:</b> ${escapeHtml(status)}\n`;
-  if (nextFollowUp) {
-    try { text += `📅 <b>المتابعة:</b> ${fmtD(nextFollowUp)}\n`; } catch { /**/ }
+    icon = "🏷️";
+    opTitle = "سيارة برسم البيع — جديد";
+    carSectionTitle = "السيارة المعروضة برسم البيع";
   }
 
-  text += `${SEP}\n👨‍💼 <b>الموظف:</b> ${escapeHtml(staffName)}`;
+  let text = `${icon} <b>${escapeHtml(opTitle)}</b>\n\n`;
+  
+  text += `👤 <b>بيانات العميل:</b>\n`;
+  text += `<blockquote><b>الاسم:</b> ${escapeHtml(customerName)}\n`;
+  if (customerPhone) {
+    text += `<b>الهاتف:</b> <code>${escapeHtml(customerPhone)}</code>\n`;
+  }
+  if (branchName) {
+    text += `<b>المعرض:</b> ${escapeHtml(branchName)}\n`;
+  }
+  text += `<b>الحالة:</b> ${escapeHtml(status)}</blockquote>\n\n`;
+
+  // تفاصيل الطلب أو المعروض
+  text += `🚗 <b>تفاصيل ${carSectionTitle}:</b>\n`;
+  text += `<blockquote>`;
+  if (opCode === "buyer_tradein_pending") {
+    if (requestedCar)  text += `<b>السيارة المطلوبة:</b> ${escapeHtml(requestedCar)}\n`;
+    if (tradeInModel)  text += `<b>سيارة الاستبدال:</b> ${escapeHtml(tradeInModel)}\n`;
+  } else if (opCode === "sell_on_behalf") {
+    if (tradeInModel)  text += `<b>موديل السيارة:</b> ${escapeHtml(tradeInModel)}\n`;
+  } else {
+    if (requestedCar)  text += `<b>السيارة المطلوبة:</b> ${escapeHtml(requestedCar)}\n`;
+  }
+  if (nextFollowUp) {
+    try { text += `<b>تاريخ المتابعة:</b> ${fmtD(nextFollowUp)}\n`; } catch { /**/ }
+  }
+  text = text.trim() + `</blockquote>\n\n`;
+
+  text += `👨‍💼 <b>الموظف المسؤول:</b> ${escapeHtml(staffName)}`;
   return text;
 }
 
@@ -187,18 +209,28 @@ function buildUpdateCustomerText(params: {
   const { opCode, customerName, staffName, oldStatus, newStatus, nextFollowUp, note } = params;
 
   let icon = "🔄";
-  let opTitle = "تحديث ملف";
-  if (opCode === "buyer_tradein_pending") { icon = "🔁"; opTitle = "تحديث ملف استبدال"; }
-  else if (opCode === "sell_on_behalf")   { icon = "📝"; opTitle = "تحديث بيع بالوكالة"; }
-
-  let text = `${icon} <b>${escapeHtml(opTitle)}</b>\n${SEP}\n`;
-  text += `👤 <b>${escapeHtml(customerName)}</b>\n`;
-  text += `📌 ${escapeHtml(oldStatus)} ➜ <b>${escapeHtml(newStatus)}</b>\n`;
-  if (nextFollowUp) {
-    try { text += `📅 <b>المتابعة:</b> ${fmtD(nextFollowUp)}\n`; } catch { /**/ }
+  let opTitle = "تحديث ملف العميل";
+  if (opCode === "buyer_tradein_pending") {
+    icon = "🔁";
+    opTitle = "تحديث ملف استبدال";
+  } else if (opCode === "sell_on_behalf") {
+    icon = "📝";
+    opTitle = "تحديث سيارة برسم البيع";
   }
-  if (note) text += `📝 ${escapeHtml(note)}\n`;
-  text += `${SEP}\n👨‍💼 <b>الموظف:</b> ${escapeHtml(staffName)}`;
+
+  let text = `${icon} <b>${escapeHtml(opTitle)}</b>\n\n`;
+  text += `👤 <b>العميل:</b> ${escapeHtml(customerName)}\n\n`;
+  text += `📌 <b>تحديثات الحالة والمتابعة:</b>\n`;
+  text += `<blockquote>الحالة: ${escapeHtml(oldStatus)} ➜ <b>${escapeHtml(newStatus)}</b>\n`;
+  if (nextFollowUp) {
+    try { text += `<b>موعد المتابعة:</b> ${fmtD(nextFollowUp)}\n`; } catch { /**/ }
+  }
+  if (note) {
+    text += `<b>الملاحظات المضافة:</b> ${escapeHtml(note)}\n`;
+  }
+  text = text.trim() + `</blockquote>\n\n`;
+
+  text += `👨‍💼 <b>بواسطة الموظف:</b> ${escapeHtml(staffName)}`;
   return text;
 }
 
@@ -235,7 +267,7 @@ export async function pushNewCustomerToManagers(params: {
       staffChatId = (data?.telegram_chat_id as string | null) ?? null;
     }
     await Promise.allSettled(
-      managers.map((m) => sendWithButtons(m.chat_id, text, params.customerId, staffChatId)),
+      managers.map((m) => sendWithButtons(m.chat_id, text, params.customerId, staffChatId, params.opCode)),
     );
   } catch { /* best-effort */ }
 }
@@ -268,7 +300,7 @@ export async function pushCustomerUpdateToManagers(params: {
       staffChatId = (data?.telegram_chat_id as string | null) ?? null;
     }
     await Promise.allSettled(
-      managers.map((m) => sendWithButtons(m.chat_id, text, params.customerId, staffChatId)),
+      managers.map((m) => sendWithButtons(m.chat_id, text, params.customerId, staffChatId, params.opCode)),
     );
   } catch { /* best-effort */ }
 }
@@ -290,7 +322,15 @@ export async function pushTelegramToManagers({
 }) {
   try {
     const managers = await getManagerRecipients(branchId);
-    const text = `🔔 <b>${escapeHtml(title)}</b>\n${SEP}\n\n${message}`;
+    
+    // تخصيص عناوين البيع بالوكالة
+    let resolvedTitle = title;
+    let resolvedMessage = message;
+    if (message.includes("sell_on_behalf") || message.includes("بيع بالوكالة")) {
+      resolvedTitle = title.replace("استبدال", "سيارة برسم البيع").replace("تحديث ملف عميل", "تحديث سيارة برسم البيع");
+    }
+
+    const text = `🔔 <b>${escapeHtml(resolvedTitle)}</b>\n\n${resolvedMessage}`;
     await Promise.allSettled(
       managers.map((m) => sendWithButtons(m.chat_id, text, customerId)),
     );
@@ -327,9 +367,9 @@ export async function pushTelegramToEmployee({
     if (!chatId) return;
 
     const text =
-      `📋 <b>${escapeHtml(title)}</b>\n${SEP}\n\n` +
+      `📋 <b>${escapeHtml(title)}</b>\n\n` +
       `${message}\n\n` +
-      `${SEP}\n<i>— أرسله: ${escapeHtml(senderName)}</i>`;
+      `<i>— أرسله: ${escapeHtml(senderName)}</i>`;
 
     await sendWithButtons(chatId, text, customerId);
   } catch { /* best-effort */ }
@@ -385,7 +425,7 @@ export async function pushTelegramPhotosToManagers({
         }
         // رسالة تفاصيل مع أزرار بعد الصور
         if (customerId) {
-          await sendWithButtons(m.chat_id, `🖼 <b>صور مرفقة</b>\n${SEP}\n\n${escapeHtml(caption)}`, customerId);
+          await sendWithButtons(m.chat_id, `🖼 <b>صور مرفقة بالملف</b>\n\n${escapeHtml(caption)}`, customerId);
         }
       }),
     );
@@ -465,21 +505,23 @@ export async function pushEvaluationRequestToMaalamManager({
 
     // ── النص الكامل ──────────────────────────────────────────────────────────
     let fullText =
-      `🔁 <b>طلب تقييم سيارة — استبدال</b>\n${SEP}\n\n` +
-      `👤 <b>صاحب السيارة:</b> ${escapeHtml(customerName)}\n`;
-    if (customerPhone) fullText += `📱 <b>الهاتف:</b> ${escapeHtml(customerPhone)}\n`;
-    if (branchName)    fullText += `🏢 <b>الفرع:</b> ${escapeHtml(branchName)}\n`;
-    fullText += `👨‍💼 <b>المُدخِل:</b> ${escapeHtml(submitterName)}\n`;
-    fullText += `\n${SEP}\n`;
-    fullText += `🚗 <b>الموديل:</b> ${escapeHtml(car.model)}\n`;
-    if (car.color)           fullText += `🎨 <b>اللون:</b> ${escapeHtml(car.color)}\n`;
-    if (car.production_year) fullText += `📅 <b>سنة الصنع:</b> ${car.production_year}\n`;
-    if (car.mileage)         fullText += `🛣 <b>المسافة المقطوعة:</b> ${car.mileage.toLocaleString("en-US")} كم\n`;
-    if (car.chassis_no)      fullText += `🔢 <b>رقم الشاصي:</b> ${escapeHtml(car.chassis_no)}\n`;
-    if (car.inspection)      fullText += `🔍 <b>حالة الفحص:</b> ${escapeHtml(car.inspection)}\n`;
-    if (car.specs)           fullText += `⚙️ <b>المواصفات:</b> ${escapeHtml(car.specs)}\n`;
-    if (car.notes)           fullText += `📝 <b>ملاحظات:</b> ${escapeHtml(car.notes)}\n`;
-    fullText += `\n${SEP}\n<i>يُرجى الضغط على الزر أدناه لإرسال قيمة التقييم للموظف 👇</i>`;
+      `🔁 <b>طلب تقييم سيارة — استبدال</b>\n\n` +
+      `👤 <b>بيانات مقدم الطلب:</b>\n` +
+      `<blockquote><b>صاحب السيارة:</b> ${escapeHtml(customerName)}\n` +
+      (customerPhone ? `<b>الهاتف:</b> <code>${escapeHtml(customerPhone)}</code>\n` : "") +
+      (branchName ? `<b>الفرع:</b> ${escapeHtml(branchName)}\n` : "") +
+      `<b>المُدخِل:</b> ${escapeHtml(submitterName)}</blockquote>\n\n` +
+      `🚗 <b>تفاصيل سيارة العميل:</b>\n` +
+      `<blockquote><b>الموديل:</b> ${escapeHtml(car.model)}\n` +
+      (car.color ? `<b>اللون:</b> ${escapeHtml(car.color)}\n` : "") +
+      (car.production_year ? `<b>سنة الصنع:</b> ${car.production_year}\n` : "") +
+      (car.mileage ? `<b>المسافة:</b> ${car.mileage.toLocaleString("en-US")} كم\n` : "") +
+      (car.chassis_no ? `<b>رقم الشاصي:</b> <code>${escapeHtml(car.chassis_no)}</code>\n` : "") +
+      (car.inspection ? `<b>الفحص:</b> ${escapeHtml(car.inspection)}\n` : "") +
+      (car.specs ? `<b>المواصفات:</b> ${escapeHtml(car.specs)}\n` : "") +
+      (car.notes ? `<b>ملاحظات:</b> ${escapeHtml(car.notes)}\n` : "") +
+      `</blockquote>\n\n` +
+      `<i>يُرجى الضغط على الزر أدناه لإرسال قيمة التقييم للموظف 👇</i>`;
 
     // ── caption مختصر للصور ───────────────────────────────────────────────────
     let photoCaption = `🔁 <b>استبدال — ${escapeHtml(car.model)}</b>\n👤 ${escapeHtml(customerName)}`;

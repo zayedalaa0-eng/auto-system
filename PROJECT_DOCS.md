@@ -262,6 +262,8 @@ https://auto-system-1982.vercel.app/api/telegram/setup?key=auto-system-secret-20
 | `SUPABASE_SERVICE_ROLE_KEY` | مفتاح الخدمة (admin) |
 | `NEXT_PUBLIC_APP_URL` | `https://auto-system-1982.vercel.app` |
 | `TELEGRAM_BOT_TOKEN` | توكن البوت |
+| `TELEGRAM_SETUP_KEY` | مفتاح الحماية الخاص برابط الإعداد (Webhook setup URL key) |
+| `TELEGRAM_WEBHOOK_SECRET` | المعرّف السري للتحقق من طلبات webhook وتأمينها (إلزامي في الإنتاج) |
 | `CRON_SECRET` | سر المهام المجدولة (Sensitive) |
 
 ---

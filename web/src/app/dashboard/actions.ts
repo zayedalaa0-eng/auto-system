@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -176,21 +176,27 @@ function buildStatusNotification({
   const now = arabicDateTime();
   const followUpStr = nextFollowUpAt ? arabicDateTime(new Date(nextFollowUpAt)) : null;
 
+  const isSellOnBehalf = ctx.operationType === "بيع بالوكالة" || ctx.operationType === "sell_on_behalf";
+
   const customerBlock =
-    `<b>الاسم الكامل:</b> ${ctx.fullName}\n` +
+    `👤 <b>تفاصيل العميل:</b>\n` +
+    `<blockquote><b>الاسم الكامل:</b> ${ctx.fullName}\n` +
     (ctx.nickname ? `<b>الكنية:</b> ${ctx.nickname}\n` : "") +
     `<b>الهاتف:</b> <code>${ctx.phone}</code>\n` +
-    (ctx.operationType ? `<b>نوع العملية:</b> ${ctx.operationType}\n` : "") +
-    (ctx.requestedCar ? `<b>السيارة المطلوبة:</b> ${ctx.requestedCar}\n` : "");
+    (ctx.operationType ? `<b>نوع العملية:</b> ${isSellOnBehalf ? "بيع بالوكالة" : ctx.operationType}\n` : "") +
+    (ctx.requestedCar ? `<b>السيارة المطلوبة:</b> ${ctx.requestedCar}\n` : "") +
+    `</blockquote>`;
 
   const footerBlock =
+    `<blockquote>` +
     (ctx.assignedUserName ? `<b>الموظف المسؤول:</b> ${ctx.assignedUserName}\n` : "") +
     (ctx.branchName ? `<b>المعرض:</b> ${ctx.branchName}\n` : "") +
     (note ? `<b>الملاحظات:</b> ${note}\n` : "") +
+    `</blockquote>` +
     `<i>🕐 ${now}</i>`;
 
   const dealValueStr = dealValue && dealValue > 0
-    ? `<b>💰 قيمة الصفقة:</b> ${dealValue.toLocaleString("ar-SA")} شيقل\n`
+    ? `<blockquote><b>💰 قيمة الصفقة:</b> ${dealValue.toLocaleString("ar-SA")} شيقل</blockquote>\n`
     : "";
 
   // ── تمت عملية البيع + استبدال ───────────────────────────────────────────
@@ -198,17 +204,22 @@ function buildStatusNotification({
     const isTradein = status === "تمت عملية البيع + استبدال";
     const isShowroom = status === "شراء من قبل المعرض";
     const emoji = isTradein ? "🔄" : isShowroom ? "🏢" : "🎉";
-    const titleText = isTradein ? "تمّت صفقة البيع + الاستبدال بنجاح" : isShowroom ? "شراء سيارة من قبل المعرض" : "تمّت عملية بيع السيارة للعميل";
+    
+    let titleText = isTradein ? "تمّت صفقة البيع + الاستبدال بنجاح" : isShowroom ? "شراء سيارة من قبل المعرض" : "تمّت عملية بيع السيارة للعميل";
+    if (isSellOnBehalf && status === "تمت عملية البيع (للعميل)") {
+      titleText = "تمّت بيع السيارة المعروضة بالوكالة للعميل";
+    }
+
     return {
       title: `${emoji} ${titleText}`,
       message:
         `${emoji} <b>${titleText}</b>\n` +
         `أتمّ الموظف <b>${actorName}</b> الصفقة بنجاح.\n\n` +
-        `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
-        customerBlock +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `<b>الحالة المُسجَّلة:</b> ${status}\n` +
-        dealValueStr +
+        customerBlock + `\n` +
+        `📌 <b>تفاصيل الحالة والمبيعات:</b>\n` +
+        `<blockquote><b>الحالة المُسجَّلة:</b> ${status}</blockquote>\n` +
+        dealValueStr + `\n` +
+        `🏢 <b>سياق العملية:</b>\n` +
         footerBlock,
     };
   }
@@ -220,43 +231,47 @@ function buildStatusNotification({
       message:
         `🎉 <b>تمّت عملية بيع بنجاح</b>\n` +
         `أتمّ الموظف <b>${actorName}</b> صفقة بيع ناجحة.\n\n` +
-        `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
-        customerBlock +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `<b>الحالة المُسجَّلة:</b> ${status}\n` +
-        dealValueStr +
+        customerBlock + `\n` +
+        `📌 <b>تفاصيل الحالة والمبيعات:</b>\n` +
+        `<blockquote><b>الحالة المُسجَّلة:</b> ${status}</blockquote>\n` +
+        dealValueStr + `\n` +
+        `🏢 <b>سياق العملية:</b>\n` +
         footerBlock,
     };
   }
 
   // ── حجز ─────────────────────────────────────────────────────────────────
   if (status === "حجز" || status === "حجز (استبدال)" || status === "حجز (سيارة العميل)") {
+    const title = isSellOnBehalf ? "🔒 تسجيل حجز سيارة برسم البيع" : "🔒 تسجيل حجز سيارة";
     return {
-      title: "🔒 تسجيل حجز سيارة",
+      title,
       message:
-        `🔒 <b>تسجيل حجز سيارة جديد</b>\n` +
+        `🔒 <b>${title} جديد</b>\n` +
         `سجّل الموظف <b>${actorName}</b> حجزاً جديداً.\n\n` +
-        `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
-        customerBlock +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `<b>الحالة المُسجَّلة:</b> ${status}\n` +
-        (followUpStr ? `<b>موعد المتابعة:</b> ${followUpStr}\n` : "") +
+        customerBlock + `\n` +
+        `📌 <b>تفاصيل الحالة والمتابعة:</b>\n` +
+        `<blockquote><b>الحالة المُسجَّلة:</b> ${status}\n` +
+        (followUpStr ? `<b>موعد المتابعة:</b> ${followUpStr}` : "") +
+        `</blockquote>\n\n` +
+        `🏢 <b>سياق العملية:</b>\n` +
         footerBlock,
     };
   }
 
   // ── تراجع / سحب ──────────────────────────────────────────────────────────
   if (status === "تراجع العميل عن الاستبدال" || status === "سحب السيارة من البيع") {
+    const titleText = isSellOnBehalf ? "↩️ سحب السيارة المعروضة من البيع" : "↩️ تراجع العميل عن صفقة الاستبدال";
     return {
-      title: "↩️ تراجع العميل عن الصفقة",
+      title: titleText,
       message:
-        `↩️ <b>تراجع العميل عن الصفقة</b>\n` +
-        `سجّل الموظف <b>${actorName}</b> تراجع العميل.\n\n` +
-        `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
-        customerBlock +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `<b>الحالة المُسجَّلة:</b> ${status}\n` +
-        (note ? `<b>السبب:</b> ${note}\n` : "") +
+        `↩️ <b>${titleText}</b>\n` +
+        `سجّل الموظف <b>${actorName}</b> الإجراء.\n\n` +
+        customerBlock + `\n` +
+        `📌 <b>تفاصيل الحالة:</b>\n` +
+        `<blockquote><b>الحالة المُسجَّلة:</b> ${status}\n` +
+        (note ? `<b>السبب:</b> ${note}` : "") +
+        `</blockquote>\n\n` +
+        `🏢 <b>سياق العملية:</b>\n` +
         footerBlock,
     };
   }
@@ -269,27 +284,29 @@ function buildStatusNotification({
       message:
         `⚠️ <b>${byClient ? "رفض العميل للعرض" : "رفض المعرض للطلب"} — يحتاج متابعة</b>\n` +
         `سجّل الموظف <b>${actorName}</b> حالة الرفض.\n\n` +
-        `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
-        customerBlock +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `<b>الحالة المُسجَّلة:</b> ${status}\n` +
+        customerBlock + `\n` +
+        `📌 <b>تفاصيل الحالة:</b>\n` +
+        `<blockquote><b>الحالة المُسجَّلة:</b> ${status}\n` +
         (note
-          ? `<b>سبب الرفض:</b> ${note}\n`
-          : `<b>سبب الرفض:</b> لم يُذكر — يُنصح بالتواصل مع الموظف.\n`) +
+          ? `<b>سبب الرفض:</b> ${note}`
+          : `<b>سبب الرفض:</b> لم يُذكر — يُنصح بالتواصل مع الموظف.`) +
+        `</blockquote>\n\n` +
+        `🏢 <b>سياق العملية:</b>\n` +
         footerBlock,
     };
   }
 
   // ── حالة عامة ───────────────────────────────────────────────────────────
+  const genericTitle = isSellOnBehalf ? "📝 تحديث سيارة برسم البيع" : "📋 تحديث ملف عميل";
   return {
-    title: "📋 تحديث ملف عميل",
+    title: genericTitle,
     message:
-      `📋 <b>تحديث ملف عميل</b>\n` +
+      `📋 <b>${genericTitle}</b>\n` +
       `قام الموظف <b>${actorName}</b> بتحديث الملف.\n\n` +
-      `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
-      customerBlock +
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `<b>الحالة الجديدة:</b> ${status}\n` +
+      customerBlock + `\n` +
+      `📌 <b>الحالة الجديدة:</b>\n` +
+      `<blockquote>${status}</blockquote>\n\n` +
+      `🏢 <b>سياق العملية:</b>\n` +
       footerBlock,
   };
 }
@@ -380,30 +397,33 @@ async function pushTradeAssessmentNotification({
   if (!model) return;
 
   const actorName = actorProfile?.full_name ?? "موظف";
-  const isAwaitingAssessment = (tradeStatus ?? "").includes("بانتظار التقييم") || (tradeStatus ?? "").includes("تقييم");
+  const isConsignment = (tradeStatus ?? "").includes("برسم البيع") || (tradeStatus ?? "").includes("وكالة") || (tradeStatus ?? "").includes("بيع");
+  const isAwaitingAssessment = !isConsignment && ((tradeStatus ?? "").includes("بانتظار التقييم") || (tradeStatus ?? "").includes("تقييم"));
   const customerDisplay = customerNickname ? `${customerName} (${customerNickname})` : customerName;
 
   // ── الرسالة النصية الشاملة ─────────────────────────────────────────────
-  const emoji = isAwaitingAssessment ? "🔍" : "🚗";
-  const titleLine = isAwaitingAssessment
-    ? `🔍 <b>طلب تقييم سيارة — يحتاج مراجعتك الفورية</b>`
-    : `🚗 <b>سيارة مرتبطة بعملية استبدال</b>`;
+  const emoji = isConsignment ? "🏷️" : isAwaitingAssessment ? "🔍" : "🚗";
+  const titleLine = isConsignment
+    ? `🏷️ <b>سيارة جديدة برسم البيع (وكالة) — تفاصيل معروضة</b>`
+    : isAwaitingAssessment
+      ? `🔍 <b>طلب تقييم سيارة استبدال — يحتاج مراجعة فورية</b>`
+      : `🚗 <b>سيارة مرتبطة بعملية استبدال</b>`;
 
-  let msg = `${titleLine}\n`;
+  let msg = `${emoji} ${titleLine}\n`;
   msg += `بواسطة الموظف: <b>${actorName}</b>\n\n`;
 
-  msg += `━━━━━━━ تفاصيل العميل ━━━━━━━\n`;
-  msg += `<b>الاسم الكامل:</b> ${customerDisplay}\n`;
-  msg += `<b>الهاتف:</b> <code>${customerPhone}</code>\n`;
+  msg += `👤 <b>بيانات العميل:</b>\n`;
+  msg += `<blockquote><b>الاسم الكامل:</b> ${customerDisplay}\n`;
+  msg += `<b>الهاتف:</b> <code>${customerPhone}</code></blockquote>\n\n`;
 
-  msg += `━━━━━━━ تفاصيل السيارة ━━━━━━━\n`;
-  msg += `<b>الطراز:</b> ${model}\n`;
+  msg += `🚗 <b>تفاصيل السيارة:</b>\n`;
+  msg += `<blockquote><b>الطراز/الموديل:</b> ${model}\n`;
   if (tradeYear) msg += `<b>سنة الصنع:</b> ${tradeYear}\n`;
   if (tradeColor) msg += `<b>اللون:</b> ${tradeColor}\n`;
   if (tradeChassis) msg += `<b>رقم الشاصي:</b> <code>${tradeChassis}</code>\n`;
   if (tradeMileage) msg += `<b>عداد المسافة:</b> ${tradeMileage.toLocaleString("ar-SA")} كم\n`;
-  if (tradePrice) msg += `<b>السعر المقترح:</b> ${tradePrice.toLocaleString("ar-SA")} شيقل\n`;
-  if (tradeStatus) msg += `<b>حالة السيارة:</b> ${tradeStatus}\n`;
+  if (tradePrice) msg += `<b>السعر التقديري:</b> ${tradePrice.toLocaleString("ar-SA")} شيقل\n`;
+  if (tradeStatus) msg += `<b>الحالة الحالية:</b> ${tradeStatus}\n`;
 
   if (tradeSpecs && tradeSpecs.trim()) {
     msg += `\n<b>📋 المواصفات:</b>\n<i>${tradeSpecs.trim()}</i>\n`;
@@ -411,12 +431,12 @@ async function pushTradeAssessmentNotification({
   if (tradeInspection && tradeInspection.trim()) {
     msg += `\n<b>🔧 الفحص / الملاحظات الفنية:</b>\n<i>${tradeInspection.trim()}</i>\n`;
   }
+  msg = msg.trim() + `</blockquote>\n\n`;
 
-  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   if (signedPhotoUrls.length > 0) {
     msg += `📸 <b>الصور:</b> ${signedPhotoUrls.length} صورة مرفقة أدناه\n`;
   } else {
-    msg += `📸 <i>لا توجد صور مرفقة حتى الآن</i>\n`;
+    msg += `📸 <i>لا توجد صور مرفقة حالياً</i>\n`;
   }
   msg += `<i>🕐 ${arabicDateTime()}</i>`;
 
@@ -425,11 +445,11 @@ async function pushTradeAssessmentNotification({
     supabase,
     actorProfile,
     branchId,
-    title: isAwaitingAssessment ? `${emoji} طلب تقييم سيارة` : `${emoji} سيارة استبدال جديدة`,
+    title: isConsignment ? `${emoji} سيارة برسم البيع` : isAwaitingAssessment ? `${emoji} طلب تقييم سيارة` : `${emoji} سيارة استبدال`,
     message: msg,
-    notificationType: "trade_assessment",
+    notificationType: isConsignment ? "inventory_consignment" : "trade_assessment",
     payload: {
-      source: "trade_assessment",
+      source: isConsignment ? "inventory_consignment" : "trade_assessment",
       customer_id: customerId,
       trade_model: model,
       chassis_no: tradeChassis,
@@ -574,15 +594,14 @@ async function notifyOpportunityForModelAvailability({
   const actorLabel = actorProfile?.full_name ?? "موظف";
 
   const message =
-    `🚨 <b>فرصة بيع فورية — سيارة متاحة الآن!</b>\n` +
+    `🚨 <b>فرصة بيع فورية — سيارة مطلوبة متاحة الآن!</b>\n` +
     `أضاف الموظف <b>${actorLabel}</b> سيارة يطلبها عملاؤك.\n\n` +
-    `━━━━━━━ تفاصيل السيارة ━━━━━━━\n` +
-    `<b>الطراز:</b> ${carText}\n` +
-    (ownerName ? `<b>مصدر السيارة / المالك:</b> ${ownerName}\n` : "") +
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `🎯 <b>العملاء المهتمون (${interestedCustomers.length})</b>\n\n` +
-    leadsSection +
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `🚗 <b>تفاصيل السيارة المتوفرة:</b>\n` +
+    `<blockquote><b>الطراز:</b> ${carText}\n` +
+    (ownerName ? `<b>مصدر السيارة / المالك:</b> ${ownerName}` : "") +
+    `</blockquote>\n\n` +
+    `🎯 <b>العملاء المهتمون (${interestedCustomers.length}):</b>\n` +
+    `<blockquote>${leadsSection}</blockquote>\n\n` +
     `⚡️ <i>تواصل مع هؤلاء العملاء فوراً قبل أن تُحجز السيارة!</i>\n` +
     `<i>🕐 ${arabicDateTime()}</i>`;
 
@@ -1244,52 +1263,44 @@ export async function sendEvaluationReminderAction(formData: FormData) {
   const customerStatus = customer?.status ?? "—";
   const opType         = customer?.operation_type ?? "—";
 
-  const line = "━━━━━━━━━━━━━━━━━━━━━━━━━━";
+  const isConsignment = opType === "بيع بالوكالة" || opType === "sell_on_behalf" || (trade?.deal_type === "بيع بالوكالة") || (trade?.deal_type === "برسم البيع");
+  const titleText = isConsignment ? "سيارة برسم البيع — عاجل" : "طلب تقييم سيارة — عاجل";
 
   const carBlock = trade ? [
-    `${line}`,
-    `🚗 <b>بيانات سيارة العميل</b>`,
-    `${line}`,
-    trade.model        ? `▪️ <b>الموديل:</b> ${trade.model}`                         : null,
-    trade.color        ? `▪️ <b>اللون:</b> ${trade.color}`                            : null,
-    trade.production_year ? `▪️ <b>سنة الصنع:</b> ${trade.production_year}`          : null,
-    trade.mileage      ? `▪️ <b>الممشى:</b> ${Number(trade.mileage).toLocaleString("ar")} كم` : null,
-    trade.chassis_no   ? `▪️ <b>رقم الشاصي:</b> <code>${trade.chassis_no}</code>`    : null,
-    trade.specs        ? `▪️ <b>المواصفات:</b> ${trade.specs}`                        : null,
-    trade.inspection   ? `▪️ <b>تقرير الفحص:</b> ${trade.inspection}`                : null,
-    trade.deal_type    ? `▪️ <b>نوع الصفقة:</b> ${trade.deal_type}`                  : null,
-    trade.status       ? `▪️ <b>الحالة الراهنة:</b> <i>${trade.status}</i>`           : null,
-    trade.price != null ? `▪️ <b>السعر التقديري:</b> ${Number(trade.price).toLocaleString("ar")} ₪` : `▪️ <b>سعر التقييم:</b> <i>لم يُحدَّد بعد</i>`,
-  ].filter(Boolean).join("\n") : null;
+    `🚗 <b>بيانات السيارة:</b>`,
+    `<blockquote>` +
+    [
+      trade.model        ? `<b>الموديل:</b> ${trade.model}`                         : null,
+      trade.color        ? `<b>اللون:</b> ${trade.color}`                            : null,
+      trade.production_year ? `<b>سنة الصنع:</b> ${trade.production_year}`          : null,
+      trade.mileage      ? `<b>الممشى:</b> ${Number(trade.mileage).toLocaleString("ar")} كم` : null,
+      trade.chassis_no   ? `<b>رقم الشاصي:</b> <code>${trade.chassis_no}</code>`    : null,
+      trade.specs        ? `<b>المواصفات:</b> ${trade.specs}`                        : null,
+      trade.inspection   ? `<b>تقرير الفحص:</b> ${trade.inspection}`                : null,
+      trade.deal_type    ? `<b>نوع الصفقة:</b> ${isConsignment ? "سيارة برسم البيع" : trade.deal_type}` : null,
+      trade.status       ? `<b>الحالة الراهنة:</b> <i>${trade.status}</i>`           : null,
+      trade.price != null ? `<b>السعر التقديري:</b> ${Number(trade.price).toLocaleString("ar")} ₪` : `<b>سعر التقييم:</b> <i>لم يُحدَّد بعد</i>`,
+    ].filter(Boolean).join("\n") +
+    `</blockquote>`
+  ].join("\n") : null;
 
   const fullMessage = [
-    `🔔 <b>طلب تقييم سيارة — عاجل</b>`,
-    `${line}`,
-    ``,
-    `السادة المحترمون،`,
-    ``,
-    `تحيةً طيبةً وبعد؛`,
-    ``,
-    `يُشرفني التواصل معكم، وأودّ إحاطتكم علمًا بأنّ لدينا سيارةً تستوجب تقييمًا فنيًا دقيقًا في أقرب وقت ممكن، نظرًا لأهمية القرار وما يترتب عليه من تبعات مالية وإجرائية.`,
-    ``,
-    `أرجو التكرم بمراجعة بيانات السيارة الواردة أدناه وإبداء رأيكم المهني بصفتكم خبيرًا متخصصًا.`,
-    ``,
-    `${line}`,
-    `👤 <b>بيانات العميل</b>`,
-    `${line}`,
-    `▪️ <b>الاسم:</b> ${customerName}`,
-    `▪️ <b>المعرض:</b> ${branchName}`,
-    `▪️ <b>الموظف المسؤول:</b> ${staffName}`,
-    `▪️ <b>نوع العملية:</b> ${opType}`,
-    `▪️ <b>الحالة الحالية:</b> ${customerStatus}`,
-    ``,
-    carBlock ?? `${line}\n🚗 <b>لا تتوفر بيانات سيارة مسجّلة حتى الآن</b>`,
-    ``,
-    `${line}`,
+    `🔔 <b>${titleText}</b>\n`,
+    `السادة المحترمون،\n`,
+    `تحيةً طيبةً وبعد؛\n`,
+    isConsignment
+      ? `يُشرفني التواصل معكم، وأودّ إحاطتكم علمًا بأنّ لدينا سيارة برسم البيع (بالوكالة) تستوجب مراجعتكم في النظام لتحديد السعر واتخاذ الإجراءات اللازمة.\n`
+      : `يُشرفني التواصل معكم، وأودّ إحاطتكم علمًا بأنّ لدينا سيارةً تستوجب تقييمًا فنيًا دقيقًا في أقرب وقت ممكن، نظرًا لأهمية القرار وما يترتب عليه من تبعات مالية وإجرائية.\n`,
+    `أرجو التكرم بمراجعة البيانات الواردة أدناه وإبداء رأيكم المهني.\n`,
+    `👤 <b>بيانات العميل:</b>`,
+    `<blockquote><b>الاسم:</b> ${customerName}`,
+    `<b>المعرض:</b> ${branchName}`,
+    `<b>الموظف المسؤول:</b> ${staffName}`,
+    `<b>نوع العملية:</b> ${isConsignment ? "سيارة برسم البيع" : opType}`,
+    `<b>الحالة الحالية:</b> ${customerStatus}</blockquote>\n`,
+    carBlock ?? `🚗 <i>لا تتوفر بيانات سيارة مسجّلة حتى الآن</i>\n`,
     `⏰ <b>ملاحظة هامة:</b>`,
-    `يُرجى إتمام التقييم وتسجيل السعر في النظام في أقرب وقت ممكن لضمان سير الإجراءات بصورة سليمة وفي الوقت المناسب.`,
-    `${line}`,
-    ``,
+    `<blockquote>يُرجى إتمام الإجراء وتسجيل السعر في النظام في أقرب وقت ممكن لضمان سير العمل بصورة سليمة.</blockquote>\n`,
     `<i>— صادر من: ${senderName} | ${senderRole}</i>`,
   ].join("\n");
 
@@ -1817,14 +1828,13 @@ export async function upsertCustomerAction(formData: FormData) {
       message:
         `✏️ <b>تحديث بيانات ملف عميل</b>\n` +
         `قام الموظف <b>${profile?.full_name ?? "موظف"}</b> بتعديل الملف.\n\n` +
-        `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
-        `<b>الاسم الكامل:</b> ${fullName}\n` +
+        `👤 <b>تفاصيل العميل:</b>\n` +
+        `<blockquote><b>الاسم الكامل:</b> ${fullName}\n` +
         (nickname ? `<b>الكنية:</b> ${nickname}\n` : "") +
         `<b>الهاتف:</b> <code>${phone}</code>\n` +
         (operationTypeLabel ? `<b>نوع العملية:</b> ${operationTypeLabel}\n` : "") +
         (normalizedRequestedCarResolved ? `<b>السيارة المطلوبة:</b> ${normalizedRequestedCarResolved}\n` : "") +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `<b>الحالة بعد التعديل:</b> ${status}\n` +
+        `<b>الحالة بعد التعديل:</b> ${status}</blockquote>\n\n` +
         `<i>🕐 ${arabicDateTime()}</i>`,
       payload: { source: "customer_update", customer_id: customerId },
     });
@@ -1950,17 +1960,17 @@ export async function upsertCustomerAction(formData: FormData) {
         message:
           `➕ <b>تسجيل عميل جديد في النظام</b>\n` +
           `أضاف الموظف <b>${profile?.full_name ?? "موظف"}</b> ملف عميل جديد.\n\n` +
-          `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
-          `<b>الاسم الكامل:</b> ${fullName}\n` +
+          `👤 <b>تفاصيل العميل:</b>\n` +
+          `<blockquote><b>الاسم الكامل:</b> ${fullName}\n` +
           (nickname ? `<b>الكنية:</b> ${nickname}\n` : "") +
           `<b>الهاتف:</b> <code>${phone}</code>\n` +
           (operationTypeLabel ? `<b>نوع العملية:</b> ${operationTypeLabel}\n` : "") +
           (normalizedRequestedCarResolved ? `<b>السيارة المطلوبة:</b> ${normalizedRequestedCarResolved}\n` : "") +
           (paymentPlan ? `<b>خطة الدفع:</b> ${paymentPlan}\n` : "") +
           (source ? `<b>مصدر العميل:</b> ${source}\n` : "") +
-          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
           `<b>الحالة الأولية:</b> ${status}\n` +
           (nextFollowUpAt ? `<b>موعد المتابعة:</b> ${arabicDateTime(new Date(nextFollowUpAt))}\n` : "") +
+          `</blockquote>\n\n` +
           `<i>🕐 ${arabicDateTime()}</i>`,
         payload: { source: "customer_create", customer_id: savedId },
       });
@@ -2380,16 +2390,16 @@ export async function createCustomerReminderAction(formData: FormData) {
     message:
       `🔔 <b>تم جدولة تذكير جديد</b>\n` +
       `بواسطة الموظف: <b>${reminderActorName}</b>\n\n` +
-      `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
-      `<b>الاسم الكامل:</b> ${reminderCtx.fullName}\n` +
+      `👤 <b>تفاصيل العميل:</b>\n` +
+      `<blockquote><b>الاسم الكامل:</b> ${reminderCtx.fullName}\n` +
       (reminderCtx.nickname ? `<b>الكنية:</b> ${reminderCtx.nickname}\n` : "") +
       `<b>الهاتف:</b> <code>${reminderCtx.phone}</code>\n` +
       (reminderCtx.branchName ? `<b>المعرض:</b> ${reminderCtx.branchName}\n` : "") +
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       (title ? `<b>عنوان التذكير:</b> ${title}\n` : "") +
       `<b>نص التذكير:</b> ${message}\n` +
       (dueAt ? `<b>موعد التذكير:</b> ${arabicDateTime(new Date(dueAt))}\n` : "") +
       (reminderCtx.requestedCar ? `<b>السيارة المطلوبة:</b> ${reminderCtx.requestedCar}\n` : "") +
+      `</blockquote>\n\n` +
       `<i>🕐 ${arabicDateTime()}</i>`,
     payload: { source: "reminder_create", customer_id: customerId },
   });
@@ -2591,13 +2601,12 @@ export async function openNewCycleAction(formData: FormData) {
       message:
         `♻️ <b>عميل عائد — دورة جديدة رقم ${newCycleNumber}</b>\n` +
         `بواسطة: <b>${actorName}</b>\n\n` +
-        `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
-        `<b>الاسم:</b> ${parent.full_name}\n` +
+        `👤 <b>تفاصيل العميل:</b>\n` +
+        `<blockquote><b>الاسم:</b> ${parent.full_name}\n` +
         `<b>الهاتف:</b> <code>${parent.phone}</code>\n` +
         (newCycleCtx.branchName ? `<b>المعرض:</b> ${newCycleCtx.branchName}\n` : "") +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `<b>نوع العملية الجديدة:</b> ${operationType === "buyer" ? "مشتري" : operationType === "buyer_tradein_pending" ? "مشتري + استبدال" : "بيع بالوكالة"}\n` +
-        `<b>الحالة الابتدائية:</b> ${firstStatus}\n` +
+        `<b>نوع العملية الجديدة:</b> ${operationType === "buyer" ? "مشتري" : operationType === "buyer_tradein_pending" ? "مشتري + استبدال" : "سيارة برسم البيع"}\n` +
+        `<b>الحالة الابتدائية:</b> ${firstStatus}</blockquote>\n\n` +
         `<i>🕐 ${arabicDateTime()}</i>`,
       payload: { source: "customer_new_cycle", customer_id: newCustomer.id, parent_customer_id: parentId },
     });
@@ -2692,16 +2701,16 @@ export async function reactivateCustomerAction(formData: FormData) {
     message:
       `🔄 <b>إعادة تفعيل دورة متابعة جديدة</b>\n` +
       `بواسطة الموظف: <b>${reactivateActorName}</b>\n\n` +
-      `━━━━━━━ تفاصيل العميل ━━━━━━━\n` +
-      `<b>الاسم الكامل:</b> ${reactivateCtx.fullName || fullName}\n` +
+      `👤 <b>تفاصيل العميل:</b>\n` +
+      `<blockquote><b>الاسم الكامل:</b> ${reactivateCtx.fullName || fullName}\n` +
       (reactivateCtx.nickname ? `<b>الكنية:</b> ${reactivateCtx.nickname}\n` : "") +
       `<b>الهاتف:</b> <code>${reactivateCtx.phone}</code>\n` +
       (reactivateCtx.branchName ? `<b>المعرض:</b> ${reactivateCtx.branchName}\n` : "") +
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `<b>الحالة الجديدة:</b> قيد المتابعة\n` +
       (reactivateCtx.requestedCar ? `<b>السيارة المطلوبة:</b> ${reactivateCtx.requestedCar}\n` : "") +
-      (reactivateCtx.operationType ? `<b>نوع العملية:</b> ${reactivateCtx.operationType}\n` : "") +
+      (reactivateCtx.operationType ? `<b>نوع العملية:</b> ${reactivateCtx.operationType === "بيع بالوكالة" || reactivateCtx.operationType === "sell_on_behalf" ? "سيارة برسم البيع" : reactivateCtx.operationType}\n` : "") +
       `<b>موعد المتابعة الأول:</b> ${arabicDateTime(new Date(Date.now() + 1000 * 60 * 60 * 24))}\n` +
+      `</blockquote>\n\n` +
       `<i>🕐 ${arabicDateTime()}</i>`,
     payload: { source: "customer_reactivate", customer_id: customerId },
   });

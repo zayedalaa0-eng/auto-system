@@ -607,29 +607,30 @@ export async function createCustomer(
     const opCode = data.operation_type;
     let icon = "🛒"; let opTitle = "مشتري جديد";
     if (opCode === "buyer_tradein_pending") { icon = "🔄"; opTitle = "مشتري جديد — مع استبدال"; }
-    else if (opCode === "sell_on_behalf")   { icon = "🤝"; opTitle = "ملف بيع بالوكالة جديد"; }
+    else if (opCode === "sell_on_behalf")   { icon = "🤝"; opTitle = "سيارة برسم البيع — جديد"; }
 
-    const SEP_CQ = "━━━━━━━━━━━━━━━━━━━━";
     let msg =
-      `${icon} <b>${opTitle}</b>\n${SEP_CQ}\n\n` +
-      `👤 <b>الاسم:</b> ${escapeHtml(data.full_name)}\n` +
-      `📱 <b>الهاتف:</b> ${escapeHtml(data.phone)}\n`;
+      `${icon} <b>${opTitle}</b>\n\n` +
+      `👤 <b>بيانات العميل:</b>\n` +
+      `<blockquote><b>الاسم:</b> ${escapeHtml(data.full_name)}\n` +
+      `<b>الهاتف:</b> <code>${escapeHtml(data.phone)}</code>\n`;
     if (opCode === "buyer_tradein_pending") {
-      if (data.requested_car)  msg += `🚗 <b>السيارة المطلوبة:</b> ${escapeHtml(data.requested_car)}\n`;
-      if (data.trade_in_model) msg += `🔁 <b>سيارة الاستبدال:</b> ${escapeHtml(data.trade_in_model)}\n`;
+      if (data.requested_car)  msg += `<b>السيارة المطلوبة:</b> ${escapeHtml(data.requested_car)}\n`;
+      if (data.trade_in_model) msg += `<b>سيارة الاستبدال:</b> ${escapeHtml(data.trade_in_model)}\n`;
     } else if (opCode === "sell_on_behalf") {
-      if (data.trade_in_model) msg += `🚗 <b>موديل السيارة:</b> ${escapeHtml(data.trade_in_model)}\n`;
+      if (data.trade_in_model) msg += `<b>سيارة برسم البيع:</b> ${escapeHtml(data.trade_in_model)}\n`;
     } else {
-      if (data.requested_car)  msg += `🚗 <b>السيارة المطلوبة:</b> ${escapeHtml(data.requested_car)}\n`;
+      if (data.requested_car)  msg += `<b>السيارة المطلوبة:</b> ${escapeHtml(data.requested_car)}\n`;
     }
-    msg += `📌 <b>الحالة:</b> ${escapeHtml(resolvedStatus)}\n`;
+    msg += `<b>الحالة:</b> ${escapeHtml(resolvedStatus)}\n`;
     if (data.next_follow_up_at) {
       try {
         const d = new Date(data.next_follow_up_at).toLocaleDateString("ar-EG", { day: "numeric", month: "long", year: "numeric" });
-        msg += `📅 <b>موعد المتابعة:</b> ${d}\n`;
+        msg += `<b>موعد المتابعة:</b> ${d}\n`;
       } catch { /* ignore */ }
     }
-    msg += `\n${SEP_CQ}\n👨‍💼 <b>الموظف المسؤول:</b> ${escapeHtml(user.full_name)}`;
+    msg = msg.trim() + `</blockquote>\n\n`;
+    msg += `👨‍💼 <b>الموظف المسؤول:</b> ${escapeHtml(user.full_name)}`;
 
     void pushTelegramToManagers({
       branchId,

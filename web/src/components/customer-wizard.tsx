@@ -86,6 +86,7 @@ export function CustomerWizard({ options, errorMessage, initialParentId, initial
   );
 
   const [hasTradeIn, setHasTradeIn] = useState(false);
+  const [showTradeInFiles, setShowTradeInFiles] = useState(false);
   const [tradeStatus, setTradeStatus] = useState<string>("استبدال (بانتظار التقييم)");
   const [tradeModel, setTradeModel] = useState("");
   const [tradePrice, setTradePrice] = useState("");
@@ -717,23 +718,38 @@ export function CustomerWizard({ options, errorMessage, initialParentId, initial
                       <textarea name="trade_in_notes" value={tradeNotes} onChange={(event) => setTradeNotes(event.target.value)} className="legacy-textarea" rows={3} placeholder="ملاحظات سيارة العميل..." />
                     </label>
                   </div>
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <div>
-                      <label className="legacy-label">صور</label>
-                      <input type="file" name="trade_files_photos" className="legacy-input" accept="image/*,.pdf" multiple />
-                    </div>
-                    <div>
-                      <label className="legacy-label">فحص</label>
-                      <input type="file" name="trade_files_inspection" className="legacy-input" accept="image/*,.pdf" multiple />
-                    </div>
-                    <div>
-                      <label className="legacy-label">رخصة</label>
-                      <input type="file" name="trade_files_license" className="legacy-input" accept="image/*,.pdf" multiple />
-                    </div>
-                    <div>
-                      <label className="legacy-label">تأمين</label>
-                      <input type="file" name="trade_files_insurance" className="legacy-input" accept="image/*,.pdf" multiple />
-                    </div>
+                  <div className="mt-4 border-t border-slate-200 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowTradeInFiles(!showTradeInFiles)}
+                      className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition duration-150 cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        📁 إرفاق صور ومرفقات سيارة العميل (فحص، رخصة، تأمين...)
+                      </span>
+                      <span>{showTradeInFiles ? "▲ إخفاء المرفقات" : "▼ عرض وإرفاق الملفات"}</span>
+                    </button>
+
+                    {showTradeInFiles && (
+                      <div className="mt-3 grid gap-3 md:grid-cols-2 p-2 border border-slate-100 rounded-xl bg-slate-50/30">
+                        <div>
+                          <label className="legacy-label text-xs">صور السيارة</label>
+                          <input type="file" name="trade_files_photos" className="legacy-input mt-1" accept="image/*,.pdf" multiple />
+                        </div>
+                        <div>
+                          <label className="legacy-label text-xs">تقرير الفحص</label>
+                          <input type="file" name="trade_files_inspection" className="legacy-input mt-1" accept="image/*,.pdf" multiple />
+                        </div>
+                        <div>
+                          <label className="legacy-label text-xs">رخصة السيارة</label>
+                          <input type="file" name="trade_files_license" className="legacy-input mt-1" accept="image/*,.pdf" multiple />
+                        </div>
+                        <div>
+                          <label className="legacy-label text-xs">بوليصة التأمين</label>
+                          <input type="file" name="trade_files_insurance" className="legacy-input mt-1" accept="image/*,.pdf" multiple />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (

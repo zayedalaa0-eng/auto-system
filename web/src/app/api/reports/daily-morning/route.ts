@@ -184,8 +184,7 @@ async function handler(req: NextRequest) {
 
       // ── متابعات اليوم ─────────────────────────────────────────────────
       if (followupsToday.length > 0) {
-        msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-        msg += `📞 <b>متابعات اليوم (${followupsToday.length})</b>\n`;
+        msg += `📞 <b>متابعات اليوم (${followupsToday.length})</b>\n<blockquote>`;
         followupsToday.slice(0, 10).forEach((c, i) => {
           const _td = new Date(c.next_follow_up_at!);
           const _tl = new Date(_td.getTime() + 3*60*60*1000);
@@ -196,13 +195,12 @@ async function handler(req: NextRequest) {
         });
         if (followupsToday.length > 10)
           msg += `   ... و${followupsToday.length - 10} عميلاً آخر\n`;
-        msg += "\n";
+        msg += "</blockquote>\n\n";
       }
 
       // ── متابعات متأخرة ────────────────────────────────────────────────
       if (overdueFollowups.length > 0) {
-        msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-        msg += `⚠️ <b>متابعات متأخرة تحتاج تدخلاً فورياً (${overdueFollowups.length})</b>\n`;
+        msg += `⚠️ <b>متابعات متأخرة تحتاج تدخلاً فورياً (${overdueFollowups.length})</b>\n<blockquote>`;
         overdueFollowups.slice(0, 7).forEach((c, i) => {
           const daysAgo = Math.floor(
             (now.getTime() - new Date(c.next_follow_up_at!).getTime()) / 86400000,
@@ -213,13 +211,12 @@ async function handler(req: NextRequest) {
         });
         if (overdueFollowups.length > 7)
           msg += `   ... و${overdueFollowups.length - 7} عميلاً آخر\n`;
-        msg += "\n";
+        msg += "</blockquote>\n\n";
       }
 
       // ── حجوزات مفتوحة ─────────────────────────────────────────────────
       if (openReservations.length > 0) {
-        msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-        msg += `🔒 <b>حجوزات مفتوحة (${openReservations.length})</b>\n`;
+        msg += `🔒 <b>حجوزات مفتوحة (${openReservations.length})</b>\n<blockquote>`;
         openReservations.slice(0, 5).forEach((c, i) => {
           const display = c.nickname ? `${c.full_name} (${c.nickname})` : c.full_name;
           msg += `${i + 1}. ${display}\n`;
@@ -227,11 +224,10 @@ async function handler(req: NextRequest) {
         });
         if (openReservations.length > 5)
           msg += `   ... و${openReservations.length - 5} آخرين\n`;
-        msg += "\n";
+        msg += "</blockquote>\n\n";
       }
 
       // ── تذييل ─────────────────────────────────────────────────────────
-      msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
       msg += `🤖 <i>نظام المعرض الذكي — تقرير تلقائي يومي</i>`;
 
       const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
@@ -314,8 +310,7 @@ async function handler(req: NextRequest) {
 
       // ── متابعات اليوم ────────────────────────────────────────────────────
       if (myFollowupsToday.length > 0) {
-        msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-        msg += `📞 <b>متابعاتك لليوم (${myFollowupsToday.length})</b>\n`;
+        msg += `📞 <b>متابعاتك لليوم (${myFollowupsToday.length})</b>\n<blockquote>`;
         myFollowupsToday.slice(0, 10).forEach((c, i) => {
           const _td = new Date(c.next_follow_up_at!);
           const _tl = new Date(_td.getTime() + 3*60*60*1000);
@@ -326,13 +321,12 @@ async function handler(req: NextRequest) {
         });
         if (myFollowupsToday.length > 10)
           msg += `   ... و${myFollowupsToday.length - 10} عميلاً آخر\n`;
-        msg += "\n";
+        msg += "</blockquote>\n\n";
       }
 
       // ── متابعات متأخرة ───────────────────────────────────────────────────
       if (myOverdue.length > 0) {
-        msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-        msg += `⚠️ <b>متابعات متأخرة تحتاج منك تدخلاً (${myOverdue.length})</b>\n`;
+        msg += `⚠️ <b>متابعات متأخرة تحتاج منك تدخلاً (${myOverdue.length})</b>\n<blockquote>`;
         myOverdue.slice(0, 7).forEach((c, i) => {
           const daysAgo = Math.floor(
             (now.getTime() - new Date(c.next_follow_up_at!).getTime()) / 86400000,
@@ -343,13 +337,12 @@ async function handler(req: NextRequest) {
         });
         if (myOverdue.length > 7)
           msg += `   ... و${myOverdue.length - 7} عميلاً آخر\n`;
-        msg += "\n";
+        msg += "</blockquote>\n\n";
       }
 
       // ── التذكيرات المعلقة ────────────────────────────────────────────────
       if (myReminders.length > 0) {
-        msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-        msg += `🔔 <b>تذكيراتك المعلقة (${myReminders.length})</b>\n`;
+        msg += `🔔 <b>تذكيراتك المعلقة (${myReminders.length})</b>\n<blockquote>`;
         myReminders.slice(0, 5).forEach((r, i) => {
           const _rd = new Date(r.due_at);
           const _rl = new Date(_rd.getTime() + 3*60*60*1000);
@@ -358,23 +351,21 @@ async function handler(req: NextRequest) {
         });
         if (myReminders.length > 5)
           msg += `   ... و${myReminders.length - 5} تذكيرات أخرى\n`;
-        msg += "\n";
+        msg += "</blockquote>\n\n";
       }
 
       // ── حجوزات مفتوحة ───────────────────────────────────────────────────
       if (myReservations.length > 0) {
-        msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-        msg += `🔒 <b>حجوزاتك المفتوحة (${myReservations.length})</b>\n`;
+        msg += `🔒 <b>حجوزاتك المفتوحة (${myReservations.length})</b>\n<blockquote>`;
         myReservations.slice(0, 5).forEach((c, i) => {
           const display = c.nickname ? `${c.full_name} (${c.nickname})` : c.full_name;
           msg += `${i + 1}. ${display} — 📱 ${c.phone}\n`;
         });
         if (myReservations.length > 5)
           msg += `   ... و${myReservations.length - 5} آخرين\n`;
-        msg += "\n";
+        msg += "</blockquote>\n\n";
       }
 
-      msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
       msg += `🤖 <i>نظام المعرض الذكي — تقريرك الصباحي الشخصي</i>`;
 
       const empChatId = emp.telegram_chat_id as string;

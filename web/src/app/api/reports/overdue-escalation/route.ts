@@ -90,7 +90,7 @@ async function handler(req: NextRequest) {
       if (criticalOverdue.length > 0) {
         msg += `🔴 منهم <b>${criticalOverdue.length}</b> متأخر أكثر من 7 أيام!\n`;
       }
-      msg += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      msg += `<blockquote>`;
 
       myOverdue.slice(0, 10).forEach((c, i) => {
         const daysAgo = Math.floor((now.getTime() - new Date(c.next_follow_up_at!).getTime()) / 86400000);
@@ -109,7 +109,7 @@ async function handler(req: NextRequest) {
         msg += `   ... و${myOverdue.length - 10} عميلاً آخر\n`;
       }
 
-      msg += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      msg += `</blockquote>\n\n`;
       msg += `💡 <i>راجع ملفات هؤلاء العملاء فوراً وحدّث مواعيد المتابعة أو أغلق الملف.</i>\n`;
       msg += `🤖 <i>نظام المعرض الذكي — تنبيه تصعيد تلقائي</i>`;
 

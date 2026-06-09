@@ -128,7 +128,6 @@ export async function POST(req: NextRequest) {
   // إشعار Telegram للموظف المُدخِل
   if (staffChatId) {
     const priceFormatted = price.toLocaleString("en-US");
-    const SEP = "━━━━━━━━━━━━━━━━━━━━";
     const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
 
     const inlineButtons: Array<Array<{ text: string; callback_data?: string; web_app?: { url: string } }>> = [];
@@ -146,11 +145,11 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         chat_id: staffChatId,
         text:
-          `💰 <b>تم تقييم السيارة</b>\n${SEP}\n\n` +
-          `👤 <b>العميل:</b> ${custRow?.full_name ?? "—"}\n` +
+          `💰 <b>تم تقييم السيارة بنجاح</b>\n\n` +
+          `<blockquote>👤 <b>العميل:</b> ${custRow?.full_name ?? "—"}\n` +
           `✅ <b>قيمة التقييم:</b> ${priceFormatted} ₪\n` +
-          `👨‍💼 <b>المُقيِّم:</b> ${user.full_name}\n\n` +
-          `${SEP}\n<i>تمّ تحديث الملف — اضغط لفتح بطاقة العميل 👇</i>`,
+          `👨‍💼 <b>المُقيِّم:</b> ${user.full_name}</blockquote>\n\n` +
+          `<i>تمّ تحديث الملف — اضغط لفتح بطاقة العميل 👇</i>`,
         parse_mode: "HTML",
         reply_markup: { inline_keyboard: inlineButtons },
       }),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Mic, Square, Trash2 } from "lucide-react";
+import { Mic, Pause, Play, Square, Trash2 } from "lucide-react";
 
 /**
  * وضعان:
@@ -42,6 +42,44 @@ export function VoiceRecorder({ customerId, name, label, onRecorded, onDeleted }
   const durationRef = useRef(0);
 
   const isDirectUpload = Boolean(customerId);
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const onTimeUpdate = () => {
+      setCurrentTime(audio.currentTime);
+    };
+
+    const onEnded = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+    };
+
+    audio.addEventListener("timeupdate", onTimeUpdate);
+    audio.addEventListener("ended", onEnded);
+
+    return () => {
+      audio.removeEventListener("timeupdate", onTimeUpdate);
+      audio.removeEventListener("ended", onEnded);
+    };
+  }, [audioUrl]);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      audio.pause();
+      setIsPlaying(false);
+    } else {
+      audio.play();
+      setIsPlaying(true);
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -204,22 +242,59 @@ export function VoiceRecorder({ customerId, name, label, onRecorded, onDeleted }
 
       {state === "uploading" && (
         <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5">
-          <span className="text-xs text-sky-600 animate-pulse">⏫ جاري حفظ التسجيل…</span>
-          {audioUrl && <audio controls src={audioUrl} className="h-7 max-w-[180px]" />}
+          <span className="text-xs text-sky-600 animate-pulse font-medium">⏫ جاري حفظ التسجيل…</span>
         </div>
       )}
 
       {state === "done" && audioUrl && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1.5">
-          <span className="text-xs font-semibold text-emerald-700">🎤 {formatDuration(duration)}</span>
-          <audio controls src={audioUrl} className="h-7 max-w-[180px]" />
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/50 p-2">
+          <audio ref={audioRef} src={audioUrl} />
+          
+          <button
+            type="button"
+            onClick={togglePlay}
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-white transition hover:bg-emerald-700 hover:scale-105 active:scale-95 cursor-pointer"
+            title={isPlaying ? "إيقاف مؤقت" : "تشغيل"}
+          >
+            {isPlaying ? (
+              <Pause className="h-3 w-3 fill-current" />
+            ) : (
+              <Play className="h-3 w-3 fill-current translate-x-[1px]" />
+            )}
+          </button>
+
+          <div className="flex flex-col gap-0.5 min-w-[70px]">
+            <span className="text-[10px] font-bold text-emerald-800">ملاحظة صوتية</span>
+            <span className="text-[11px] font-mono font-medium text-emerald-700">
+              {formatDuration(Math.floor(currentTime))} / {formatDuration(duration)}
+            </span>
+          </div>
+
+          {/* شريط التقدم المخصص */}
+          <div 
+            onClick={(e) => {
+              const audio = audioRef.current;
+              if (!audio || !audio.duration) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              const clickX = e.clientX - rect.left;
+              const percentage = clickX / rect.width;
+              audio.currentTime = percentage * audio.duration;
+            }}
+            className="relative h-1.5 w-24 overflow-hidden rounded-full bg-emerald-200/60 cursor-pointer"
+          >
+            <div 
+              style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+              className="h-full bg-emerald-600 transition-all duration-100 ease-linear"
+            />
+          </div>
+
           <button
             type="button"
             onClick={deleteRecording}
-            className="inline-flex items-center gap-1 rounded bg-slate-200 px-1.5 py-0.5 text-xs text-slate-600 transition hover:bg-rose-100 hover:text-rose-700"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-slate-200 text-slate-600 transition hover:bg-rose-100 hover:text-rose-700 cursor-pointer"
             title="حذف التسجيل"
           >
-            <Trash2 className="h-3 w-3" />
+            <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       )}
