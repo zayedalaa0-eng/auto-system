@@ -25,21 +25,27 @@ export async function GET(req: NextRequest) {
 
     const { data: inv } = await admin
       .from("inventory")
-      .select("id, model, chassis_no, price, color, production_year, availability_status")
+      .select("id, model, chassis_no, price, color, production_year, availability_status, deal_type")
       .eq("branch_id", branchId)
       .not("availability_status", "in", '("مباعة","محجوزة","مسحوبة من المعرض")')
       .eq("is_active", true)
       .order("updated_at", { ascending: false })
       .limit(50);
 
+    const isCustomerCar = (d: string | null) => {
+      const v = (d ?? "").trim();
+      return v.includes("برسم البيع") || v.includes("استبدال");
+    };
+
     return NextResponse.json({
       ok: true,
       inventory: (inv ?? []).map(i => ({
         id: i.id,
-        label: `${i.model ?? ""}${i.chassis_no ? ` — شاصي: ${i.chassis_no}` : ""}${i.color ? ` — ${i.color}` : ""}${i.price ? ` — ${i.price.toLocaleString()} ₪` : ""}`,
+        label: `${i.model ?? ""}${i.chassis_no ? ` — شاصي: ${i.chassis_no}` : ""}${i.color ? ` — ${i.color}` : ""}${i.price ? ` — ${Number(i.price).toLocaleString("en-US")} ₪` : ""}`,
         model: i.model ?? "",
         chassis_no: i.chassis_no ?? null,
         availability_status: i.availability_status ?? "",
+        category: isCustomerCar(i.deal_type) ? "customer" : "showroom",
       })),
     });
   } catch (err) {

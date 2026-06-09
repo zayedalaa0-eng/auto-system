@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   // Inventory scoped to branch
   let inventoryQuery = admin
     .from("inventory")
-    .select("id, model, production_year, chassis_no, color, availability_status, price")
+    .select("id, model, production_year, chassis_no, color, availability_status, price, deal_type, owner_name")
     .eq("is_active", true)
     .order("model");
 
@@ -54,6 +54,11 @@ export async function GET(req: NextRequest) {
     caps.isGeneralManager ? branchesQuery : Promise.resolve({ data: [] }),
   ]);
 
+  const isCustomerCar = (dealType: string | null) => {
+    const d = (dealType ?? "").trim();
+    return d.includes("برسم البيع") || d.includes("استبدال");
+  };
+
   const inventoryOptions = (inventory ?? [])
     .filter((item) => !isUnavailable(item.availability_status))
     .map((item) => ({
@@ -68,6 +73,8 @@ export async function GET(req: NextRequest) {
         .filter(Boolean)
         .join(" — "),
       model: item.model,
+      // تصنيف: سيارات المعرض (شراء/حيازة) أو سيارات العملاء (برسم البيع/استبدال)
+      category: isCustomerCar(item.deal_type) ? "customer" : "showroom",
     }));
 
   return NextResponse.json({

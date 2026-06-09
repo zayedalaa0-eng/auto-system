@@ -683,6 +683,7 @@ export function CustomerProfileContent({
   const [detailUseInventory, setDetailUseInventory] = useState(true);
   const [detailUseCustomRequest, setDetailUseCustomRequest] = useState(false);
   const [detailInventoryToAdd, setDetailInventoryToAdd] = useState("");
+  const [detailInvCategory, setDetailInvCategory] = useState<"showroom" | "customer">("showroom");
   const [detailCustomType, setDetailCustomType] = useState("");
   const [detailCustomYear, setDetailCustomYear] = useState("");
   const [detailCustomNegotiation, setDetailCustomNegotiation] = useState("");
@@ -1640,15 +1641,35 @@ export function CustomerProfileContent({
                     </button>
                   </div>
 
-                  {detailUseInventory && (
-                    <div className="grid gap-2 md:grid-cols-[1fr_auto] mb-3">
-                      <select className="legacy-select" value={detailInventoryToAdd} onChange={(e) => setDetailInventoryToAdd(e.target.value)}>
-                        <option value="">اختر من المخزون</option>
-                        {options.inventoryOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
-                      </select>
-                      <button type="button" className="legacy-btn legacy-btn-info" onClick={addInventoryChoice}>إضافة</button>
-                    </div>
-                  )}
+                  {detailUseInventory && (() => {
+                    const showroomOpts = options.inventoryOptions.filter(o => o.category !== "customer");
+                    const customerOpts = options.inventoryOptions.filter(o => o.category === "customer");
+                    const shownOpts = detailInvCategory === "customer" ? customerOpts : showroomOpts;
+                    return (
+                      <div className="mb-3 space-y-2">
+                        {/* زر التبديل */}
+                        <div className="flex gap-2">
+                          <button type="button"
+                            onClick={() => { setDetailInvCategory("showroom"); setDetailInventoryToAdd(""); }}
+                            className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-semibold border transition ${detailInvCategory === "showroom" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-blue-300"}`}>
+                            🏢 سيارات المعرض ({showroomOpts.length})
+                          </button>
+                          <button type="button"
+                            onClick={() => { setDetailInvCategory("customer"); setDetailInventoryToAdd(""); }}
+                            className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-semibold border transition ${detailInvCategory === "customer" ? "bg-amber-500 text-white border-amber-500" : "bg-white text-slate-600 border-slate-200 hover:border-amber-300"}`}>
+                            👤 سيارات العملاء ({customerOpts.length})
+                          </button>
+                        </div>
+                        <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+                          <select className="legacy-select" value={detailInventoryToAdd} onChange={(e) => setDetailInventoryToAdd(e.target.value)}>
+                            <option value="">اختر من {detailInvCategory === "customer" ? "سيارات العملاء" : "سيارات المعرض"}</option>
+                            {shownOpts.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+                          </select>
+                          <button type="button" className="legacy-btn legacy-btn-info" onClick={addInventoryChoice}>إضافة</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {detailUseCustomRequest && (
                     <div className="space-y-3 mb-3">

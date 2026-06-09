@@ -291,6 +291,7 @@ export type CustomerFormOptions = {
   inventoryOptions: Array<{
     id: string;
     label: string;
+    category?: "showroom" | "customer";
   }>;
   statuses: string[];
   statusesByType: {
@@ -1811,10 +1812,15 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
     if (status === "sold" || status === "reserved" || status === "withdrawn") return false;
     return true;
   };
-  const toOption = (item: { id: string; model: string; production_year: number | null; chassis_no: string | null }) => ({
-    id: item.id,
-    label: `${item.model}${item.production_year ? ` - موديل:${item.production_year}` : ""}${item.chassis_no ? ` - شاصي:${item.chassis_no}` : ""}`,
-  });
+  const toOption = (item: { id: string; model: string; production_year: number | null; chassis_no: string | null; deal_type?: string | null }) => {
+    const deal = (item.deal_type ?? "").trim();
+    const isCustomer = deal.includes(AR_DEAL_SWAP) || deal.includes(AR_DEAL_CONSIGN);
+    return {
+      id: item.id,
+      label: `${item.model}${item.production_year ? ` - موديل:${item.production_year}` : ""}${item.chassis_no ? ` - شاصي:${item.chassis_no}` : ""}`,
+      category: (isCustomer ? "customer" : "showroom") as "customer" | "showroom",
+    };
+  };
 
   let inventoryOptions = (inventoryScoped ?? [])
     .filter((item) => isAvailable(item.availability_status))

@@ -20,7 +20,7 @@ type TelegramWebApp = {
   colorScheme?: "light" | "dark";
 };
 
-type InventoryOption = { id: string; label: string; model: string; chassis_no?: string | null };
+type InventoryOption = { id: string; label: string; model: string; chassis_no?: string | null; category?: "showroom" | "customer" };
 type StaffOption = { id: string; full_name: string };
 type OperationType = "buyer" | "buyer_tradein_pending" | "sell_on_behalf";
 
@@ -214,6 +214,7 @@ export default function AddCustomerMiniApp() {
   const [rcSelectedCars,    setRcSelectedCars]    = useState<InventoryOption[]>([]);
   const [rcNegotiations,    setRcNegotiations]    = useState<Record<string,string>>({});
   const [rcInventoryToAdd,  setRcInventoryToAdd]  = useState("");
+  const [invCategory,       setInvCategory]       = useState<"showroom" | "customer">("showroom");
   const [rcUseCustom,       setRcUseCustom]       = useState(false);
   const [rcCustomType,      setRcCustomType]      = useState("");
   const [rcCustomYear,      setRcCustomYear]      = useState("");
@@ -309,7 +310,13 @@ export default function AddCustomerMiniApp() {
   }, [chatId]);
 
   // المخزون النشط: للمدير العام من rcBranchInventory، للبقية من formData
-  const activeInventory: InventoryOption[] = formData?.isGeneralManager ? rcBranchInventory : (formData?.inventoryOptions ?? []);
+  const allInventory: InventoryOption[] = formData?.isGeneralManager ? rcBranchInventory : (formData?.inventoryOptions ?? []);
+  // فلتر الفئة: showroom = سيارات المعرض، customer = سيارات العملاء
+  const activeInventory: InventoryOption[] = allInventory.filter(o =>
+    invCategory === "customer" ? o.category === "customer" : o.category !== "customer"
+  );
+  const showroomCount = allInventory.filter(o => o.category !== "customer").length;
+  const customerCount = allInventory.filter(o => o.category === "customer").length;
 
   function addRcCar() {
     if (!rcInventoryToAdd) return;
@@ -776,9 +783,28 @@ export default function AddCustomerMiniApp() {
                   <div style={{ fontSize: 13, color: "#b45309", fontStyle: "italic" }}>اختر المعرض أولاً لعرض السيارات المتاحة</div>
                 ) : (
                   <>
+                    {/* زر التبديل بين سيارات المعرض وسيارات العملاء */}
+                    <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                      <button type="button"
+                        onClick={() => { setInvCategory("showroom"); setRcInventoryToAdd(""); }}
+                        style={{ flex: 1, padding: "8px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                          border: `1.5px solid ${invCategory === "showroom" ? btnBg : borderColor}`,
+                          background: invCategory === "showroom" ? (isDark ? "rgba(0,122,255,0.15)" : "#eff6ff") : "transparent",
+                          color: invCategory === "showroom" ? btnBg : hintColor }}>
+                        🏢 سيارات المعرض ({showroomCount})
+                      </button>
+                      <button type="button"
+                        onClick={() => { setInvCategory("customer"); setRcInventoryToAdd(""); }}
+                        style={{ flex: 1, padding: "8px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                          border: `1.5px solid ${invCategory === "customer" ? "#f59e0b" : borderColor}`,
+                          background: invCategory === "customer" ? (isDark ? "rgba(245,158,11,0.15)" : "#fffbeb") : "transparent",
+                          color: invCategory === "customer" ? "#b45309" : hintColor }}>
+                        👤 سيارات العملاء ({customerCount})
+                      </button>
+                    </div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <select value={rcInventoryToAdd} onChange={e => setRcInventoryToAdd(e.target.value)} style={{ ...input, flex: 1 }}>
-                        <option value="">اختر من المخزون</option>
+                        <option value="">اختر من {invCategory === "customer" ? "سيارات العملاء" : "سيارات المعرض"}</option>
                         {activeInventory.map(o => (
                           <option key={o.id} value={o.id}>{o.label}</option>
                         ))}
