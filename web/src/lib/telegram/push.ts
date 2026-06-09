@@ -330,7 +330,11 @@ export async function pushTelegramToManagers({
       resolvedTitle = title.replace("استبدال", "سيارة برسم البيع").replace("تحديث ملف عميل", "تحديث سيارة برسم البيع");
     }
 
-    const text = `🔔 <b>${escapeHtml(resolvedTitle)}</b>\n\n${resolvedMessage}`;
+    let text = `🔔 <b>${escapeHtml(resolvedTitle)}</b>\n\n${resolvedMessage}`;
+    if (customerId) {
+      const logSection = await buildCustomerLogSection(customerId, 5);
+      text += logSection;
+    }
     await Promise.allSettled(
       managers.map((m) => sendWithButtons(m.chat_id, text, customerId)),
     );
@@ -366,10 +370,16 @@ export async function pushTelegramToEmployee({
     const chatId = user?.telegram_chat_id as string | null;
     if (!chatId) return;
 
-    const text =
+    let text =
       `📋 <b>${escapeHtml(title)}</b>\n\n` +
-      `${message}\n\n` +
-      `<i>— أرسله: ${escapeHtml(senderName)}</i>`;
+      `${message}\n\n`;
+
+    if (customerId) {
+      const logSection = await buildCustomerLogSection(customerId, 5);
+      text += logSection + `\n\n`;
+    }
+    
+    text += `<i>— أرسله: ${escapeHtml(senderName)}</i>`;
 
     await sendWithButtons(chatId, text, customerId);
   } catch { /* best-effort */ }
@@ -503,6 +513,8 @@ export async function pushEvaluationRequestToMaalamManager({
 
     const appUrl = getAppUrl();
 
+    const logSection = await buildCustomerLogSection(customerId, 3);
+
     // ── النص الكامل ──────────────────────────────────────────────────────────
     let fullText =
       `🔁 <b>طلب تقييم سيارة — استبدال</b>\n\n` +
@@ -520,7 +532,8 @@ export async function pushEvaluationRequestToMaalamManager({
       (car.inspection ? `<b>الفحص:</b> ${escapeHtml(car.inspection)}\n` : "") +
       (car.specs ? `<b>المواصفات:</b> ${escapeHtml(car.specs)}\n` : "") +
       (car.notes ? `<b>ملاحظات:</b> ${escapeHtml(car.notes)}\n` : "") +
-      `</blockquote>\n\n` +
+      `</blockquote>\n` +
+      logSection + `\n\n` +
       `<i>يُرجى الضغط على الزر أدناه لإرسال قيمة التقييم للموظف 👇</i>`;
 
     // ── caption مختصر للصور ───────────────────────────────────────────────────
