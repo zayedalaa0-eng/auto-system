@@ -1777,7 +1777,7 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
   const supabase = await createClient();
   const inventoryBaseQuery = supabase
     .from("inventory")
-    .select("id, model, chassis_no, production_year, availability_status, deal_type, condition_label, branch_id, branches(name)")
+    .select("id, model, chassis_no, production_year, availability_status, deal_type, condition_label, owner_name, branch_id, branches(name)")
     .order("model");
   const [{ data: branches }, { data: staff }, { data: inventoryScoped }] = await Promise.all([
     supabase.from("branches").select("id, name, whatsapp_number, whatsapp_prefix").eq("is_active", true).order("name"),
@@ -1812,9 +1812,13 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
     if (status === "sold" || status === "reserved" || status === "withdrawn") return false;
     return true;
   };
-  const toOption = (item: { id: string; model: string; production_year: number | null; chassis_no: string | null; deal_type?: string | null }) => {
+  const branchNameSet = new Set((branches ?? []).map((b) => (b.name ?? "").trim().toLowerCase()));
+  const toOption = (item: { id: string; model: string; production_year: number | null; chassis_no: string | null; deal_type?: string | null; owner_name?: string | null }) => {
     const deal = (item.deal_type ?? "").trim();
-    const isCustomer = deal.includes(AR_DEAL_SWAP) || deal.includes(AR_DEAL_CONSIGN);
+    const dealIsCustomer = deal.includes(AR_DEAL_SWAP) || deal.includes(AR_DEAL_CONSIGN);
+    const owner = (item.owner_name ?? "").trim().toLowerCase();
+    // سيارة عميل فقط إذا كان نوعها برسم البيع/استبدال والمالك شخص (ليس معرضاً)
+    const isCustomer = dealIsCustomer && !(owner && branchNameSet.has(owner));
     return {
       id: item.id,
       label: `${item.model}${item.production_year ? ` - موديل:${item.production_year}` : ""}${item.chassis_no ? ` - شاصي:${item.chassis_no}` : ""}`,
@@ -1846,14 +1850,14 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
         const admin = createAdminClient();
         const { data } = await admin
           .from("inventory")
-          .select("id, model, chassis_no, production_year, availability_status, deal_type, condition_label, branch_id")
+          .select("id, model, chassis_no, production_year, availability_status, deal_type, condition_label, owner_name, branch_id")
           .neq("branch_id", profile.branch_id)
           .order("model");
         externalRows = (data ?? []) as typeof externalRows;
       } else {
         const { data } = await supabase
           .from("inventory")
-          .select("id, model, chassis_no, production_year, availability_status, deal_type, condition_label, branch_id")
+          .select("id, model, chassis_no, production_year, availability_status, deal_type, condition_label, owner_name, branch_id")
           .neq("branch_id", profile.branch_id)
           .order("model");
         externalRows = (data ?? []) as typeof externalRows;

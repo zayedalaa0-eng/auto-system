@@ -47,16 +47,27 @@ export async function GET(req: NextRequest) {
     staffQuery = staffQuery.eq("branch_id", user.branch_id) as typeof staffQuery;
   }
 
-  let branchesQuery = admin.from("branches").select("id, name").eq("is_active", true).order("name");
+  // نجلب كل المعارض دائماً (للتصنيف) — والمدير العام يستخدمها أيضاً في الواجهة
+  const branchesQuery = admin.from("branches").select("id, name").eq("is_active", true).order("name");
   const [{ data: inventory }, { data: staff }, { data: branches }] = await Promise.all([
     inventoryQuery,
     staffQuery,
-    caps.isGeneralManager ? branchesQuery : Promise.resolve({ data: [] }),
+    branchesQuery,
   ]);
 
-  const isCustomerCar = (dealType: string | null) => {
+  // أسماء المعارض (لتمييز سيارات المعرض عن سيارات العملاء)
+  const branchNames = new Set((branches ?? []).map((b) => (b.name ?? "").trim().toLowerCase()));
+
+  // سيارة عميل = نوع الصفقة برسم البيع/استبدال + المالك شخص (ليس معرضاً)
+  // فإذا انتقلت ملكيتها للمعرض (owner = اسم معرض) تُصبح سيارة معرض
+  const isCustomerCar = (dealType: string | null, ownerName: string | null) => {
     const d = (dealType ?? "").trim();
-    return d.includes("برسم البيع") || d.includes("استبدال");
+    const dealIsCustomer = d.includes("برسم البيع") || d.includes("استبدال");
+    if (!dealIsCustomer) return false;
+    const owner = (ownerName ?? "").trim().toLowerCase();
+    // إذا كان المالك معرضاً → سيارة معرض (انتقلت الملكية)
+    if (owner && branchNames.has(owner)) return false;
+    return true;
   };
 
   const inventoryOptions = (inventory ?? [])
@@ -73,8 +84,8 @@ export async function GET(req: NextRequest) {
         .filter(Boolean)
         .join(" — "),
       model: item.model,
-      // تصنيف: سيارات المعرض (شراء/حيازة) أو سيارات العملاء (برسم البيع/استبدال)
-      category: isCustomerCar(item.deal_type) ? "customer" : "showroom",
+      // تصنيف: سيارات المعرض أو سيارات العملاء
+      category: isCustomerCar(item.deal_type, item.owner_name) ? "customer" : "showroom",
     }));
 
   return NextResponse.json({
