@@ -72,8 +72,18 @@ export function CustomersReportTable({
         <tbody>
           {customers.length > 0 ? (
             customers.map((customer) => {
-              const carName = carNameOnly(customer.requested_car_report ?? customer.requested_car);
+              let carName = carNameOnly(customer.requested_car_report ?? customer.requested_car);
               const hasSpecialRequest = (customer.requested_car_report ?? customer.requested_car ?? "").includes("طلب خاص");
+
+              // إزالة اسم سيارة الاستبدال من السيارة المطلوبة لتفادي التكرار
+              if (carName && isBuyerTradeIn(customer.operation_type) && customer.trade_in_model) {
+                const tradeNorm = customer.trade_in_model.replace(/\s+/g, " ").trim().toLowerCase();
+                const parts = carName.split("|").map(p => p.trim()).filter(p => {
+                  const pn = p.replace(/\s+/g, " ").trim().toLowerCase();
+                  return pn !== tradeNorm && !pn.includes(tradeNorm) && !tradeNorm.includes(pn);
+                });
+                carName = parts.length > 0 ? parts.join(" | ") : null;
+              }
 
               return (
                 <tr key={customer.id}>
@@ -99,37 +109,32 @@ export function CustomersReportTable({
 
                   {/* العميل والهاتف */}
                   <td>
-                    <div className="flex items-start gap-2.5">
-                      {/* أيقونة العميل */}
-                      <span className="flex-shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-sky-400 to-blue-500 text-white shadow-sm">
-                        <User className="h-5 w-5" />
-                      </span>
-                      <div className="min-w-0 flex flex-col gap-1">
-                        {/* الاسم + الكنية */}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-bold text-slate-900 text-sm leading-tight">{customer.full_name}</span>
-                          {customer.nickname ? (
-                            <span className="text-xs font-medium text-sky-500">({customer.nickname})</span>
-                          ) : null}
-                        </div>
-                        {/* الهاتف */}
-                        <div className="flex items-center gap-1.5">
-                          <Phone className="h-3 w-3 flex-shrink-0 text-slate-400" />
-                          <span className="text-xs text-slate-500 num-val">{customer.phone}</span>
-                        </div>
-                        {/* نوع العملية */}
-                        {customer.operation_type ? (
-                          <span className="inline-flex w-fit items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-600">
-                            {customer.operation_type === "buyer"
-                              ? "🛒 مشتري"
-                              : isBuyerTradeIn(customer.operation_type)
-                                ? "🔄 مشتري + استبدال"
-                                : isSellOnBehalf(customer.operation_type)
-                                  ? "🤝 بيع بالوكالة"
-                                  : customer.operation_type}
-                          </span>
+                    <div className="flex flex-col gap-1.5">
+                      {/* الاسم + أيقونة صغيرة + الكنية */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <User className="h-4 w-4 flex-shrink-0 text-sky-500" />
+                        <span className="font-bold text-slate-900 text-sm leading-tight">{customer.full_name}</span>
+                        {customer.nickname ? (
+                          <span className="text-xs font-medium text-sky-500">({customer.nickname})</span>
                         ) : null}
                       </div>
+                      {/* الهاتف */}
+                      <div className="flex items-center gap-1.5">
+                        <Phone className="h-3 w-3 flex-shrink-0 text-slate-400" />
+                        <span className="text-xs text-slate-500 num-val">{customer.phone}</span>
+                      </div>
+                      {/* نوع العملية */}
+                      {customer.operation_type ? (
+                        <span className="inline-flex w-fit items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-600">
+                          {customer.operation_type === "buyer"
+                            ? "🛒 مشتري"
+                            : isBuyerTradeIn(customer.operation_type)
+                              ? "🔄 مشتري + استبدال"
+                              : isSellOnBehalf(customer.operation_type)
+                                ? "🤝 بيع بالوكالة"
+                                : customer.operation_type}
+                        </span>
+                      ) : null}
                     </div>
                   </td>
 
