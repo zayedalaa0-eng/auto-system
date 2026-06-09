@@ -165,15 +165,21 @@ export function CustomersReportTable({
                         <>
                           {/* السيارات المطلوبة — كل سيارة في سطر مع شارتها بجانبها (بدون لف) */}
                           {requestedCars.length > 0 ? (
-                            requestedCars.map((rc, i) => (
-                              <div key={i} className="flex items-center gap-1.5 whitespace-nowrap">
-                                <Car className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
-                                <span className="text-sm font-semibold text-slate-700 leading-tight">{rc.name}</span>
-                                {rc.special ? (
-                                  <span className="inline-flex items-center rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-semibold text-rose-600 flex-shrink-0">غير متوفرة بالمعرض</span>
-                                ) : null}
-                              </div>
-                            ))
+                            requestedCars.map((rc, i) => {
+                              // شارة توفر السيارة بالمخزون — تظهر على أول سيارة فقط
+                              const availBadge = i === 0 ? inventoryAvailabilityBadge(customer.inventory_availability) : null;
+                              return (
+                                <div key={i} className="flex items-center gap-1.5 whitespace-nowrap">
+                                  <Car className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
+                                  <span className="text-sm font-semibold text-slate-700 leading-tight">{rc.name}</span>
+                                  {rc.special ? (
+                                    <span className="inline-flex items-center rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-semibold text-rose-600 flex-shrink-0">غير متوفرة بالمعرض</span>
+                                  ) : availBadge ? (
+                                    <span className={`inline-flex items-center text-[11px] font-semibold flex-shrink-0 ${availBadge.cls}`}>{availBadge.label}</span>
+                                  ) : null}
+                                </div>
+                              );
+                            })
                           ) : (
                             <span className="text-xs text-slate-300">— لم تُحدَّد —</span>
                           )}
@@ -195,12 +201,6 @@ export function CustomersReportTable({
                   <td>
                     <div className="flex flex-col gap-1.5 items-start">
                       <StatusPill value={customer.status} />
-                      {(() => {
-                        const badge = inventoryAvailabilityBadge(customer.inventory_availability);
-                        return badge ? (
-                          <span className={`text-xs font-semibold ${badge.cls}`}>{badge.label}</span>
-                        ) : null;
-                      })()}
                       {customer.payment_method ? (
                         <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
                           💳 {customer.payment_method}
