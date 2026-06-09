@@ -467,7 +467,7 @@ export default async function InventoryPage({
                           ) : (
                             <Store className="h-4 w-4 flex-shrink-0 text-amber-500" />
                           )}
-                          <span className="font-bold text-slate-900 text-[15px] leading-tight truncate">{item.owner_name ?? "—"}</span>
+                          <span className="font-bold text-slate-900 text-sm leading-tight truncate">{item.owner_name ?? "—"}</span>
                         </div>
                         {/* اسم المعرض (للأشخاص فقط) */}
                         {ownerIsPerson && item.branch_name ? (
@@ -493,13 +493,13 @@ export default async function InventoryPage({
                         {/* اسم السيارة */}
                         <div className="flex items-center gap-1.5">
                           <Car className="h-4 w-4 flex-shrink-0 text-blue-400" />
-                          <span className="font-bold text-blue-700 text-[15px] leading-tight truncate">{item.model || "—"}</span>
+                          <span className="font-bold text-blue-700 text-sm leading-tight truncate">{item.model || "—"}</span>
                         </div>
                         {/* سنة الصنع */}
                         {item.production_year ? (
                           <div className="flex items-center gap-1.5">
                             <Calendar className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
-                            <span className="text-[13px] text-slate-500 font-medium">{item.production_year}</span>
+                            <span className="text-xs text-slate-500 font-medium">{item.production_year}</span>
                           </div>
                         ) : null}
                         {/* الحالة */}
