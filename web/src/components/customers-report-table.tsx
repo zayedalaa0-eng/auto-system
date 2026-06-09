@@ -77,12 +77,12 @@ export function CustomersReportTable({
       <table className="premium-table">
         <thead className="legacy-standard-head">
           <tr>
-            <th style={{ width: "170px" }}>المعرض / الموظف</th>
-            <th style={{ width: "160px" }}>العميل والهاتف</th>
-            <th style={{ width: "160px" }}>السيارة</th>
-            <th style={{ width: "150px" }}>الحالة</th>
-            <th style={{ width: "130px" }}>آخر تواصل</th>
-            <th style={{ width: "130px" }}>الإجراءات</th>
+            <th style={{ width: "150px" }}>المعرض / الموظف</th>
+            <th style={{ width: "150px" }}>العميل والهاتف</th>
+            <th style={{ width: "230px" }}>السيارة</th>
+            <th style={{ width: "140px" }}>الحالة</th>
+            <th style={{ width: "120px" }}>آخر تواصل</th>
+            <th style={{ width: "120px" }}>الإجراءات</th>
           </tr>
         </thead>
         <tbody>
@@ -153,24 +153,24 @@ export function CustomersReportTable({
                       {/* بيع بالوكالة: سيارة العميل المعروضة للبيع */}
                       {isSellOnBehalf(customer.operation_type) ? (
                         customer.trade_in_model ? (
-                          <div className="flex items-center gap-1.5 flex-wrap">
+                          <div className="flex items-center gap-1.5 whitespace-nowrap">
                             <Car className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
                             <span className="text-sm font-semibold text-slate-700 leading-tight">{customer.trade_in_model}</span>
-                            <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-600">معروضة للبيع</span>
+                            <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-600 flex-shrink-0">معروضة للبيع</span>
                           </div>
                         ) : (
                           <span className="text-xs text-slate-300">— لم تُحدَّد —</span>
                         )
                       ) : (
                         <>
-                          {/* السيارات المطلوبة — كل سيارة في سطر مع شارتها */}
+                          {/* السيارات المطلوبة — كل سيارة في سطر مع شارتها بجانبها (بدون لف) */}
                           {requestedCars.length > 0 ? (
                             requestedCars.map((rc, i) => (
-                              <div key={i} className="flex items-center gap-1.5 flex-wrap">
+                              <div key={i} className="flex items-center gap-1.5 whitespace-nowrap">
                                 <Car className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
                                 <span className="text-sm font-semibold text-slate-700 leading-tight">{rc.name}</span>
                                 {rc.special ? (
-                                  <span className="inline-flex items-center rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-semibold text-rose-600">غير متوفرة بالمعرض</span>
+                                  <span className="inline-flex items-center rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-semibold text-rose-600 flex-shrink-0">غير متوفرة بالمعرض</span>
                                 ) : null}
                               </div>
                             ))
@@ -180,10 +180,10 @@ export function CustomersReportTable({
 
                           {/* سيارة الاستبدال */}
                           {isBuyerTradeIn(customer.operation_type) && customer.trade_in_model ? (
-                            <div className="flex items-center gap-1.5 flex-wrap">
+                            <div className="flex items-center gap-1.5 whitespace-nowrap">
                               <Car className="h-3 w-3 flex-shrink-0 text-violet-500" />
                               <span className="text-sm font-semibold text-violet-700 leading-tight">{customer.trade_in_model}</span>
-                              <span className="inline-flex items-center rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-semibold text-violet-600">استبدال</span>
+                              <span className="inline-flex items-center rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-semibold text-violet-600 flex-shrink-0">استبدال</span>
                             </div>
                           ) : null}
                         </>
