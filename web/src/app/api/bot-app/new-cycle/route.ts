@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
       branchId: user.branch_id,
       customerId: inserted?.id ?? null,
       title: "فتح دورة جديدة",
-      message: `🔄 <b>${escapeHtml(user.full_name)}</b> فتح دورة متابعة جديدة للعميل:\n👤 <b>${escapeHtml(parent.full_name)}</b>\n🔖 ${escapeHtml(opLabel)}`,
+      message: `🔄 <b>فتح دورة متابعة جديدة للعميل:</b>\n👤 <b>${escapeHtml(parent.full_name)}</b>\n🔖 النوع: ${escapeHtml(opLabel)}\n\n👨‍💼 <b>بواسطة:</b> ${escapeHtml(user.full_name)}`,
     });
 
     return NextResponse.json({ ok: true, id: inserted?.id });

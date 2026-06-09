@@ -8,7 +8,7 @@ import { getRoleCapabilities } from "@/lib/roles";
 import { PHONE_LENGTH, PHONE_ERROR_MESSAGE, normalizePhone } from "@/lib/phone";
 import { createAdminClient, hasSupabaseServiceRoleEnv } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { pushTelegramToManagers, pushTelegramPhotosToManagers, pushTelegramToEmployee } from "@/lib/telegram/push";
+import { pushTelegramToManagers, pushTelegramPhotosToManagers, pushTelegramToEmployee, pushNewCustomerToManagers } from "@/lib/telegram/push";
 
 async function getCurrentProfile() {
   if (!hasSupabaseEnv()) return null;
@@ -409,8 +409,7 @@ async function pushTradeAssessmentNotification({
       ? `🔍 <b>طلب تقييم سيارة استبدال — يحتاج مراجعة فورية</b>`
       : `🚗 <b>سيارة مرتبطة بعملية استبدال</b>`;
 
-  let msg = `${emoji} ${titleLine}\n`;
-  msg += `بواسطة الموظف: <b>${actorName}</b>\n\n`;
+  let msg = `${emoji} ${titleLine}\n\n`;
 
   msg += `👤 <b>بيانات العميل:</b>\n`;
   msg += `<blockquote><b>الاسم الكامل:</b> ${customerDisplay}\n`;
@@ -438,7 +437,8 @@ async function pushTradeAssessmentNotification({
   } else {
     msg += `📸 <i>لا توجد صور مرفقة حالياً</i>\n`;
   }
-  msg += `<i>🕐 ${arabicDateTime()}</i>`;
+  msg += `\n👨‍💼 <b>بواسطة الموظف:</b> <b>${actorName}</b>\n`;
+  msg += `🕐 <i>${arabicDateTime()}</i>`;
 
   // ── إرسال الرسالة النصية ──────────────────────────────────────────────
   await sendManagementActivityNotification({
@@ -474,6 +474,7 @@ async function sendManagementActivityNotification({
   notificationType,
   payload,
   customerId,
+  skipTelegramPush = false,
 }: {
   supabase: Awaited<ReturnType<typeof createClient>>;
   actorProfile: Awaited<ReturnType<typeof getCurrentProfile>>;
@@ -483,6 +484,7 @@ async function sendManagementActivityNotification({
   notificationType?: string;
   payload?: Record<string, unknown>;
   customerId?: string | null;
+  skipTelegramPush?: boolean;
 }) {
   const writer = hasSupabaseServiceRoleEnv() ? createAdminClient() : supabase;
 
@@ -519,6 +521,8 @@ async function sendManagementActivityNotification({
   }));
 
   await writer.from("notifications").insert(rows);
+
+  if (skipTelegramPush) return;
 
   // Fire-and-forget Telegram push to managers with linked accounts
   const resolvedCustomerId = customerId ?? (payload?.customer_id as string | null | undefined) ?? null;
@@ -594,16 +598,16 @@ async function notifyOpportunityForModelAvailability({
   const actorLabel = actorProfile?.full_name ?? "موظف";
 
   const message =
-    `🚨 <b>فرصة بيع فورية — سيارة مطلوبة متاحة الآن!</b>\n` +
-    `أضاف الموظف <b>${actorLabel}</b> سيارة يطلبها عملاؤك.\n\n` +
+    `🚨 <b>فرصة بيع فورية — سيارة مطلوبة متاحة الآن!</b>\n\n` +
     `🚗 <b>تفاصيل السيارة المتوفرة:</b>\n` +
     `<blockquote><b>الطراز:</b> ${carText}\n` +
     (ownerName ? `<b>مصدر السيارة / المالك:</b> ${ownerName}` : "") +
     `</blockquote>\n\n` +
     `🎯 <b>العملاء المهتمون (${interestedCustomers.length}):</b>\n` +
     `<blockquote>${leadsSection}</blockquote>\n\n` +
-    `⚡️ <i>تواصل مع هؤلاء العملاء فوراً قبل أن تُحجز السيارة!</i>\n` +
-    `<i>🕐 ${arabicDateTime()}</i>`;
+    `⚡️ <i>تواصل مع هؤلاء العملاء فوراً قبل أن تُحجز السيارة!</i>\n\n` +
+    `👨‍💼 <b>بواسطة الموظف:</b> ${actorLabel}\n` +
+    `🕐 <i>${arabicDateTime()}</i>`;
 
   await sendManagementActivityNotification({
     supabase,
@@ -1973,6 +1977,21 @@ export async function upsertCustomerAction(formData: FormData) {
           `</blockquote>\n\n` +
           `<i>🕐 ${arabicDateTime()}</i>`,
         payload: { source: "customer_create", customer_id: savedId },
+        skipTelegramPush: true,
+      });
+
+      void pushNewCustomerToManagers({
+        branchId,
+        customerId: savedId,
+        opCode: operationType ?? "buyer",
+        customerName: fullName,
+        customerPhone: phone,
+        staffName: profile?.full_name ?? "موظف",
+        staffUserId: profile?.id ?? null,
+        status,
+        requestedCar: normalizedRequestedCarResolved,
+        tradeInModel: tradeModelInput ?? null,
+        nextFollowUp: resolvedNextFollowup,
       });
     }
   }

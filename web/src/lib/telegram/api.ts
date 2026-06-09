@@ -23,6 +23,7 @@ export async function sendMessage(
   options?: {
     parseMode?: "HTML" | "Markdown";
     replyMarkup?: ReplyKeyboardMarkup | ReplyKeyboardRemove | ForceReply;
+    replyToMessageId?: number;
   },
 ) {
   const res = await fetch(`${getBaseUrl()}/sendMessage`, {
@@ -33,6 +34,7 @@ export async function sendMessage(
       text,
       parse_mode: options?.parseMode ?? "HTML",
       ...(options?.replyMarkup ? { reply_markup: options.replyMarkup } : {}),
+      ...(options?.replyToMessageId ? { reply_to_message_id: options.replyToMessageId } : {}),
     }),
   });
   return res.json();

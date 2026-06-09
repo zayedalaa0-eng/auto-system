@@ -36,7 +36,7 @@ import {
   sendMessageToStaff,
   type BotUser,
 } from "./queries";
-import { pushTelegramVoiceToManagers } from "./push";
+import { pushTelegramVoiceToManagers, buildCustomerLogSection } from "./push";
 import { clearSession, getSession, setSession } from "./sessions";
 import { PHONE_LENGTH, normalizePhone } from "@/lib/phone";
 import { STATUS_BY_TYPE } from "@/lib/statuses";
@@ -45,6 +45,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export type TelegramUpdate = {
   message?: {
     chat: { id: number };
+    message_id: number;
     from?: { first_name?: string; username?: string };
     text?: string;
     voice?: { file_id: string; duration: number; mime_type?: string; file_size?: number };
@@ -59,7 +60,7 @@ export type TelegramUpdate = {
     id: string;
     from: { id: number };
     data?: string;
-    message?: { chat: { id: number } };
+    message?: { chat: { id: number }; message_id: number };
   };
 };
 
@@ -1800,6 +1801,19 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     if (cq.data?.startsWith("eval_reply:")) {
       const parts = cq.data.slice("eval_reply:".length).split(":");
       return handleEvalReplyCallback(chatId, user, parts[0] ?? "");
+    }
+
+    // زر السجل التاريخي للملف
+    if (cq.data?.startsWith("history:")) {
+      const customerId = cq.data.slice("history:".length);
+      const logSection = await buildCustomerLogSection(customerId, 10);
+      const text = logSection.trim() !== ""
+        ? logSection
+        : "📜 لا يوجد سجل تاريخي متوفر لهذا الملف حالياً.";
+      const messageId = cq.message?.message_id;
+      return sendMessage(chatId, text, {
+        replyToMessageId: messageId,
+      });
     }
 
     return;
