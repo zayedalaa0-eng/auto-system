@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     if (!user) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
 
     // جلب بيانات العميل الكاملة
-    const [customerRes, logsRes, tradeInsRes, attachmentsRes, inventoryRes] = await Promise.all([
+    const [customerRes, logsRes, tradeInsRes, attachmentsRes, inventoryRes, branchesRes] = await Promise.all([
       admin
         .from("customers")
         .select("id, full_name, phone, nickname, address, status, operation_type, requested_car, notes, branch_id, assigned_user_id, next_follow_up_at, created_at, is_active, metadata, visit_count, last_contact_at")
@@ -57,12 +57,14 @@ export async function GET(req: NextRequest) {
       // سيارات المخزون المتاحة للربط (مشتري عند حجز/بيع)
       admin
         .from("inventory")
-        .select("id, model, chassis_no, price, color, production_year, availability_status")
+        .select("id, model, chassis_no, price, color, production_year, availability_status, deal_type, owner_name, condition_label")
         .eq("branch_id", user.branch_id ?? "")
         .not("availability_status", "in", '("مباعة","محجوزة","مسحوبة من المعرض")')
         .eq("is_active", true)
         .order("updated_at", { ascending: false })
         .limit(30),
+      // أسماء المعارض للتصنيف
+      admin.from("branches").select("name").eq("is_active", true),
     ]);
 
     if (!customerRes.data) {
@@ -165,13 +167,23 @@ export async function GET(req: NextRequest) {
       ancestorCycles,
       photos,
       voiceNotes,
-      inventoryOptions: (inventoryRes.data ?? []).map(i => ({
-        id: i.id,
-        label: `${i.model ?? ""}${i.chassis_no ? ` — شاصي: ${i.chassis_no}` : ""}${i.color ? ` — ${i.color}` : ""}${i.price ? ` — ${i.price.toLocaleString()} ₪` : ""}`,
-        model: i.model ?? "",
-        chassis_no: i.chassis_no,
-        availability_status: i.availability_status,
-      })),
+      inventoryOptions: (() => {
+        const branchNames = new Set((branchesRes.data ?? []).map(b => (b.name ?? "").trim().toLowerCase()));
+        return (inventoryRes.data ?? []).map(i => {
+          const owner = (i.owner_name ?? "").trim().toLowerCase();
+          const isCustomer = Boolean(owner) && !branchNames.has(owner);
+          return {
+            id: i.id,
+            // التسمية المختصرة: النوع — السنة — الحالة — اللون (الشاصي يُضاف في الواجهة عند الحجز/البيع)
+            label: [i.model, i.production_year ? String(i.production_year) : null, i.condition_label, i.color]
+              .filter(Boolean).join(" — "),
+            model: i.model ?? "",
+            chassis_no: i.chassis_no,
+            availability_status: i.availability_status,
+            category: isCustomer ? "customer" : "showroom",
+          };
+        });
+      })(),
       canEdit:
         isGeneralManager ||
         customer.branch_id === user.branch_id ||

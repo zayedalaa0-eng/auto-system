@@ -37,7 +37,7 @@ type TradeIn = {
 };
 type Log = { id: string; action: string; details: string | null; actor_name: string; created_at: string };
 type Attachment = { id: string; file_name: string | null; file_category: string | null; public_url: string | null; mime_type?: string | null; created_at: string };
-type InventoryOption = { id: string; label: string; model: string; chassis_no: string | null };
+type InventoryOption = { id: string; label: string; model: string; chassis_no: string | null; category?: "showroom" | "customer" };
 type Branch = { id: string; name: string };
 type AncestorCycle = { id: string; status: string; cycle_number: number; logs: Log[] };
 type PageData = {
@@ -146,6 +146,7 @@ export default function CustomerPage() {
   const [followUp,     setFollowUp]     = useState("");
   const [reqCar,       setReqCar]       = useState("");
   const [selInventory, setSelInventory] = useState("");
+  const [selInvCategory, setSelInvCategory] = useState<"showroom" | "customer">("showroom");
   const [paymentMethod,setPaymentMethod]= useState("");
 
   /* trade-in edit state */
@@ -1592,16 +1593,37 @@ export default function CustomerPage() {
                   </select>
                 </div>
 
-                {/* اختيار سيارة من المخزون */}
-                {needsInventoryChassis(selStatus,opCode)&&data.inventoryOptions.length>0&&(
+                {/* اختيار سيارة من المخزون — مع تبويبي المعرض/العملاء + الشاصي */}
+                {needsInventoryChassis(selStatus,opCode)&&data.inventoryOptions.length>0&&(()=>{
+                  const showroomOpts = data.inventoryOptions.filter(o=>o.category!=="customer");
+                  const customerOpts = data.inventoryOptions.filter(o=>o.category==="customer");
+                  const shownOpts = selInvCategory==="customer"?customerOpts:showroomOpts;
+                  return (
                   <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                    <span style={css.label}>🚗 اختيار سيارة من المخزون</span>
+                    <span style={css.label}>🚗 اختيار سيارة من المخزون (إلزامي عند الحجز/البيع)</span>
+                    <div style={{display:"flex",gap:6}}>
+                      <button type="button" onClick={()=>{setSelInvCategory("showroom");setSelInventory("");}}
+                        style={{flex:1,padding:"7px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",
+                          border:`1.5px solid ${selInvCategory==="showroom"?btnBg:border}`,
+                          background:selInvCategory==="showroom"?(isDark?"rgba(37,99,235,0.15)":"#eff6ff"):"transparent",
+                          color:selInvCategory==="showroom"?btnBg:hint}}>
+                        🏢 المعرض ({showroomOpts.length})
+                      </button>
+                      <button type="button" onClick={()=>{setSelInvCategory("customer");setSelInventory("");}}
+                        style={{flex:1,padding:"7px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",
+                          border:`1.5px solid ${selInvCategory==="customer"?"#f59e0b":border}`,
+                          background:selInvCategory==="customer"?(isDark?"rgba(245,158,11,0.15)":"#fffbeb"):"transparent",
+                          color:selInvCategory==="customer"?"#b45309":hint}}>
+                        👤 العملاء ({customerOpts.length})
+                      </button>
+                    </div>
                     <select value={selInventory} onChange={e=>setSelInventory(e.target.value)} style={css.input}>
                       <option value="">— اختر سيارة —</option>
-                      {data.inventoryOptions.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}
+                      {shownOpts.map(o=><option key={o.id} value={o.id}>{o.label}{o.chassis_no?` — شاصي:${o.chassis_no}`:""}</option>)}
                     </select>
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* اختيار سيارة البيع بالوكالة (إذا أكثر من سيارة) */}
                 {opCode==="sell_on_behalf"&&data.allTradeIns.length>1&&(

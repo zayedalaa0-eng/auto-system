@@ -1854,9 +1854,28 @@ export function CustomerProfileContent({
 
                 {needsInventoryChassis && (() => {
                   const selectedInvOpt = options.inventoryOptions.find((o) => o.id === inventoryForStatus);
+                  // عند الحجز/البيع: التسمية تشمل الشاصي
+                  const labelWithChassis = (o: { label: string; chassis_no?: string | null }) =>
+                    `${o.label}${o.chassis_no ? ` — شاصي:${o.chassis_no}` : ""}`;
+                  const showroomOpts = options.inventoryOptions.filter(o => o.category !== "customer");
+                  const customerOpts = options.inventoryOptions.filter(o => o.category === "customer");
+                  const shownOpts = detailInvCategory === "customer" ? customerOpts : showroomOpts;
                   return (
                     <>
                       <label className="legacy-label mt-1">السيارة / الشاصي — إلزامي عند الحجز/البيع</label>
+                      {/* تبويبا سيارات المعرض / العملاء */}
+                      <div className="flex gap-2 mb-1.5">
+                        <button type="button"
+                          onClick={() => { setDetailInvCategory("showroom"); setInventoryForStatus(""); markDirty(); }}
+                          className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold border transition ${detailInvCategory === "showroom" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200"}`}>
+                          🏢 سيارات المعرض ({showroomOpts.length})
+                        </button>
+                        <button type="button"
+                          onClick={() => { setDetailInvCategory("customer"); setInventoryForStatus(""); markDirty(); }}
+                          className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold border transition ${detailInvCategory === "customer" ? "bg-amber-500 text-white border-amber-500" : "bg-white text-slate-600 border-slate-200"}`}>
+                          👤 سيارات العملاء ({customerOpts.length})
+                        </button>
+                      </div>
                       <select
                         name="inventory_id_for_status"
                         className="legacy-select"
@@ -1870,14 +1889,14 @@ export function CustomerProfileContent({
                             ✅ السيارة المحجوزة حالياً{linkedInventoryChassis ? ` — شاصي: ${linkedInventoryChassis}` : ""}
                           </option>
                         )}
-                        {options.inventoryOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+                        {shownOpts.map((opt) => <option key={opt.id} value={opt.id}>{labelWithChassis(opt)}</option>)}
                       </select>
 
                       {/* رسالة التأكيد بعد الاختيار */}
                       {selectedInvOpt ? (
                         <div className="mt-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm">
                           <div className="font-bold text-emerald-700 mb-0.5">✅ سيتم ربط الملف بالسيارة التالية</div>
-                          <div className="text-slate-700 font-medium">{selectedInvOpt.label}</div>
+                          <div className="text-slate-700 font-medium">{labelWithChassis(selectedInvOpt)}</div>
                           <div className="mt-1 text-xs text-emerald-600">
                             سيتم تحديث حالة هذه السيارة في المخزون تلقائياً عند الحفظ.
                           </div>
