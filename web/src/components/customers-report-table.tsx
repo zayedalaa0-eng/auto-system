@@ -24,16 +24,6 @@ function isBuyerTradeIn(opType: string | null | undefined) {
   return opType === "buyer_tradein_pending" || opType === "buyer_tradein_evaluated" || opType === "مشتري + استبدال";
 }
 
-// يظهر فقط لعملاء بيع بالوكالة — معلومة إضافية عن سيارة العميل
-function tradeInStatusBadge(status: string | null | undefined, opType: string | null | undefined) {
-  if (!isSellOnBehalf(opType)) return null;
-  const s = (status ?? "").trim();
-  if (!s) return null;
-  if (s.includes("برسم البيع")) return { label: "🚗 برسم البيع",    cls: "text-amber-600" };
-  if (s.includes("عرض سيارة") || s.includes("معروضة")) return { label: "🚗 عرض سيارة للبيع", cls: "text-amber-600" };
-  return null;
-}
-
 function carNameOnly(value: string | null) {
   if (!value) return null;
   const cleaned = value
@@ -109,57 +99,79 @@ export function CustomersReportTable({
 
                   {/* العميل والهاتف */}
                   <td>
-                    <div className="flex flex-col gap-1.5">
-                      <div className="font-bold text-slate-900 text-sm leading-tight">{customer.full_name}</div>
-                      <div className="flex items-center gap-1.5">
-                        <Phone className="h-3 w-3 flex-shrink-0 text-slate-400" />
-                        <span className="text-xs text-slate-500 num-val">{customer.phone}</span>
+                    <div className="flex items-start gap-2.5">
+                      {/* أيقونة العميل */}
+                      <span className="flex-shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-sky-400 to-blue-500 text-white shadow-sm">
+                        <User className="h-5 w-5" />
+                      </span>
+                      <div className="min-w-0 flex flex-col gap-1">
+                        {/* الاسم + الكنية */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-slate-900 text-sm leading-tight">{customer.full_name}</span>
+                          {customer.nickname ? (
+                            <span className="text-xs font-medium text-sky-500">({customer.nickname})</span>
+                          ) : null}
+                        </div>
+                        {/* الهاتف */}
+                        <div className="flex items-center gap-1.5">
+                          <Phone className="h-3 w-3 flex-shrink-0 text-slate-400" />
+                          <span className="text-xs text-slate-500 num-val">{customer.phone}</span>
+                        </div>
+                        {/* نوع العملية */}
+                        {customer.operation_type ? (
+                          <span className="inline-flex w-fit items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-600">
+                            {customer.operation_type === "buyer"
+                              ? "🛒 مشتري"
+                              : isBuyerTradeIn(customer.operation_type)
+                                ? "🔄 مشتري + استبدال"
+                                : isSellOnBehalf(customer.operation_type)
+                                  ? "🤝 بيع بالوكالة"
+                                  : customer.operation_type}
+                          </span>
+                        ) : null}
                       </div>
-                      {customer.operation_type ? (
-                        <span className="inline-flex w-fit items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-600">
-                          {customer.operation_type === "buyer"
-                            ? "🛒 مشتري"
-                            : isBuyerTradeIn(customer.operation_type)
-                              ? "🔄 مشتري + استبدال"
-                              : isSellOnBehalf(customer.operation_type)
-                                ? "🤝 بيع بالوكالة"
-                                : customer.operation_type}
-                        </span>
-                      ) : null}
                     </div>
                   </td>
 
-                  {/* السيارة المطلوبة */}
+                  {/* السيارة */}
                   <td>
                     <div className="flex flex-col gap-1.5">
-                      {/* السيارة المطلوبة */}
-                      {carName ? (
-                        <div className="flex items-center gap-1.5">
-                          <Car className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
-                          <span className="text-sm font-semibold text-slate-700 leading-tight">{carName}</span>
-                        </div>
+                      {/* بيع بالوكالة: سيارة العميل المعروضة للبيع */}
+                      {isSellOnBehalf(customer.operation_type) ? (
+                        customer.trade_in_model ? (
+                          <div className="flex items-center gap-1.5">
+                            <Car className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                            <span className="text-sm font-semibold text-slate-700 leading-tight">{customer.trade_in_model}</span>
+                            <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-600">معروضة للبيع</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-300">— لم تُحدَّد —</span>
+                        )
                       ) : (
-                        <span className="text-xs text-slate-300">— لم تُحدَّد —</span>
+                        <>
+                          {/* السيارة المطلوبة (مشتري / مشتري + استبدال) */}
+                          {carName ? (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Car className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
+                              <span className="text-sm font-semibold text-slate-700 leading-tight">{carName}</span>
+                              {hasSpecialRequest ? (
+                                <span className="inline-flex items-center rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-semibold text-rose-600">غير متوفرة بالمعرض</span>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-300">— لم تُحدَّد —</span>
+                          )}
+
+                          {/* سيارة الاستبدال */}
+                          {isBuyerTradeIn(customer.operation_type) && customer.trade_in_model ? (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Car className="h-3 w-3 flex-shrink-0 text-violet-500" />
+                              <span className="text-sm font-semibold text-violet-700 leading-tight">{customer.trade_in_model}</span>
+                              <span className="inline-flex items-center rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-semibold text-violet-600">استبدال</span>
+                            </div>
+                          ) : null}
+                        </>
                       )}
-                      {hasSpecialRequest ? (
-                        <span className="inline-flex w-fit items-center rounded bg-rose-50 px-1.5 py-0.5 text-xs font-semibold text-rose-600">
-                          ⚠️ غير متوفرة بالمعرض
-                        </span>
-                      ) : null}
-                      {/* سيارة الاستبدال */}
-                      {isBuyerTradeIn(customer.operation_type) && customer.trade_in_model ? (
-                        <div className="flex items-center gap-1.5 rounded-md bg-violet-50 px-2 py-1">
-                          <Car className="h-3 w-3 flex-shrink-0 text-violet-500" />
-                          <span className="text-xs font-semibold text-violet-700">{customer.trade_in_model}</span>
-                          <span className="text-[10px] text-violet-400">(استبدال)</span>
-                        </div>
-                      ) : null}
-                      {(() => {
-                        const badge = tradeInStatusBadge(customer.trade_in_status, customer.operation_type);
-                        return badge ? (
-                          <span className={`text-xs font-semibold ${badge.cls}`}>{badge.label}</span>
-                        ) : null;
-                      })()}
                     </div>
                   </td>
 
