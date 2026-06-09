@@ -1814,11 +1814,11 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
   };
   const branchNameSet = new Set((branches ?? []).map((b) => (b.name ?? "").trim().toLowerCase()));
   const toOption = (item: { id: string; model: string; production_year: number | null; chassis_no: string | null; deal_type?: string | null; owner_name?: string | null }) => {
-    const deal = (item.deal_type ?? "").trim();
-    const dealIsCustomer = deal.includes(AR_DEAL_SWAP) || deal.includes(AR_DEAL_CONSIGN);
     const owner = (item.owner_name ?? "").trim().toLowerCase();
-    // سيارة عميل فقط إذا كان نوعها برسم البيع/استبدال والمالك شخص (ليس معرضاً)
-    const isCustomer = dealIsCustomer && !(owner && branchNameSet.has(owner));
+    // التصنيف حسب المالك:
+    // • مالك شخص (غير فارغ وليس اسم معرض) → سيارة عميل
+    // • مالك معرض أو فارغ → سيارة معرض (ملك المعرض)
+    const isCustomer = Boolean(owner) && !branchNameSet.has(owner);
     return {
       id: item.id,
       label: `${item.model}${item.production_year ? ` - موديل:${item.production_year}` : ""}${item.chassis_no ? ` - شاصي:${item.chassis_no}` : ""}`,

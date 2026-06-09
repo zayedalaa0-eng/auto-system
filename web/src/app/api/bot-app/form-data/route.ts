@@ -58,16 +58,12 @@ export async function GET(req: NextRequest) {
   // أسماء المعارض (لتمييز سيارات المعرض عن سيارات العملاء)
   const branchNames = new Set((branches ?? []).map((b) => (b.name ?? "").trim().toLowerCase()));
 
-  // سيارة عميل = نوع الصفقة برسم البيع/استبدال + المالك شخص (ليس معرضاً)
-  // فإذا انتقلت ملكيتها للمعرض (owner = اسم معرض) تُصبح سيارة معرض
-  const isCustomerCar = (dealType: string | null, ownerName: string | null) => {
-    const d = (dealType ?? "").trim();
-    const dealIsCustomer = d.includes("برسم البيع") || d.includes("استبدال");
-    if (!dealIsCustomer) return false;
+  // التصنيف حسب المالك:
+  // • مالك شخص (غير فارغ وليس اسم معرض) → سيارة عميل
+  // • مالك معرض أو فارغ → سيارة معرض
+  const isCustomerCar = (_dealType: string | null, ownerName: string | null) => {
     const owner = (ownerName ?? "").trim().toLowerCase();
-    // إذا كان المالك معرضاً → سيارة معرض (انتقلت الملكية)
-    if (owner && branchNames.has(owner)) return false;
-    return true;
+    return Boolean(owner) && !branchNames.has(owner);
   };
 
   const inventoryOptions = (inventory ?? [])

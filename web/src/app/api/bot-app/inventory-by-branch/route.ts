@@ -23,18 +23,23 @@ export async function GET(req: NextRequest) {
 
     if (!user) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
 
-    const { data: inv } = await admin
-      .from("inventory")
-      .select("id, model, chassis_no, price, color, production_year, availability_status, deal_type")
-      .eq("branch_id", branchId)
-      .not("availability_status", "in", '("مباعة","محجوزة","مسحوبة من المعرض")')
-      .eq("is_active", true)
-      .order("updated_at", { ascending: false })
-      .limit(50);
+    const [{ data: inv }, { data: branchRows }] = await Promise.all([
+      admin
+        .from("inventory")
+        .select("id, model, chassis_no, price, color, production_year, availability_status, deal_type, owner_name")
+        .eq("branch_id", branchId)
+        .not("availability_status", "in", '("مباعة","محجوزة","مسحوبة من المعرض")')
+        .eq("is_active", true)
+        .order("updated_at", { ascending: false })
+        .limit(50),
+      admin.from("branches").select("name").eq("is_active", true),
+    ]);
 
-    const isCustomerCar = (d: string | null) => {
-      const v = (d ?? "").trim();
-      return v.includes("برسم البيع") || v.includes("استبدال");
+    const branchNames = new Set((branchRows ?? []).map(b => (b.name ?? "").trim().toLowerCase()));
+    // التصنيف حسب المالك: شخص → عميل، معرض/فارغ → معرض
+    const isCustomerCar = (ownerName: string | null) => {
+      const owner = (ownerName ?? "").trim().toLowerCase();
+      return Boolean(owner) && !branchNames.has(owner);
     };
 
     return NextResponse.json({
@@ -45,7 +50,7 @@ export async function GET(req: NextRequest) {
         model: i.model ?? "",
         chassis_no: i.chassis_no ?? null,
         availability_status: i.availability_status ?? "",
-        category: isCustomerCar(i.deal_type) ? "customer" : "showroom",
+        category: isCustomerCar(i.owner_name) ? "customer" : "showroom",
       })),
     });
   } catch (err) {
