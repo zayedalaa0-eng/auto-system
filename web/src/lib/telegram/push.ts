@@ -560,6 +560,7 @@ export async function pushEvaluationRequestToMaalamManager({
   branchName,
   car,
   photoUrls = [],
+  opCode,
 }: {
   tradeInId: string;
   customerId: string;
@@ -580,16 +581,20 @@ export async function pushEvaluationRequestToMaalamManager({
     notes?: string | null;
   };
   photoUrls?: string[];
+  opCode?: string | null;
 }) {
   try {
     const managers = await getMaalamManagerChatIds();
     if (managers.length === 0) return;
 
     const appUrl = getAppUrl();
+    const isConsignment = opCode === "sell_on_behalf";
+    const titleText = isConsignment ? "سيارة برسم البيع — جديد" : "طلب تقييم سيارة — استبدال";
+    const emoji = isConsignment ? "🏷️" : "🔁";
 
     // ── النص الكامل ──────────────────────────────────────────────────────────
     let fullText =
-      `🔁 <b>طلب تقييم سيارة — استبدال</b>\n\n` +
+      `${emoji} <b>${titleText}</b>\n\n` +
       `👤 <b>بيانات مقدم الطلب:</b>\n` +
       `<blockquote><b>صاحب السيارة:</b> ${escapeHtml(customerName)}\n` +
       (customerPhone ? `<b>الهاتف:</b> <code>${escapeHtml(customerPhone)}</code>\n` : "") +
@@ -605,11 +610,15 @@ export async function pushEvaluationRequestToMaalamManager({
       (car.specs ? `<b>المواصفات:</b> ${escapeHtml(car.specs)}\n` : "") +
       (car.notes ? `<b>ملاحظات:</b> ${escapeHtml(car.notes)}\n` : "") +
       `</blockquote>\n\n` +
-      `<i>يُرجى الضغط على الزر أدناه لإرسال قيمة التقييم للموظف 👇</i>\n\n` +
+      (isConsignment
+        ? `<i>يُرجى الضغط على الزر أدناه لتحديد سعر السيارة للموظف 👇</i>\n\n`
+        : `<i>يُرجى الضغط على الزر أدناه لإرسال قيمة التقييم للموظف 👇</i>\n\n`) +
       `👨‍💼 <b>المُدخِل:</b> ${escapeHtml(submitterName)}`;
 
     // ── caption مختصر للصور ───────────────────────────────────────────────────
-    let photoCaption = `🔁 <b>استبدال — ${escapeHtml(car.model)}</b>\n👤 ${escapeHtml(customerName)}`;
+    let photoCaption = isConsignment
+      ? `🏷️ <b>برسم البيع — ${escapeHtml(car.model)}</b>\n👤 ${escapeHtml(customerName)}`
+      : `🔁 <b>استبدال — ${escapeHtml(car.model)}</b>\n👤 ${escapeHtml(customerName)}`;
     if (customerPhone)       photoCaption += ` | 📱 ${escapeHtml(customerPhone)}`;
     if (car.color)           photoCaption += `\n🎨 ${escapeHtml(car.color)}`;
     if (car.production_year) photoCaption += ` | 📅 ${car.production_year}`;
@@ -630,7 +639,7 @@ export async function pushEvaluationRequestToMaalamManager({
 
         const markup = {
           inline_keyboard: [
-            [{ text: "✍️ إرسال قيمة التقييم للموظف", callback_data: callbackData }],
+            [{ text: isConsignment ? "✍️ تحديد سعر السيارة للموظف" : "✍️ إرسال قيمة التقييم للموظف", callback_data: callbackData }],
             ...(evalCardUrl ? [[{ text: "📋 فتح البطاقة الكاملة مع الصور", web_app: { url: evalCardUrl } }]] : []),
             ...(customerCardUrl ? [[{ text: "👤 بطاقة العميل الكاملة", web_app: { url: customerCardUrl } }]] : []),
             [{ text: "📜 السجل التاريخي للملف", callback_data: `history:${customerId}` }],

@@ -195,8 +195,8 @@ export async function POST(req: NextRequest) {
         if (invErr) console.error("[add-customer] inventory insert failed:", invErr.message);
       }
 
-      // ── إرسال طلب التقييم لمدير معرض المعلم (للاستبدال فقط) ─────────────
-      if (opCode === "buyer_tradein_pending" && ti.model?.trim() && inserted?.id) {
+      // ── إرسال إشعار سيارة برسم البيع لمدير معرض المعلم (للبيع بالوكالة فقط) ─────────────
+      if (opCode === "sell_on_behalf" && ti.model?.trim() && inserted?.id) {
         // جلب اسم المعرض
         let branchNameStr: string | null = null;
         if (resolvedBranchId) {
@@ -221,6 +221,7 @@ export async function POST(req: NextRequest) {
             inspection: ti.inspection?.trim() ?? null,
             specs: ti.specs?.trim() ?? null,
           },
+          opCode,
         });
       }
     }
