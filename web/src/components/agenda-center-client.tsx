@@ -8,6 +8,7 @@ import { Bell, ChevronDown, ClipboardCheck, ClipboardList, Eye, IdCard, ListChec
 import { sendQuickReminderAction, sendEvaluationReminderAction } from "@/app/dashboard/actions";
 import type { AgendaOverview, OperationalAlertItem, PendingEvaluationItem } from "@/lib/data";
 import { formatDate } from "@/lib/format";
+import { getRoleCapabilities } from "@/lib/roles";
 
 type ModalKind = "tasks" | "trades" | "licenses" | "evaluation" | null;
 
@@ -63,10 +64,11 @@ function EvalReminderDropdown({
   // لا يوجد أحد آخر لإرساله؟
   if (recipients.length === 0) return null;
 
-  // تسمية الدور بالعربي
+  // تسمية الدور بالعربي (تدعم العربي والإنجليزي)
   function roleLabel(role: string) {
-    if (role === "general_manager") return "مدير عام";
-    if (role === "manager") return "مدير معرض";
+    const c = getRoleCapabilities(role);
+    if (c.isGeneralManager) return "مدير عام";
+    if (c.isManager) return "مدير معرض";
     return "موظف";
   }
 

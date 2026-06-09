@@ -1,6 +1,7 @@
 ﻿import { type NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { STATUS_BY_TYPE } from "@/lib/statuses";
+import { getRoleCapabilities } from "@/lib/roles";
 
 export async function GET(req: NextRequest) {
   try {
@@ -72,8 +73,9 @@ export async function GET(req: NextRequest) {
 
     // ── فحص صلاحية العرض ────────────────────────────────────────────────────────
     // الموظف والمدير لا يمكنهما رؤية عملاء معارض أخرى
+    const caps = getRoleCapabilities(user.role, user.full_name);
     const canView =
-      user.role === "general_manager" ||
+      caps.isGeneralManager ||
       customer.branch_id === user.branch_id ||
       user.id === customer.assigned_user_id;
 
@@ -109,7 +111,7 @@ export async function GET(req: NextRequest) {
       ancestorCycles = ancestorInfos.map(a => ({ ...a, logs: logsByAnc.get(a.id) ?? [] }));
     }
 
-    const isGeneralManager = user.role === "general_manager";
+    const isGeneralManager = caps.isGeneralManager;
 
     // جلب قائمة المعارض للمدير العام فقط
     let branches: { id: string; name: string }[] = [];
@@ -174,7 +176,7 @@ export async function GET(req: NextRequest) {
         isGeneralManager ||
         customer.branch_id === user.branch_id ||
         user.id === customer.assigned_user_id,
-      isManager: user.role === "manager" || user.role === "general_manager",
+      isManager: caps.isManager,
       isGeneralManager,
       branches,
     });

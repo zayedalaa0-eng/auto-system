@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     // • المدير العام   : يعدّل كل العملاء في جميع المعارض
     // • مدير + موظف   : يعدّلون أي عميل في نفس المعرض
     // • موظف معيَّن    : يعدّل عملاءه حتى لو من معرض آخر (حالة استثنائية)
-    const isGeneralManager = user.role === "general_manager";
+    const isGeneralManager = caps.isGeneralManager;
     const canEditCustomer =
       isGeneralManager ||
       customer.branch_id === user.branch_id ||

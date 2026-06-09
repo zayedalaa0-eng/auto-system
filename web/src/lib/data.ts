@@ -2439,12 +2439,12 @@ export async function getPendingEvaluationWithDetails(): Promise<PendingEvaluati
 
   // تجميع الموظفين حسب الفرع (+ المدير العام يُضاف لكل الفروع)
   const gmStaff: EvaluationStaffMember[] = (staffRows ?? [])
-    .filter((u) => u.role === "general_manager")
+    .filter((u) => getRoleCapabilities(u.role as string, u.full_name as string).isGeneralManager)
     .map((u) => ({ id: u.id as string, full_name: (u.full_name as string) ?? "", role: u.role as string }));
 
   const staffByBranch = new Map<string, EvaluationStaffMember[]>();
   for (const u of staffRows ?? []) {
-    if (u.role === "general_manager") continue;
+    if (getRoleCapabilities(u.role as string, u.full_name as string).isGeneralManager) continue;
     const bid = u.branch_id as string | null;
     if (!bid) continue;
     const arr = staffByBranch.get(bid) ?? [];

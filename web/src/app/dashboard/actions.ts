@@ -1195,9 +1195,10 @@ export async function sendEvaluationReminderAction(formData: FormData) {
 
   const admin       = createAdminClient();
   const senderName  = profile.full_name ?? "المستخدم";
+  const senderCaps  = getRoleCapabilities(profile.role, profile.full_name);
   const senderRole  =
-    profile.role === "general_manager" ? "المدير العام"
-    : profile.role === "manager"       ? "مدير المعرض"
+    senderCaps.isGeneralManager ? "المدير العام"
+    : senderCaps.isManager      ? "مدير المعرض"
     : "الموظف";
 
   // ── جلب بيانات العميل وسيارته من قاعدة البيانات ───────────────────────────

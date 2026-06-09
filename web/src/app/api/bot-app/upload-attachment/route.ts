@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getRoleCapabilities } from "@/lib/roles";
 
 // مطابق للويب: صور في customer-attachments (خاص)، صوت في voice-notes (عام)
 const PHOTO_BUCKET = "customer-attachments";
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (customer) {
-      const isGeneralManager = user.role === "general_manager";
+      const isGeneralManager = getRoleCapabilities(user.role, user.full_name).isGeneralManager;
       const canUpload =
         isGeneralManager ||
         customer.branch_id === user.branch_id ||
