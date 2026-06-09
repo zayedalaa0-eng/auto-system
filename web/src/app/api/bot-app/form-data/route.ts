@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   // Inventory scoped to branch
   let inventoryQuery = admin
     .from("inventory")
-    .select("id, model, production_year, chassis_no, color, availability_status, price, deal_type, owner_name")
+    .select("id, model, production_year, chassis_no, color, availability_status, price, deal_type, owner_name, condition_label")
     .eq("is_active", true)
     .order("model");
 
@@ -70,16 +70,17 @@ export async function GET(req: NextRequest) {
     .filter((item) => !isUnavailable(item.availability_status))
     .map((item) => ({
       id: item.id,
+      // التسمية المختصرة: النوع — السنة — الحالة — اللون (بدون شاصي)
       label: [
         item.model,
-        item.production_year ? `موديل:${item.production_year}` : null,
-        item.chassis_no ? `شاصي:${item.chassis_no}` : null,
+        item.production_year ? String(item.production_year) : null,
+        item.condition_label ?? null,
         item.color ?? null,
-        item.price ? `${Number(item.price).toLocaleString("en-US")} ₪` : null,
       ]
         .filter(Boolean)
         .join(" — "),
       model: item.model,
+      chassis_no: item.chassis_no ?? null,
       // تصنيف: سيارات المعرض أو سيارات العملاء
       category: isCustomerCar(item.deal_type, item.owner_name) ? "customer" : "showroom",
     }));

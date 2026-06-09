@@ -354,8 +354,8 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // ── إرسال إشعار سيارة برسم البيع لمدير معرض المعلم (بيع بالوكالة جديد فقط) ─────────────
-      if (opCode === "sell_on_behalf" && ti.model?.trim() && !existingTradeInId) {
+      // ── إرسال إشعار التقييم/برسم البيع لمدير معرض المعلم (جديد فقط) ─────────────
+      if ((opCode === "buyer_tradein_pending" || opCode === "sell_on_behalf") && ti.model?.trim() && !existingTradeInId) {
         let branchNameStr: string | null = null;
         if (customer.branch_id) {
           const { data: branchRow } = await admin.from("branches").select("name").eq("id", customer.branch_id).maybeSingle();

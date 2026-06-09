@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     const [{ data: inv }, { data: branchRows }] = await Promise.all([
       admin
         .from("inventory")
-        .select("id, model, chassis_no, price, color, production_year, availability_status, deal_type, owner_name")
+        .select("id, model, chassis_no, price, color, production_year, availability_status, deal_type, owner_name, condition_label")
         .eq("branch_id", branchId)
         .not("availability_status", "in", '("مباعة","محجوزة","مسحوبة من المعرض")')
         .eq("is_active", true)
@@ -46,7 +46,9 @@ export async function GET(req: NextRequest) {
       ok: true,
       inventory: (inv ?? []).map(i => ({
         id: i.id,
-        label: `${i.model ?? ""}${i.chassis_no ? ` — شاصي: ${i.chassis_no}` : ""}${i.color ? ` — ${i.color}` : ""}${i.price ? ` — ${Number(i.price).toLocaleString("en-US")} ₪` : ""}`,
+        // التسمية المختصرة: النوع — السنة — الحالة — اللون (بدون شاصي)
+        label: [i.model, i.production_year ? String(i.production_year) : null, i.condition_label, i.color]
+          .filter(Boolean).join(" — "),
         model: i.model ?? "",
         chassis_no: i.chassis_no ?? null,
         availability_status: i.availability_status ?? "",

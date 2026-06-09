@@ -291,6 +291,7 @@ export type CustomerFormOptions = {
   inventoryOptions: Array<{
     id: string;
     label: string;
+    chassis_no?: string | null;
     category?: "showroom" | "customer";
   }>;
   statuses: string[];
@@ -1777,7 +1778,7 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
   const supabase = await createClient();
   const inventoryBaseQuery = supabase
     .from("inventory")
-    .select("id, model, chassis_no, production_year, availability_status, deal_type, condition_label, owner_name, branch_id, branches(name)")
+    .select("id, model, chassis_no, production_year, availability_status, deal_type, condition_label, color, owner_name, branch_id, branches(name)")
     .order("model");
   const [{ data: branches }, { data: staff }, { data: inventoryScoped }] = await Promise.all([
     supabase.from("branches").select("id, name, whatsapp_number, whatsapp_prefix").eq("is_active", true).order("name"),
@@ -1813,15 +1814,20 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
     return true;
   };
   const branchNameSet = new Set((branches ?? []).map((b) => (b.name ?? "").trim().toLowerCase()));
-  const toOption = (item: { id: string; model: string; production_year: number | null; chassis_no: string | null; deal_type?: string | null; owner_name?: string | null }) => {
+  const toOption = (item: { id: string; model: string; production_year: number | null; chassis_no: string | null; deal_type?: string | null; owner_name?: string | null; condition_label?: string | null }) => {
     const owner = (item.owner_name ?? "").trim().toLowerCase();
-    // التصنيف حسب المالك:
-    // • مالك شخص (غير فارغ وليس اسم معرض) → سيارة عميل
-    // • مالك معرض أو فارغ → سيارة معرض (ملك المعرض)
     const isCustomer = Boolean(owner) && !branchNameSet.has(owner);
+    // التسمية المختصرة: النوع — السنة — الحالة — اللون (بدون شاصي)
+    const label = [
+      item.model,
+      item.production_year ? String(item.production_year) : null,
+      item.condition_label ?? null,
+      (item as { color?: string | null }).color ?? null,
+    ].filter(Boolean).join(" — ");
     return {
       id: item.id,
-      label: `${item.model}${item.production_year ? ` - موديل:${item.production_year}` : ""}${item.chassis_no ? ` - شاصي:${item.chassis_no}` : ""}`,
+      label,
+      chassis_no: item.chassis_no ?? null,
       category: (isCustomer ? "customer" : "showroom") as "customer" | "showroom",
     };
   };
@@ -1843,6 +1849,8 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
         availability_status: string;
         deal_type: string | null;
         condition_label: string | null;
+        color: string | null;
+        owner_name: string | null;
         branch_id: string | null;
       }> = [];
 
@@ -1850,14 +1858,14 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
         const admin = createAdminClient();
         const { data } = await admin
           .from("inventory")
-          .select("id, model, chassis_no, production_year, availability_status, deal_type, condition_label, owner_name, branch_id")
+          .select("id, model, chassis_no, production_year, availability_status, deal_type, condition_label, color, owner_name, branch_id")
           .neq("branch_id", profile.branch_id)
           .order("model");
         externalRows = (data ?? []) as typeof externalRows;
       } else {
         const { data } = await supabase
           .from("inventory")
-          .select("id, model, chassis_no, production_year, availability_status, deal_type, condition_label, owner_name, branch_id")
+          .select("id, model, chassis_no, production_year, availability_status, deal_type, condition_label, color, owner_name, branch_id")
           .neq("branch_id", profile.branch_id)
           .order("model");
         externalRows = (data ?? []) as typeof externalRows;
