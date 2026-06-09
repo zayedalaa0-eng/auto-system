@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
@@ -900,7 +900,7 @@ export function CustomerProfileContent({
         event.preventDefault();
         const form = event.currentTarget;
         const dealInput = form.querySelector<HTMLInputElement>("[name='deal_value']");
-        const dealVal = dealInput?.value ? `${Number(dealInput.value).toLocaleString("ar")} شيقل` : "غير محدد";
+        const dealVal = dealInput?.value ? `${Number(dealInput.value).toLocaleString("en-US")} شيقل` : "غير محدد";
         requireConfirm({
           title: "إتمام عملية البيع",
           description: `سيتم تسجيل إتمام عملية البيع للعميل "${customer.full_name}"${dealInput?.value ? ` بقيمة ${dealVal}` : ""}. هذا الإجراء سيُغلق الملف نهائياً.`,
@@ -920,7 +920,7 @@ export function CustomerProfileContent({
       event.preventDefault();
       const form = event.currentTarget;
       const dealInput = form.querySelector<HTMLInputElement>("[name='deal_value']");
-      const dealVal = dealInput?.value ? `${Number(dealInput.value).toLocaleString("ar")} شيقل` : "غير محدد";
+      const dealVal = dealInput?.value ? `${Number(dealInput.value).toLocaleString("en-US")} شيقل` : "غير محدد";
       requireConfirm({
         title: "إتمام عملية البيع",
         description: `سيتم تسجيل إتمام عملية البيع للعميل "${customer.full_name}"${dealInput?.value ? ` بقيمة ${dealVal}` : ""}. هذا الإجراء سيُغلق الملف نهائياً.`,

@@ -196,7 +196,7 @@ function buildStatusNotification({
     `<i>🕐 ${now}</i>`;
 
   const dealValueStr = dealValue && dealValue > 0
-    ? `<blockquote><b>💰 قيمة الصفقة:</b> ${dealValue.toLocaleString("ar-SA")} شيقل</blockquote>\n`
+    ? `<blockquote><b>💰 قيمة الصفقة:</b> ${dealValue.toLocaleString("en-US")} شيقل</blockquote>\n`
     : "";
 
   // ── تمت عملية البيع + استبدال ───────────────────────────────────────────
@@ -420,8 +420,8 @@ async function pushTradeAssessmentNotification({
   if (tradeYear) msg += `<b>سنة الصنع:</b> ${tradeYear}\n`;
   if (tradeColor) msg += `<b>اللون:</b> ${tradeColor}\n`;
   if (tradeChassis) msg += `<b>رقم الشاصي:</b> <code>${tradeChassis}</code>\n`;
-  if (tradeMileage) msg += `<b>عداد المسافة:</b> ${tradeMileage.toLocaleString("ar-SA")} كم\n`;
-  if (tradePrice) msg += `<b>السعر التقديري:</b> ${tradePrice.toLocaleString("ar-SA")} شيقل\n`;
+  if (tradeMileage) msg += `<b>عداد المسافة:</b> ${tradeMileage.toLocaleString("en-US")} كم\n`;
+  if (tradePrice) msg += `<b>السعر التقديري:</b> ${tradePrice.toLocaleString("en-US")} شيقل\n`;
   if (tradeStatus) msg += `<b>الحالة الحالية:</b> ${tradeStatus}\n`;
 
   if (tradeSpecs && tradeSpecs.trim()) {
@@ -1277,13 +1277,13 @@ export async function sendEvaluationReminderAction(formData: FormData) {
       trade.model        ? `<b>الموديل:</b> ${trade.model}`                         : null,
       trade.color        ? `<b>اللون:</b> ${trade.color}`                            : null,
       trade.production_year ? `<b>سنة الصنع:</b> ${trade.production_year}`          : null,
-      trade.mileage      ? `<b>الممشى:</b> ${Number(trade.mileage).toLocaleString("ar")} كم` : null,
+      trade.mileage      ? `<b>الممشى:</b> ${Number(trade.mileage).toLocaleString("en-US")} كم` : null,
       trade.chassis_no   ? `<b>رقم الشاصي:</b> <code>${trade.chassis_no}</code>`    : null,
       trade.specs        ? `<b>المواصفات:</b> ${trade.specs}`                        : null,
       trade.inspection   ? `<b>تقرير الفحص:</b> ${trade.inspection}`                : null,
       trade.deal_type    ? `<b>نوع الصفقة:</b> ${isConsignment ? "سيارة برسم البيع" : trade.deal_type}` : null,
       trade.status       ? `<b>الحالة الراهنة:</b> <i>${trade.status}</i>`           : null,
-      trade.price != null ? `<b>السعر التقديري:</b> ${Number(trade.price).toLocaleString("ar")} ₪` : `<b>سعر التقييم:</b> <i>لم يُحدَّد بعد</i>`,
+      trade.price != null ? `<b>السعر التقديري:</b> ${Number(trade.price).toLocaleString("en-US")} ₪` : `<b>سعر التقييم:</b> <i>لم يُحدَّد بعد</i>`,
     ].filter(Boolean).join("\n") +
     `</blockquote>`
   ].join("\n") : null;
@@ -2848,9 +2848,9 @@ export async function saveCustomerProfileAction(formData: FormData) {
   const existingNotes = (existingCustomer?.notes as string | null) ?? null;
   const closureAutoNote = !isActive ? `تم إغلاق الملف تلقائيًا بسبب الحالة الحالية: ${status}.` : "";
   const mergedNotes = note
-    ? `${existingNotes ? `${existingNotes}\n\n` : ""}[تحديث ${new Date().toLocaleString("ar-EG")}]\n${note}${closureAutoNote ? `\n${closureAutoNote}` : ""}`
+    ? `${existingNotes ? `${existingNotes}\n\n` : ""}[تحديث ${new Date().toLocaleString("en-US")}]\n${note}${closureAutoNote ? `\n${closureAutoNote}` : ""}`
     : closureAutoNote
-      ? `${existingNotes ? `${existingNotes}\n\n` : ""}[تحديث ${new Date().toLocaleString("ar-EG")}]\n${closureAutoNote}`
+      ? `${existingNotes ? `${existingNotes}\n\n` : ""}[تحديث ${new Date().toLocaleString("en-US")}]\n${closureAutoNote}`
       : existingNotes;
 
   // حفظ قيمة الصفقة في metadata إذا كانت موجودة وإذا كانت الحالة إغلاق
