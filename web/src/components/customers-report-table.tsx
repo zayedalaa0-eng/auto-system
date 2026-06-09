@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, Car } from "lucide-react";
+import { Bell, Building2, Calendar, CalendarClock, Car, Phone, User } from "lucide-react";
 
 import { sendQuickReminderAction } from "@/app/dashboard/actions";
 import { StatusPill } from "@/components/status-pill";
@@ -71,12 +71,11 @@ export function CustomersReportTable({
       <table className="premium-table">
         <thead className="legacy-standard-head">
           <tr>
-            <th style={{ width: "140px" }}>المعرض / التاريخ</th>
+            <th style={{ width: "170px" }}>المعرض / الموظف</th>
             <th style={{ width: "160px" }}>العميل والهاتف</th>
-            <th style={{ width: "150px" }}>السيارة</th>
-            <th style={{ width: "140px" }}>الحالة</th>
+            <th style={{ width: "160px" }}>السيارة</th>
+            <th style={{ width: "150px" }}>الحالة</th>
             <th style={{ width: "130px" }}>آخر تواصل</th>
-            <th style={{ width: "120px" }}>الموظف</th>
             <th style={{ width: "130px" }}>الإجراءات</th>
           </tr>
         </thead>
@@ -88,80 +87,104 @@ export function CustomersReportTable({
 
               return (
                 <tr key={customer.id}>
-                  {/* المعرض / التاريخ */}
+                  {/* المعرض / التاريخ / الموظف */}
                   <td>
-                    {customer.branch_name ? (
-                      <div className="text-sm font-semibold text-rose-600">{customer.branch_name}</div>
-                    ) : null}
-                    <div className="mt-1 text-xs text-slate-600 font-medium">
-                      {formatDate(customer.created_at ?? null)}
+                    <div className="flex flex-col gap-1.5">
+                      {customer.branch_name ? (
+                        <div className="flex items-center gap-1.5">
+                          <Building2 className="h-3.5 w-3.5 flex-shrink-0 text-rose-400" />
+                          <span className="text-sm font-bold text-rose-600">{customer.branch_name}</span>
+                        </div>
+                      ) : null}
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="h-3 w-3 flex-shrink-0 text-slate-400" />
+                        <span className="text-xs text-slate-500 font-medium">{formatDate(customer.created_at ?? null)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <User className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" />
+                        <span className="text-xs font-bold text-blue-600 truncate">{customer.assigned_user_name ?? "—"}</span>
+                      </div>
                     </div>
                   </td>
 
                   {/* العميل والهاتف */}
                   <td>
-                    <div className="font-bold text-slate-900 leading-tight">{customer.full_name}</div>
-                    <div className="mt-1 text-xs text-slate-500 num-val">{customer.phone}</div>
-                    {customer.operation_type ? (
-                      <div className="mt-1 text-xs font-semibold text-sky-600">
-                        {customer.operation_type === "buyer"
-                          ? "مشتري"
-                          : isBuyerTradeIn(customer.operation_type)
-                            ? "مشتري + استبدال"
-                            : isSellOnBehalf(customer.operation_type)
-                              ? "بيع بالوكالة"
-                              : customer.operation_type}
+                    <div className="flex flex-col gap-1.5">
+                      <div className="font-bold text-slate-900 text-sm leading-tight">{customer.full_name}</div>
+                      <div className="flex items-center gap-1.5">
+                        <Phone className="h-3 w-3 flex-shrink-0 text-slate-400" />
+                        <span className="text-xs text-slate-500 num-val">{customer.phone}</span>
                       </div>
-                    ) : null}
+                      {customer.operation_type ? (
+                        <span className="inline-flex w-fit items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-600">
+                          {customer.operation_type === "buyer"
+                            ? "🛒 مشتري"
+                            : isBuyerTradeIn(customer.operation_type)
+                              ? "🔄 مشتري + استبدال"
+                              : isSellOnBehalf(customer.operation_type)
+                                ? "🤝 بيع بالوكالة"
+                                : customer.operation_type}
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
 
                   {/* السيارة المطلوبة */}
                   <td>
-                    {carName ? (
-                      <div className="car-cell">
-                        <Car className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
-                        <span className="car-cell__name">{carName}</span>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-slate-400">—</span>
-                    )}
-                    {hasSpecialRequest ? (
-                      <div className="mt-1 text-xs font-semibold text-rose-600">غير متوفرة بالمعرض</div>
-                    ) : null}
-                    {/* سيارة الاستبدال — لعملاء مشتري + استبدال */}
-                    {isBuyerTradeIn(customer.operation_type) && customer.trade_in_model ? (
-                      <div className="mt-1 flex items-center gap-1 text-xs font-semibold text-violet-600">
-                        <Car className="h-3 w-3 flex-shrink-0" />
-                        <span>{customer.trade_in_model} (استبدال)</span>
-                      </div>
-                    ) : null}
-                    {(() => {
-                      const badge = tradeInStatusBadge(customer.trade_in_status, customer.operation_type);
-                      return badge ? (
-                        <div className={`mt-1 text-xs font-semibold ${badge.cls}`}>{badge.label}</div>
-                      ) : null;
-                    })()}
+                    <div className="flex flex-col gap-1.5">
+                      {/* السيارة المطلوبة */}
+                      {carName ? (
+                        <div className="flex items-center gap-1.5">
+                          <Car className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
+                          <span className="text-sm font-semibold text-slate-700 leading-tight">{carName}</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-300">— لم تُحدَّد —</span>
+                      )}
+                      {hasSpecialRequest ? (
+                        <span className="inline-flex w-fit items-center rounded bg-rose-50 px-1.5 py-0.5 text-xs font-semibold text-rose-600">
+                          ⚠️ غير متوفرة بالمعرض
+                        </span>
+                      ) : null}
+                      {/* سيارة الاستبدال */}
+                      {isBuyerTradeIn(customer.operation_type) && customer.trade_in_model ? (
+                        <div className="flex items-center gap-1.5 rounded-md bg-violet-50 px-2 py-1">
+                          <Car className="h-3 w-3 flex-shrink-0 text-violet-500" />
+                          <span className="text-xs font-semibold text-violet-700">{customer.trade_in_model}</span>
+                          <span className="text-[10px] text-violet-400">(استبدال)</span>
+                        </div>
+                      ) : null}
+                      {(() => {
+                        const badge = tradeInStatusBadge(customer.trade_in_status, customer.operation_type);
+                        return badge ? (
+                          <span className={`text-xs font-semibold ${badge.cls}`}>{badge.label}</span>
+                        ) : null;
+                      })()}
+                    </div>
                   </td>
 
                   {/* الحالة وموعد المتابعة */}
                   <td>
-                    <StatusPill value={customer.status} />
-                    {(() => {
-                      const badge = inventoryAvailabilityBadge(customer.inventory_availability);
-                      return badge ? (
-                        <div className={`mt-1 text-xs font-semibold ${badge.cls}`}>{badge.label}</div>
-                      ) : null;
-                    })()}
-                    {customer.payment_method ? (
-                      <div className="mt-1 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                        💳 {customer.payment_method}
-                      </div>
-                    ) : null}
-                    {customer.next_follow_up_at ? (
-                      <div className="mt-1.5 text-xs text-slate-400">
-                        {formatDate(customer.next_follow_up_at)}
-                      </div>
-                    ) : null}
+                    <div className="flex flex-col gap-1.5 items-start">
+                      <StatusPill value={customer.status} />
+                      {(() => {
+                        const badge = inventoryAvailabilityBadge(customer.inventory_availability);
+                        return badge ? (
+                          <span className={`text-xs font-semibold ${badge.cls}`}>{badge.label}</span>
+                        ) : null;
+                      })()}
+                      {customer.payment_method ? (
+                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                          💳 {customer.payment_method}
+                        </span>
+                      ) : null}
+                      {customer.next_follow_up_at ? (
+                        <div className="flex items-center gap-1.5 rounded-md bg-sky-50 px-2 py-1">
+                          <CalendarClock className="h-3 w-3 flex-shrink-0 text-sky-500" />
+                          <span className="text-xs font-semibold text-sky-700">{formatDate(customer.next_follow_up_at)}</span>
+                        </div>
+                      ) : null}
+                    </div>
                   </td>
 
                   {/* آخر تواصل */}
@@ -172,13 +195,6 @@ export function CustomersReportTable({
                     <div className="mt-1 inline-flex items-center gap-1 rounded-md bg-cyan-500 px-2 py-0.5 text-xs font-bold text-white">
                       تفاعلات: {customer.visit_count ?? 0}
                     </div>
-                  </td>
-
-                  {/* الموظف */}
-                  <td>
-                    <span className="text-sm font-bold text-blue-600">
-                      {customer.assigned_user_name ?? "—"}
-                    </span>
                   </td>
 
                   {/* الإجراءات */}
@@ -227,7 +243,7 @@ export function CustomersReportTable({
             })
           ) : (
             <tr>
-              <td colSpan={7}>
+              <td colSpan={6}>
                 <div className="empty-state">{emptyMessage}</div>
               </td>
             </tr>
