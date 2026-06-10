@@ -223,9 +223,14 @@ export default async function InventoryPage({
 
   // ── الفلترة النهائية (مع status/incomplete) ──────────────────────────────────
   const filteredInventory = baseFiltered.filter((item) => {
-    if (!status || status === "all") return true;
-    if (status === "incomplete") return isIncomplete(item);
-    return normalize(item.availability_status) === status;
+    const activeStatus = status ?? "active";
+    if (activeStatus === "active") {
+      const itemStatus = normalize(item.availability_status);
+      return itemStatus !== "مباعة" && itemStatus !== "مسحوبة من المعرض";
+    }
+    if (activeStatus === "all") return true;
+    if (activeStatus === "incomplete") return isIncomplete(item);
+    return normalize(item.availability_status) === activeStatus;
   });
 
   // ── تقسيم المخزون: معرض vs عملاء ───────────────────────────────────────────
@@ -292,12 +297,16 @@ export default async function InventoryPage({
   function statsHref(s: string | null) {
     const p = new URLSearchParams(currentParams);
     p.delete("status");
-    if (s) p.set("status", s);
+    if (s) {
+      p.set("status", s);
+    } else {
+      p.set("status", "all");
+    }
     const qs = p.toString();
     return qs ? `/dashboard/inventory?${qs}` : "/dashboard/inventory";
   }
 
-  const activeStatus = status ?? "";
+  const activeStatus = status ?? "active";
 
   return (
     <div className="legacy-grid gap-6">
@@ -336,11 +345,24 @@ export default async function InventoryPage({
       <div className="flex flex-wrap items-center gap-2 px-1">
         {/* حبوب الحالة */}
         <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
+          {/* النشط */}
+          <Link
+            href={statsHref("active")}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+              activeStatus === "active"
+                ? "bg-blue-700 text-white shadow"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <span className="h-2 w-2 rounded-full bg-blue-500 flex-shrink-0" />
+            النشط <span className="opacity-70">{statsAvailable + statsReserved}</span>
+          </Link>
+
           {/* الكل */}
           <Link
-            href={statsHref(null)}
+            href={statsHref("all")}
             className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-              !activeStatus || activeStatus === "all"
+              activeStatus === "all"
                 ? "bg-slate-800 text-white shadow"
                 : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
             }`}

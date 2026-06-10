@@ -37,7 +37,7 @@ export function InventoryFilterBar({
   const currentBranch = searchParams.get("branch") ?? (isGeneralManager ? "all" : "self");
   const currentOwner = searchParams.get("owner") ?? "all";
   const currentDeal = searchParams.get("deal") ?? "all";
-  const currentStatus = searchParams.get("status") ?? "all";
+  const currentStatus = searchParams.get("status") ?? "active";
   const currentGearbox = searchParams.get("gearbox") ?? "all";
   const currentFuel = searchParams.get("fuel") ?? "all";
 
@@ -64,8 +64,12 @@ export function InventoryFilterBar({
 
   function navigate(key: string, value: string | null) {
     const params = new URLSearchParams(searchParams.toString());
-    if (!value || value === "all") {
-      params.delete(key);
+    if (!value || value === "all" || value === "active") {
+      if (key === "status" && value === "all") {
+        params.set(key, "all");
+      } else {
+        params.delete(key);
+      }
     } else {
       params.set(key, value);
     }
@@ -79,13 +83,22 @@ export function InventoryFilterBar({
 
   const activeFilterCount = [
     currentQ,
-    currentBranch !== "all" && currentBranch !== "self" ? currentBranch : "",
+    currentBranch !== (isGeneralManager ? "all" : "self") ? currentBranch : "",
     currentOwner !== "all" ? currentOwner : "",
     currentDeal !== "all" ? currentDeal : "",
-    currentStatus !== "all" ? currentStatus : "",
+    currentStatus !== "active" ? currentStatus : "",
     currentGearbox !== "all" ? currentGearbox : "",
     currentFuel !== "all" ? currentFuel : "",
   ].filter(Boolean).length;
+
+  // دالة مساعدة لتوليد تنسيقات حقول التصفية بشكل احترافي وراقي
+  function getSelectClasses(isActive: boolean, activeThemeClasses: string) {
+    const baseClasses = "legacy-select flex-1 w-full text-sm font-semibold transition-all duration-200 outline-none border focus:ring-2 focus:ring-offset-0 cursor-pointer rounded-xl";
+    if (isActive) {
+      return `${baseClasses} ${activeThemeClasses} shadow-sm`;
+    }
+    return `${baseClasses} !border-slate-200 !bg-white !text-slate-600 hover:!border-slate-300 focus:!ring-slate-100 focus:!border-slate-400`;
+  }
 
   // عدد أصحاب برسم البيع لعرضه في optgroup
   const ownersCount = consignmentOwners.length;
@@ -132,11 +145,14 @@ export function InventoryFilterBar({
         </div>
       </div>
 
-      {/* ── شريط الفلاتر — صف واحد ── */}
-      <div className="flex flex-wrap gap-2 lg:flex-nowrap">
+      {/* ── شريط الفلاتر — شبكة متناسقة احترافية ── */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* المعرض */}
         <select
-          className="legacy-select text-blue-700 flex-1 min-w-[130px]"
+          className={getSelectClasses(
+            currentBranch !== (isGeneralManager ? "all" : "self"),
+            "!border-blue-300 !bg-blue-50/60 !text-blue-800 font-semibold focus:!ring-blue-100 focus:!border-blue-500"
+          )}
           value={currentBranch}
           onChange={(e) => navigate("branch", e.target.value)}
         >
@@ -168,7 +184,10 @@ export function InventoryFilterBar({
 
         {/* أصحاب السيارات برسم البيع — فلتر مستقل */}
         <select
-          className="legacy-select text-violet-700 flex-1 min-w-[130px]"
+          className={getSelectClasses(
+            currentOwner !== "all",
+            "!border-violet-300 !bg-violet-50/60 !text-violet-800 font-semibold focus:!ring-violet-100 focus:!border-violet-500"
+          )}
           value={currentOwner}
           onChange={(e) => navigate("owner", e.target.value)}
         >
@@ -184,7 +203,10 @@ export function InventoryFilterBar({
 
         {/* نوع الصفقة */}
         <select
-          className="legacy-select text-emerald-700 flex-1 min-w-[130px]"
+          className={getSelectClasses(
+            currentDeal !== "all",
+            "!border-emerald-300 !bg-emerald-50/60 !text-emerald-800 font-semibold focus:!ring-emerald-100 focus:!border-emerald-500"
+          )}
           value={currentDeal}
           onChange={(e) => navigate("deal", e.target.value)}
         >
@@ -198,11 +220,15 @@ export function InventoryFilterBar({
 
         {/* حالة السيارة */}
         <select
-          className="legacy-select text-sky-700 flex-1 min-w-[130px]"
+          className={getSelectClasses(
+            currentStatus !== "active",
+            "!border-sky-300 !bg-sky-50/60 !text-sky-800 font-semibold focus:!ring-sky-100 focus:!border-sky-500"
+          )}
           value={currentStatus}
           onChange={(e) => navigate("status", e.target.value)}
         >
-          <option value="all">كل الحالات</option>
+          <option value="active">النشط (متوفرة + محجوزة)</option>
+          <option value="all">كل الحالات (بما فيها المباعة والمسحوبة)</option>
           {statuses.map((s) => (
             <option key={s} value={s}>
               {s}
@@ -212,7 +238,10 @@ export function InventoryFilterBar({
 
         {/* ناقل الحركة (القير) */}
         <select
-          className="legacy-select text-slate-700 flex-1 min-w-[130px]"
+          className={getSelectClasses(
+            currentGearbox !== "all",
+            "!border-indigo-300 !bg-indigo-50/60 !text-indigo-800 font-semibold focus:!ring-indigo-100 focus:!border-indigo-500"
+          )}
           value={currentGearbox}
           onChange={(e) => navigate("gearbox", e.target.value)}
           disabled={gearboxOptions.length === 0}
@@ -227,7 +256,10 @@ export function InventoryFilterBar({
 
         {/* نوع الوقود */}
         <select
-          className="legacy-select text-slate-700 flex-1 min-w-[130px]"
+          className={getSelectClasses(
+            currentFuel !== "all",
+            "!border-amber-300 !bg-amber-50/60 !text-amber-800 font-semibold focus:!ring-amber-100 focus:!border-amber-500"
+          )}
           value={currentFuel}
           onChange={(e) => navigate("fuel", e.target.value)}
           disabled={fuelTypes.length === 0}
