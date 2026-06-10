@@ -23,16 +23,27 @@ export async function GET(req: NextRequest) {
     const statusFilter = sp.get("status") ?? "";
     const dealFilter   = sp.get("deal")   ?? "";
     const tabFilter    = sp.get("tab")    ?? "";
+    const branchFilter = sp.get("branch") ?? "";  // فلتر المعرض (للمدير العام)
     const qFilter      = normalize(sp.get("q") ?? "");
 
+    // ── أسماء المعارض + اسم معرض المستخدم (للتصنيف حسب المالك وكشف المعلم) ──
+    const { data: branchRows } = await supabase.from("branches").select("id, name").eq("is_active", true);
+    const branchNameSet = new Set((branchRows ?? []).map(b => normalize(b.name as string)));
+    const userBranchName = normalize(
+      (branchRows ?? []).find(b => b.id === profile.branch_id)?.name as string ?? ""
+    );
+    const isMuallim = userBranchName.includes("المعلم");
+
+    // ── جلب المخزون ──────────────────────────────────────────────────────────
     let query = supabase
       .from("inventory")
       .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, gearbox, fuel_type, mileage, specs, inspection, notes, source_customer_id, branch_id, branches(name)")
       .eq("is_active", true)
       .order("updated_at", { ascending: false })
-      .limit(500);
+      .limit(1000);
 
-    if (!caps.isGeneralManager && profile.branch_id) {
+    // النطاق: المدير العام = الكل، معرض المعلم = الكل (cross-branch)، غيرهما = فرعه
+    if (!caps.isGeneralManager && profile.branch_id && !isMuallim) {
       query = query.eq("branch_id", profile.branch_id) as typeof query;
     }
 
@@ -41,11 +52,44 @@ export async function GET(req: NextRequest) {
 
     let items = (rows ?? []) as Array<Record<string, unknown>>;
 
-    const CUSTOMER_DEALS = ["برسم البيع", "استبدال"];
+    // ── تصنيف حسب المالك: شخص → عميل، معرض/فارغ → معرض ──────────────────────
+    const isCustomerCar = (i: Record<string, unknown>) => {
+      const owner = normalize(i.owner_name as string);
+      return Boolean(owner) && !branchNameSet.has(owner);
+    };
+
+    // ── معرض المعلم: من المعارض الأخرى يأخذ فقط المعروضة (برسم البيع/استبدال/حيازة) ──
+    if (isMuallim && !caps.isGeneralManager) {
+      const ownNorm = userBranchName;
+      items = items.filter(i => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const br = (i as any).branches;
+        const bName = normalize((Array.isArray(br) ? br[0]?.name : br?.name) as string ?? "");
+        if (bName === ownNorm) return true; // كل سيارات معرضه
+        // من المعارض الأخرى: فقط سيارات معروضة للبيع/استبدال/حيازة (تطابق جدول المعلم)
+        const deal = normalize(i.deal_type as string);
+        return deal.includes("برسم البيع") || deal.includes("استبدال") || deal.includes("حيازة");
+      });
+    }
+
+    // ── فلتر المعرض للمدير العام (إن اختار معرضاً محدداً) ──────────────────────
+    if (caps.isGeneralManager && branchFilter && branchFilter !== "all") {
+      const wanted = branchFilter.replace(/^branch:/, "").replace(/^cross:/, "").trim();
+      if (wanted && wanted !== "self") {
+        items = items.filter(i => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const br = (i as any).branches;
+          const bName = (Array.isArray(br) ? br[0]?.name : br?.name) as string ?? "";
+          return normalize(bName) === normalize(wanted);
+        });
+      }
+    }
+
+    // ── فلتر التبويب (حسب المالك) ──────────────────────────────────────────────
     if (tabFilter === "customers") {
-      items = items.filter(i => CUSTOMER_DEALS.some(d => normalize(i.deal_type as string).includes(normalize(d))));
+      items = items.filter(isCustomerCar);
     } else if (tabFilter === "showroom") {
-      items = items.filter(i => !CUSTOMER_DEALS.some(d => normalize(i.deal_type as string).includes(normalize(d))));
+      items = items.filter(i => !isCustomerCar(i));
     }
 
     if (statusFilter === "incomplete") {
