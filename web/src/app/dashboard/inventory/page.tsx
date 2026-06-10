@@ -22,6 +22,8 @@ type InventoryFilters = {
   car?: string;
   cross?: string;
   tab?: string;
+  minPrice?: string;
+  maxPrice?: string;
 };
 
 function normalize(value: string | null | undefined) {
@@ -111,7 +113,7 @@ export default async function InventoryPage({
   searchParams: Promise<InventoryFilters>;
 }) {
   const params = await searchParams;
-  const { q, branch, owner, deal, status, gearbox, fuel, car, cross, tab } = params;
+  const { q, branch, owner, deal, status, gearbox, fuel, minPrice, maxPrice, car, cross, tab } = params;
 
   // التبويب: showroom = مخزون المعرض، customers = مخزون العملاء
   const activeTab = tab === "customers" ? "customers" : "showroom";
@@ -197,6 +199,15 @@ export default async function InventoryPage({
     if (deal && deal !== "all" && itemDeal !== deal) return false;
     if (gearbox && gearbox !== "all" && itemGearbox !== gearbox) return false;
     if (fuel && fuel !== "all" && itemFuel !== fuel) return false;
+
+    if (minPrice) {
+      const min = Number(minPrice);
+      if (!isNaN(min) && min > 0 && (!item.price || item.price < min)) return false;
+    }
+    if (maxPrice) {
+      const max = Number(maxPrice);
+      if (!isNaN(max) && max > 0 && (!item.price || item.price > max)) return false;
+    }
 
     if (!query) return true;
     return [
@@ -427,38 +438,38 @@ export default async function InventoryPage({
       </div>
 
       {/* ── تبويبات المخزون ── */}
-      <div className="flex gap-2 border-b border-slate-200 pb-0">
+      <div className="flex gap-2.5">
         <Link
           href={tabHref("showroom")}
-          className={`inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold rounded-t-xl border border-b-0 transition-colors ${
+          className={`inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold rounded-xl border transition-all ${
             activeTab === "showroom"
-              ? "bg-white border-slate-200 text-blue-700 shadow-sm -mb-px"
-              : "bg-slate-50 border-transparent text-slate-500 hover:text-slate-700"
+              ? "bg-blue-600 border-blue-600 text-white shadow-sm"
+              : "bg-blue-50 border-blue-100 text-blue-600 hover:bg-blue-100"
           }`}
         >
           🏢 مخزون المعرض
           <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
-            activeTab === "showroom" ? "bg-blue-100 text-blue-700" : "bg-slate-200 text-slate-500"
+            activeTab === "showroom" ? "bg-white/25 text-white" : "bg-blue-100 text-blue-600"
           }`}>{showroomCount}</span>
         </Link>
         <Link
           href={tabHref("customers")}
-          className={`inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold rounded-t-xl border border-b-0 transition-colors ${
+          className={`inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold rounded-xl border transition-all ${
             activeTab === "customers"
-              ? "bg-white border-slate-200 text-amber-700 shadow-sm -mb-px"
-              : "bg-slate-50 border-transparent text-slate-500 hover:text-slate-700"
+              ? "bg-amber-500 border-amber-500 text-white shadow-sm"
+              : "bg-blue-50 border-blue-100 text-blue-600 hover:bg-blue-100"
           }`}
         >
           👤 مخزون العملاء
           <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
-            activeTab === "customers" ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-500"
+            activeTab === "customers" ? "bg-white/25 text-white" : "bg-blue-100 text-blue-600"
           }`}>{customersCount}</span>
         </Link>
       </div>
 
       {/* ── جدول المخزون ── */}
       <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
-        <table className="premium-table">
+        <table className={`premium-table ${activeTab === "customers" ? "premium-table--amber" : "premium-table--blue"}`}>
           <thead className="legacy-standard-head">
             <tr>
               <th style={{ width: "180px" }}>المالك / الشاصي</th>

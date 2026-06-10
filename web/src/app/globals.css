@@ -245,15 +245,30 @@ select {
 }
 
 .premium-table tbody tr {
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
-.premium-table tbody tr:hover {
-  background-color: #f8fbff;
+/* تمييز الصفوف (zebra) — فردي أبيض، زوجي أزرق فاتح جداً */
+.premium-table tbody tr:nth-child(odd) {
+  background-color: #ffffff;
 }
-
 .premium-table tbody tr:nth-child(even) {
-  background-color: #fcfdff;
+  background-color: #f4f8fd;
+}
+
+/* عند المرور — خلفية أوضح + خط جانبي بلون التبويب النشط */
+.premium-table--blue tbody tr:hover {
+  background-color: #e6f1fb !important;
+  box-shadow: inset 3px 0 0 0 #2563eb;
+}
+.premium-table--amber tbody tr:hover {
+  background-color: #fef6e7 !important;
+  box-shadow: inset 3px 0 0 0 #f59e0b;
+}
+/* الافتراضي (تقارير بلا تبويبات) — أزرق ثابت */
+.premium-table tbody tr:hover {
+  background-color: #e6f1fb;
+  box-shadow: inset 3px 0 0 0 #2563eb;
 }
 
 .status-badge {
