@@ -25,13 +25,23 @@ function isBuyerTradeIn(opType: string | null | undefined) {
 }
 
 function cleanCarPart(part: string): string {
-  return part
-    .replace(/\(?\s*طلب\s+خاص\s*\)?/gi, "")
-    .replace(/\s*-\s*موديل\s*:?\s*[^|]+/gi, "")
-    .replace(/\s*-\s*model\s*:?\s*[^|]+/gi, "")
-    .replace(/\s*-\s*شاصي\s*:\s*[^|]+/gi, "")
-    .replace(/\s*-\s*chassis\s*:\s*[^|]+/gi, "")
-    .trim();
+  let p = part.replace(/\(?\s*طلب\s+خاص\s*\)?/gi, "");
+
+  // تقسيم النص بناءً على أي نوع من الشرطات (العادية، الطويلة، أو المتوسطة)
+  const segments = p.split(/\s*[-–—]\s*/);
+  if (segments.length > 1) {
+    // نبحث عن الجزء الذي يحتوي على سنة الصنع (4 أرقام)
+    const yearIndex = segments.findIndex((s) => /^\d{4}$/.test(s.trim()));
+    if (yearIndex !== -1) {
+      // نأخذ الموديل والسنة فقط ونتجاهل ما بعدهما
+      p = segments.slice(0, yearIndex + 1).join(" - ");
+    } else {
+      // إذا لم يكن هناك سنة، نأخذ الجزء الأول فقط
+      p = segments[0];
+    }
+  }
+
+  return p.trim();
 }
 
 /** يُرجع مصفوفة سيارات مطلوبة — كل سيارة باسمها وعلم "طلب خاص" */
@@ -82,7 +92,7 @@ export function CustomersReportTable({
             <th style={{ width: "250px" }}>السيارة</th>
             <th style={{ width: "175px" }}>الحالة</th>
             <th style={{ width: "95px" }}>آخر تواصل</th>
-            <th style={{ width: "115px" }}>الإجراءات</th>
+            <th style={{ width: "90px" }}>الإجراءات</th>
           </tr>
         </thead>
         <tbody>
@@ -130,7 +140,7 @@ export function CustomersReportTable({
                       {/* الهاتف */}
                       <div className="flex items-center gap-1.5">
                         <Phone className="h-3 w-3 flex-shrink-0 text-slate-400" />
-                        <span className="text-xs text-slate-500 num-val">{customer.phone}</span>
+                        <span className="text-xs font-bold text-slate-800 num-val">{customer.phone}</span>
                       </div>
                       {/* نوع العملية */}
                       {customer.operation_type ? (
@@ -251,7 +261,7 @@ export function CustomersReportTable({
                         {/* زر التفاصيل */}
                         <Link
                           href={`${basePath}?customer=${customer.id}&mode=view${query ? `&q=${encodeURIComponent(query)}` : ""}`}
-                          className="legacy-table-btn legacy-table-btn--view"
+                          className="inline-flex h-[32px] flex-1 items-center justify-center rounded-lg bg-blue-600 px-2 text-[11px] font-bold !text-white hover:bg-blue-700 transition-colors shadow-sm"
                         >
                           التفاصيل
                         </Link>

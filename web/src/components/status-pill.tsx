@@ -72,7 +72,7 @@ export function StatusPill({ value }: StatusPillProps) {
   return (
     <span
       className={clsx(
-        "inline-flex min-h-7 items-center rounded-full px-3 py-0.5 text-xs font-semibold ring-1 ring-inset whitespace-nowrap",
+        "inline-flex min-h-6 items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset whitespace-nowrap",
         getStatusClasses(label),
       )}
     >
