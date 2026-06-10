@@ -8,7 +8,7 @@ import { getRoleCapabilities } from "@/lib/roles";
 import { PHONE_LENGTH, PHONE_ERROR_MESSAGE, normalizePhone } from "@/lib/phone";
 import { createAdminClient, hasSupabaseServiceRoleEnv } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { pushTelegramToManagers, pushTelegramPhotosToManagers, pushTelegramToEmployee, pushNewCustomerToManagers } from "@/lib/telegram/push";
+import { pushTelegramToManagers, pushTelegramPhotosToManagers, pushTelegramToEmployee, pushNewCustomerToManagers, pushTelegramOpportunity } from "@/lib/telegram/push";
 
 async function getCurrentProfile() {
   if (!hasSupabaseEnv()) return null;
@@ -549,32 +549,61 @@ async function notifyOpportunityForModelAvailability({
 
   const reader = hasSupabaseServiceRoleEnv() ? createAdminClient() : supabase;
 
-  const { data: directInterestedCustomers } = await reader
+  // جلب آخر 1000 عميل نشط يمتلكون طلب سيارة
+  const { data: candidates } = await reader
     .from("customers")
     .select("id, full_name, phone, requested_car, is_active")
     .eq("is_active", true)
-    .ilike("requested_car", `%${cleanModel}%`)
-    .limit(80);
+    .not("requested_car", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1000);
 
-  let interestedCustomers = directInterestedCustomers ?? [];
-  if (interestedCustomers.length === 0) {
-    const modelTokens = cleanModel
-      .toLowerCase()
-      .split(/[\s\-_/|]+/)
-      .map((token) => token.trim())
-      .filter((token) => token.length >= 3);
-    const { data: fallbackCandidates } = await reader
-      .from("customers")
-      .select("id, full_name, phone, requested_car, is_active")
-      .eq("is_active", true)
-      .not("requested_car", "is", null)
-      .limit(400);
-    interestedCustomers = (fallbackCandidates ?? []).filter((row) => {
-      const requested = String(row.requested_car ?? "").toLowerCase();
-      if (!requested) return false;
-      return modelTokens.some((token) => requested.includes(token));
-    });
-  }
+  const normalizeForMatch = (s: string) => s.toLowerCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').trim();
+  const invStr = normalizeForMatch(cleanModel);
+
+  // قائمة الكلمات العامة والماركات التي لا تكفي وحدها لتأكيد التطابق
+  const genericWords = new Set([
+    'هونداي', 'هيونداي', 'hyundai', 'كيا', 'kia', 'تويوتا', 'toyota', 'نيسان', 'nissan',
+    'سكودا', 'skoda', 'مرسيدس', 'mercedes', 'بيجو', 'peugeot', 'ستروين', 'سيتروين', 'citroen',
+    'فولكس', 'فاج', 'volkswagen', 'vw', 'اودي', 'audi', 'ام', 'جي', 'mg', 'شانجان', 'changan',
+    'هوندا', 'honda', 'فورد', 'ford', 'شيفروليه', 'شفروليه', 'chevrolet', 'لكزس', 'lexus',
+    'مازدا', 'mazda', 'رينو', 'renault', 'فيات', 'fiat', 'بي', 'دبليو', 'bmw', 'جيب', 'jeep',
+    'لاندروفر', 'لاند', 'روفر', 'land', 'rover', 'ميتسوبيشي', 'mitsubishi', 'سيات', 'seat',
+    'سياره', 'طلب', 'خاص', 'موديل', 'سنه', 'سنة', 'لون', 'مستعمل', 'مستعمله', 'جديد', 'جديده',
+    'بدون', 'فتحه', 'بانوراما', 'جير', 'اوتوماتيك', 'عادي', 'ديزل', 'بنزين', 'كهرباء', 'هايبرد'
+  ]);
+
+  const interestedCustomers = (candidates ?? []).filter((row) => {
+    const reqStr = normalizeForMatch(String(row.requested_car ?? ""));
+    if (!reqStr) return false;
+
+    // 1. التطابق المباشر أو التضمين الكامل
+    if (invStr.includes(reqStr) || reqStr.includes(invStr)) {
+      // لا نعتبره تطابقاً إذا كان النص المطلوب هو مجرد كلمة عامة مثل "هونداي" أو سنة مثل "2024"
+      if (genericWords.has(reqStr) || !isNaN(Number(reqStr))) return false;
+      return true;
+    }
+
+    // 2. مطابقة الكلمات (الـ Tokens) للبحث عن الموديل الفعلي المشترك
+    const invTokens = invStr.split(/[\s\-_/|]+/).filter(t => t.length >= 2);
+    const reqTokens = reqStr.split(/[\s\-_/|]+/).filter(t => t.length >= 2);
+
+    let nonGenericMatchFound = false;
+    for (const rT of reqTokens) {
+      // نبحث عن الكلمة في اسم السيارة المعروضة
+      const matchedInvT = invTokens.find(iT => iT === rT || iT.includes(rT) || rT.includes(iT));
+      if (matchedInvT) {
+        // يجب ألا تكون الكلمة المطابقة مجرد اسم ماركة، أو رقم سنة، لتعتبر تطابقاً حقيقياً
+        const isNum = !isNaN(Number(rT)) || !isNaN(Number(matchedInvT));
+        if (!genericWords.has(rT) && !genericWords.has(matchedInvT) && !isNum) {
+          nonGenericMatchFound = true;
+          break;
+        }
+      }
+    }
+
+    return nonGenericMatchFound;
+  });
 
   if (!interestedCustomers || interestedCustomers.length === 0) return;
 
@@ -609,21 +638,58 @@ async function notifyOpportunityForModelAvailability({
     `👨‍💼 <b>بواسطة الموظف:</b> ${actorLabel}\n` +
     `🕐 <i>${arabicDateTime()}</i>`;
 
-  await sendManagementActivityNotification({
-    supabase,
-    actorProfile,
+  const writer = hasSupabaseServiceRoleEnv() ? createAdminClient() : supabase;
+  const { data: maalamBranches } = await writer.from("branches").select("id").ilike("name", "%المعلم%");
+  const maalamBranchIds = (maalamBranches ?? []).map(b => b.id);
+
+  const { data: users } = await writer
+    .from("app_users")
+    .select("id, full_name, role, branch_id, is_active, status");
+
+  const recipients = (users ?? []).filter((user) => {
+    const isActive = user.is_active !== false && String(user.status ?? "active").toLowerCase() !== "inactive";
+    if (!isActive) return false;
+    
+    const caps = getRoleCapabilities(user.role, user.full_name);
+    // المدراء العامون
+    if (caps.isGeneralManager) return true;
+    // موظفي أو مدراء معرض المعلم تصلهم كافة الفرص
+    if (user.branch_id && maalamBranchIds.includes(user.branch_id)) return true;
+    // الموظفين والمدراء في نفس المعرض
+    if (branchId && user.branch_id === branchId) return true;
+    
+    return false;
+  });
+
+  if (recipients.length > 0) {
+    const rows = recipients.map((recipient) => ({
+      recipient_user_id: recipient.id,
+      recipient_branch_id: recipient.branch_id ?? null,
+      recipient_label: recipient.full_name ?? null,
+      notification_type: "inventory_opportunity",
+      title: "🚨 فرصة بيع سيارة متاحة",
+      message,
+      status: "unread",
+      created_by_user_id: actorProfile?.id ?? null,
+      payload: {
+        source: "inventory_opportunity",
+        actor_name: actorProfile?.full_name ?? "النظام",
+        actor_role: actorProfile?.role ?? null,
+        model: cleanModel,
+        chassis_no: chassisNo,
+        owner_name: ownerName,
+        interested_customers_count: interestedCustomers.length,
+        interested_customers: interestedCustomers.map((c) => ({ id: c.id, name: c.full_name, phone: c.phone })),
+      },
+    }));
+
+    await writer.from("notifications").insert(rows);
+  }
+
+  void pushTelegramOpportunity({
     branchId,
     title: "🚨 فرصة بيع سيارة متاحة",
     message,
-    notificationType: "inventory_opportunity",
-    payload: {
-      source: "inventory_opportunity",
-      model: cleanModel,
-      chassis_no: chassisNo,
-      owner_name: ownerName,
-      interested_customers_count: interestedCustomers.length,
-      interested_customers: interestedCustomers.map((c) => ({ id: c.id, name: c.full_name, phone: c.phone })),
-    },
   });
 }
 

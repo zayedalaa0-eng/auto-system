@@ -421,6 +421,47 @@ export async function pushTelegramToManagers({
 }
 
 /**
+ * إشعار "فرصة بيع" لجميع موظفي المعرض الخاص بالسيارة، بالإضافة إلى موظفي ومدراء معرض "المعلم" لجميع الفرص.
+ */
+export async function pushTelegramOpportunity({
+  branchId,
+  title,
+  message,
+}: {
+  branchId: string | null;
+  title: string;
+  message: string;
+}) {
+  try {
+    const admin = createAdminClient();
+    
+    const { data: maalamBranches } = await admin.from("branches").select("id").ilike("name", "%المعلم%");
+    const maalamBranchIds = (maalamBranches ?? []).map(b => b.id);
+
+    const { data: users } = await admin
+      .from("app_users")
+      .select("id, full_name, role, branch_id, telegram_chat_id")
+      .not("telegram_chat_id", "is", null)
+      .eq("is_active", true);
+
+    const recipients = (users ?? []).filter((u) => {
+      const caps = getRoleCapabilities(u.role, u.full_name);
+      if (caps.isGeneralManager) return true;
+      if (u.branch_id && maalamBranchIds.includes(u.branch_id)) return true;
+      if (branchId && u.branch_id === branchId) return true;
+      return false;
+    });
+
+    // لا نضيف 🔔 لأن title يحتوي مسبقاً على الأيقونة 🚨 
+    const text = `<b>${escapeHtml(title)}</b>\n\n${message}`;
+    
+    await Promise.allSettled(
+      recipients.map((m) => sendWithButtons(m.telegram_chat_id as string, text, null)),
+    );
+  } catch { /* best-effort */ }
+}
+
+/**
  * إرسال رسالة تيليغرام مباشرة لموظف معين عبر user_id
  */
 export async function pushTelegramToEmployee({

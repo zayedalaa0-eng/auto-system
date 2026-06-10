@@ -14,7 +14,7 @@ type Props = {
   isGeneralManager: boolean;
   isMuallimBranch: boolean;
   branchName: string | null;
-  totalCount: number;
+  totalCount?: number;
   activeTab: "showroom" | "customers";
 };
 
@@ -28,7 +28,6 @@ export function InventoryFilterBar({
   isGeneralManager,
   isMuallimBranch,
   branchName,
-  totalCount,
   activeTab,
 }: Props) {
   const router = useRouter();
@@ -129,11 +128,8 @@ export function InventoryFilterBar({
           ) : null}
         </div>
 
-        {/* عداد النتائج + مسح */}
+        {/* مسح الفلاتر */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-sm font-bold text-slate-500 whitespace-nowrap">
-            {totalCount} سيارة
-          </span>
           {activeFilterCount > 0 ? (
             <button
               type="button"
