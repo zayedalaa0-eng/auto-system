@@ -15,6 +15,7 @@ type Props = {
   isMuallimBranch: boolean;
   branchName: string | null;
   totalCount: number;
+  activeTab: "showroom" | "customers";
 };
 
 export function InventoryFilterBar({
@@ -28,6 +29,7 @@ export function InventoryFilterBar({
   isMuallimBranch,
   branchName,
   totalCount,
+  activeTab,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -84,7 +86,7 @@ export function InventoryFilterBar({
   const activeFilterCount = [
     currentQ,
     currentBranch !== (isGeneralManager ? "all" : "self") ? currentBranch : "",
-    currentOwner !== "all" ? currentOwner : "",
+    currentOwner !== "all" && activeTab === "customers" ? currentOwner : "",
     currentDeal !== "all" ? currentDeal : "",
     currentStatus !== "active" ? currentStatus : "",
     currentGearbox !== "all" ? currentGearbox : "",
@@ -182,24 +184,26 @@ export function InventoryFilterBar({
           )}
         </select>
 
-        {/* أصحاب السيارات برسم البيع — فلتر مستقل */}
-        <select
-          className={getSelectClasses(
-            currentOwner !== "all",
-            "!border-violet-300 !bg-violet-50/60 !text-violet-800 font-semibold focus:!ring-violet-100 focus:!border-violet-500"
-          )}
-          value={currentOwner}
-          onChange={(e) => navigate("owner", e.target.value)}
-        >
-          <option value="all">
-            {ownersCount > 0 ? `أصحاب برسم البيع (${ownersCount})` : "أصحاب برسم البيع"}
-          </option>
-          {consignmentOwners.map((o) => (
-            <option key={o} value={o}>
-              {o}
+        {/* أصحاب السيارات برسم البيع — فلتر مستقل (يظهر في مخزون العملاء فقط) */}
+        {activeTab === "customers" && (
+          <select
+            className={getSelectClasses(
+              currentOwner !== "all",
+              "!border-violet-300 !bg-violet-50/60 !text-violet-800 font-semibold focus:!ring-violet-100 focus:!border-violet-500"
+            )}
+            value={currentOwner}
+            onChange={(e) => navigate("owner", e.target.value)}
+          >
+            <option value="all">
+              {ownersCount > 0 ? `أصحاب برسم البيع (${ownersCount})` : "أصحاب برسم البيع"}
             </option>
-          ))}
-        </select>
+            {consignmentOwners.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        )}
 
         {/* نوع الصفقة */}
         <select

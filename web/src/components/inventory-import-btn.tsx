@@ -100,7 +100,7 @@ export function InventoryImportBtn({ isGeneralManager, branchId, branchName, bra
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="legacy-btn legacy-btn-primary flex items-center gap-2"
+        className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-bold text-emerald-700 shadow-sm transition-all hover:bg-emerald-50 hover:border-emerald-300"
         title="استيراد من Excel"
       >
         <FileSpreadsheet className="h-4 w-4" />

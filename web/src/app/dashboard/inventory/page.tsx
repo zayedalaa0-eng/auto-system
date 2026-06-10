@@ -7,7 +7,6 @@ import { InventoryExportBtn } from "@/components/inventory-export-btn";
 import { InventoryFilterBar } from "@/components/inventory-filter-bar";
 import { InventoryImportBtn } from "@/components/inventory-import-btn";
 import { EditableCell, InventoryPriceCellNew, GEARBOX_OPTIONS, FUEL_OPTIONS } from "@/components/inventory-inline-edit";
-import { InventorySaveViewBtn } from "@/components/inventory-save-view-btn";
 import { sendQuickReminderAction } from "@/app/dashboard/actions";
 import { getInventoryCarAttachments, getInventoryDirectory, getInventoryFilterContext } from "@/lib/data";
 import { formatCurrency } from "@/lib/format";
@@ -315,7 +314,7 @@ export default async function InventoryPage({
         <div className="flex items-center justify-end gap-2 mb-3">
           <Link
             href="/dashboard/inventory/new"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg hover:-translate-y-0.5 px-4 py-2 text-sm font-bold text-white transition-all transform"
           >
             + إضافة سيارة
           </Link>
@@ -328,6 +327,7 @@ export default async function InventoryPage({
           />
         </div>
         <InventoryFilterBar
+          activeTab={activeTab}
           branches={branches}
           consignmentOwners={consignmentOwners}
           deals={deals}
@@ -423,8 +423,6 @@ export default async function InventoryPage({
           </Link>
         </div>
 
-        {/* زر حفظ كعرض */}
-        <InventorySaveViewBtn />
       </div>
 
       {/* ── تبويبات المخزون ── */}
