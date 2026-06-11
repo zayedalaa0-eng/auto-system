@@ -383,24 +383,73 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // ── #9: مزامنة المخزون لمشتري استبدال (تحديث حالة سيارة الاستبدال) ────
-      if (opCode === "buyer_tradein_pending" && newStatus) {
-        const { data: existingTiInv } = await admin
-          .from("inventory")
-          .select("id")
-          .eq("source_customer_id", customer_id)
-          .maybeSingle();
+      // ── #9: مزامنة المخزون لمشتري استبدال (إنشاء أو تحديث سيارة الاستبدال) ────
+      if (opCode === "buyer_tradein_pending" && ti.model?.trim()) {
+        const statusLabel = newStatus || String(customer.status ?? "");
 
-        if (existingTiInv?.id) {
-          const tiInvStatus = newStatus.includes("تمت عملية البيع") ? "مباعة"
-            : newStatus.includes("حجز")                              ? "محجوزة"
-            : newStatus.includes("سحب") || newStatus.includes("رفض")  ? "مسحوبة من المعرض"
-            : null;
-          if (tiInvStatus) {
-            await admin.from("inventory")
-              .update({ availability_status: tiInvStatus })
-              .eq("id", existingTiInv.id);
+        const isCompletedTradein = statusLabel.includes("تمت عملية البيع + استبدال");
+        const isShowroomPurchase = statusLabel.includes("شراء من قبل المعرض");
+        const isExternalSold     = statusLabel.includes("تمت عملية البيع (للعميل)");
+        const isReserved         = statusLabel.includes("حجز (سيارة العميل)") || statusLabel.includes("حجز (استبدال)");
+        const isWithdrawn        =
+          statusLabel.includes("تراجع العميل عن الاستبدال") ||
+          statusLabel.includes("رفض من قبل العميل")          ||
+          statusLabel.includes("رفض من قبل المعرض")           ||
+          statusLabel.includes("سحب السيارة من البيع")        ||
+          statusLabel.includes("إغلاق الملف");
+
+        let tiOwnerName        = String(updates.full_name ?? customer.full_name);
+        let tiDealType         = "استبدال";
+        let tiAvailability     = "متوفرة";
+
+        if (isCompletedTradein || isShowroomPurchase) {
+          if (customer.branch_id) {
+            const { data: branchRow } = await admin.from("branches").select("name").eq("id", customer.branch_id).maybeSingle();
+            tiOwnerName = branchRow?.name ?? tiOwnerName;
           }
+          tiDealType = isShowroomPurchase ? "شراء" : "استبدال";
+        } else if (isExternalSold) {
+          tiAvailability = "مباعة";
+        } else if (isReserved) {
+          tiAvailability = "محجوزة";
+        } else if (isWithdrawn) {
+          tiAvailability = "مسحوبة من المعرض";
+        }
+
+        const tiInvPayload = {
+          branch_id: customer.branch_id,
+          source_customer_id: customer_id,
+          model: ti.model.trim(),
+          owner_name: tiOwnerName,
+          deal_type: tiDealType,
+          chassis_no: ti.chassis_no?.trim() ?? null,
+          condition_label: "مستعملة",
+          availability_status: tiAvailability,
+          price: ti.price ?? null,
+          color: ti.color?.trim() ?? null,
+          production_year: ti.production_year ?? null,
+          mileage: ti.mileage ?? null,
+          specs: ti.specs?.trim() ?? null,
+          inspection: ti.inspection?.trim() ?? null,
+          is_active: true,
+          metadata: { gear: ti.gear ?? null, fuel: ti.fuel ?? null, source: "telegram_miniapp" },
+        };
+
+        // البحث عن سجل موجود بالشاصي أولاً ثم بمعرّف العميل
+        let existingTiInvId: string | null = null;
+        if (ti.chassis_no?.trim()) {
+          const { data: byChassis } = await admin.from("inventory").select("id").eq("chassis_no", ti.chassis_no.trim()).maybeSingle();
+          existingTiInvId = byChassis?.id ?? null;
+        }
+        if (!existingTiInvId) {
+          const { data: byCustomer } = await admin.from("inventory").select("id").eq("source_customer_id", customer_id).maybeSingle();
+          existingTiInvId = byCustomer?.id ?? null;
+        }
+
+        if (existingTiInvId) {
+          await admin.from("inventory").update(tiInvPayload).eq("id", existingTiInvId);
+        } else {
+          await admin.from("inventory").insert(tiInvPayload);
         }
       }
     }
