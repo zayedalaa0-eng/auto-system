@@ -2176,6 +2176,59 @@ export async function upsertCustomerAction(formData: FormData) {
         action: "trade_in_saved",
         details: `تم حفظ سيارة العميل ضمن مسار الشراء/الاستبدال: ${tradeModel}.`,
       });
+
+      // ── تنبيه مدراء معرض المعلم بطلب التقييم ────────────────────────────
+      {
+        const adminWriter = hasSupabaseServiceRoleEnv() ? createAdminClient() : supabase;
+        const { data: maalamBranches } = await adminWriter
+          .from("branches")
+          .select("id")
+          .ilike("name", "%المعلم%")
+          .eq("is_active", true);
+
+        if (maalamBranches && maalamBranches.length > 0) {
+          const maalamBranchIds = maalamBranches.map((b) => b.id);
+          const { data: maalamManagers } = await adminWriter
+            .from("app_users")
+            .select("id, full_name, role, branch_id")
+            .in("branch_id", maalamBranchIds)
+            .eq("is_active", true);
+
+          const maalamRecipients = (maalamManagers ?? []).filter((u) => {
+            const caps = getRoleCapabilities(u.role, u.full_name);
+            return caps.isManager;
+          });
+
+          if (maalamRecipients.length > 0) {
+            const branchLabel = branchId
+              ? (await adminWriter.from("branches").select("name").eq("id", branchId).maybeSingle()).data?.name ?? ""
+              : "";
+            const notifTitle = "🔁 طلب تقييم سيارة — استبدال";
+            const notifMsg =
+              `طلب ${profile?.full_name ?? "موظف"} تقييم سيارة للعميل ${fullName}` +
+              ` — ${tradeModel}` +
+              (branchLabel ? ` | ${branchLabel}` : "");
+
+            await adminWriter.from("notifications").insert(
+              maalamRecipients.map((m) => ({
+                recipient_user_id: m.id,
+                recipient_branch_id: m.branch_id ?? null,
+                notification_type: "trade_in_evaluation",
+                title: notifTitle,
+                message: notifMsg,
+                status: "unread",
+                created_by_user_id: profile?.id ?? null,
+                payload: {
+                  source: "customer_form",
+                  customer_id: savedId,
+                  actor_name: profile?.full_name ?? "النظام",
+                  trade_model: tradeModel,
+                },
+              })),
+            );
+          }
+        }
+      }
     } else if (targetTradeInId && !hasTradeIn) {
       const { error } = await supabase
         .from("trade_ins")
