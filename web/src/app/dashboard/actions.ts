@@ -1171,6 +1171,117 @@ export async function markNotificationReadAction(formData: FormData) {
   redirect(redirectTo);
 }
 
+export async function sendEvaluationReplyAction(formData: FormData): Promise<{ error?: string; success?: boolean }> {
+  if (!hasSupabaseEnv()) return { error: "غير متاح" };
+
+  const profile = await getCurrentProfile();
+  if (!profile) return { error: "غير مصرح" };
+
+  const caps = getRoleCapabilities(profile.role, profile.full_name);
+  if (!caps.isManager) return { error: "هذه الوظيفة للمديرين فقط" };
+
+  const notificationId  = getText(formData, "notification_id");
+  const customerId      = getText(formData, "customer_id");
+  const actorUserId     = getNullableText(formData, "actor_user_id");
+  const priceRaw        = getText(formData, "price");
+  const price           = parseNumber(priceRaw);
+
+  if (!customerId || !price || price <= 0) return { error: "أدخل قيمة تقييم صحيحة" };
+
+  const admin = hasSupabaseServiceRoleEnv() ? createAdminClient() : await createClient();
+
+  // 1. تحديث سعر التقييم في trade_ins
+  const { data: tradeRow } = await admin
+    .from("trade_ins")
+    .select("id, model")
+    .eq("customer_id", customerId)
+    .eq("is_active", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!tradeRow) return { error: "لم يُعثر على سيارة مرتبطة بهذا العميل" };
+
+  await admin.from("trade_ins")
+    .update({ price, status: "تم التقييم" })
+    .eq("id", tradeRow.id);
+
+  // 2. جلب بيانات العميل والموظف المُدخِل
+  const { data: custRow } = await admin
+    .from("customers")
+    .select("full_name, assigned_user_id, app_users(id, full_name, telegram_chat_id)")
+    .eq("id", customerId)
+    .maybeSingle();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const custAny = custRow as any;
+  const staffArr = Array.isArray(custAny?.app_users) ? custAny.app_users : (custAny?.app_users ? [custAny.app_users] : []);
+  const staff = staffArr[0] ?? null;
+  const recipientUserId = actorUserId ?? staff?.id ?? custRow?.assigned_user_id ?? null;
+  const staffChatId     = staff?.telegram_chat_id ?? null;
+  const customerName    = custRow?.full_name ?? "—";
+  const priceFormatted  = price.toLocaleString("en-US");
+
+  // 3. إشعار ويب للموظف المُدخِل
+  if (recipientUserId) {
+    await admin.from("notifications").insert({
+      recipient_user_id: recipientUserId,
+      notification_type: "evaluation",
+      title: "💰 تم تقييم السيارة",
+      message: `سيارة العميل ${customerName} — ${tradeRow.model} قُيِّمت بـ ${priceFormatted} ₪ بواسطة ${profile.full_name}`,
+      status: "unread",
+      created_by_user_id: profile.id,
+      payload: { source: "evaluation_reply", customer_id: customerId, trade_id: tradeRow.id, price },
+    });
+  }
+
+  // 4. إشعار Telegram للموظف إن كان لديه حساب
+  if (staffChatId) {
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
+    const inlineButtons: Array<Array<Record<string, unknown>>> = appUrl
+      ? [[{ text: "📋 فتح بطاقة العميل", web_app: { url: `${appUrl}/bot-app/customer?id=${customerId}&chat_id=${staffChatId}` } }]]
+      : [];
+    inlineButtons.push([{ text: "🏠 القائمة الرئيسية", callback_data: "main_menu" }]);
+
+    void fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: staffChatId,
+        text:
+          `💰 <b>تم تقييم السيارة بنجاح</b>\n\n` +
+          `<blockquote>👤 <b>العميل:</b> ${customerName}\n` +
+          `🚗 <b>السيارة:</b> ${tradeRow.model}\n` +
+          `✅ <b>قيمة التقييم:</b> ${priceFormatted} ₪\n` +
+          `👨‍💼 <b>المُقيِّم:</b> ${profile.full_name}</blockquote>\n\n` +
+          `<i>تمّ تحديث الملف — اضغط لفتح بطاقة العميل 👇</i>`,
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: inlineButtons },
+      }),
+    });
+  }
+
+  // 5. تحديث log العميل
+  await admin.from("customer_logs").insert({
+    customer_id: customerId,
+    actor_user_id: profile.id,
+    actor_name: profile.full_name,
+    action: "trade_in_saved",
+    details: `تم تقييم سيارة العميل ${customerName} بقيمة ${priceFormatted} ₪ — بواسطة ${profile.full_name}`,
+  });
+
+  // 6. تعليم التنبيه الأصلي كمقروء
+  if (notificationId) {
+    await admin.from("notifications")
+      .update({ status: "read", read_at: new Date().toISOString() })
+      .eq("id", notificationId);
+  }
+
+  revalidatePath("/dashboard/notifications");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
 export async function completeReminderAction(formData: FormData) {
   if (!hasSupabaseEnv()) return;
 
@@ -2221,6 +2332,7 @@ export async function upsertCustomerAction(formData: FormData) {
                 payload: {
                   source: "customer_form",
                   customer_id: savedId,
+                  actor_user_id: profile?.id ?? null,
                   actor_name: profile?.full_name ?? "النظام",
                   trade_model: tradeModel,
                 },
