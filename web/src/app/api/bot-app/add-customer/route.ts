@@ -51,14 +51,15 @@ export async function POST(req: NextRequest) {
     const caps = getRoleCapabilities(user.role, user.full_name);
 
     // للمدير العام: يمكنه تحديد المعرض يدوياً
+    // استخدام || بدلاً من ?? لتحويل السلسلة الفارغة "" إلى null
     const resolvedBranchId = caps.isGeneralManager
-      ? (bodyBranchId as string | null | undefined) ?? null
-      : user.branch_id ?? null;
+      ? ((bodyBranchId as string | null | undefined) || null)
+      : (user.branch_id || null);
 
-    // Duplicate phone check — نبحث في كل الملفات (نشطة ومغلقة) لنفس المعرض
+    // Duplicate phone check — نبحث في كل الملفات (نشطة ومغلقة) لنفس المعرض فقط
     const dupQuery = admin
       .from("customers")
-      .select("id, full_name, status, is_active")
+      .select("id, full_name, status, is_active, branch_id")
       .eq("phone", normalizedPhone);
 
     const { data: dupCustomer } = await (resolvedBranchId
@@ -67,6 +68,15 @@ export async function POST(req: NextRequest) {
     ).order("is_active", { ascending: false }) // الملفات النشطة أولاً
      .limit(1)
      .maybeSingle();
+
+    // تسجيل تشخيصي مؤقت
+    console.log("[add-customer] dupCheck", {
+      phone: normalizedPhone,
+      resolvedBranchId,
+      userBranchId: user.branch_id,
+      found: !!dupCustomer?.id,
+      foundBranchId: dupCustomer?.branch_id ?? null,
+    });
 
     if (dupCustomer?.id) {
       const isActive = dupCustomer.is_active !== false;
