@@ -80,15 +80,26 @@ export async function POST(req: NextRequest) {
 
     if (dupCustomer?.id) {
       const isActive = dupCustomer.is_active !== false;
+      // جلب اسم المعرض للعميل المكرر
+      let dupBranchName: string | null = null;
+      if (dupCustomer.branch_id) {
+        const { data: dupBranch } = await admin.from("branches").select("name").eq("id", dupCustomer.branch_id).maybeSingle();
+        dupBranchName = dupBranch?.name ?? null;
+      }
+      const isSameBranch = dupCustomer.branch_id === resolvedBranchId;
+      const branchNote = dupBranchName ? ` (معرض: ${dupBranchName})` : "";
       return NextResponse.json(
         {
           error: isActive
-            ? "يوجد عميل نشط بنفس رقم الهاتف في هذا المعرض"
-            : "يوجد ملف مغلق بنفس رقم الهاتف — يمكنك فتح الملف القديم أو إدخاله كعميل جديد",
-          customer_id: dupCustomer.id,
+            ? `يوجد عميل نشط بنفس رقم الهاتف${branchNote}`
+            : `يوجد ملف مغلق بنفس رقم الهاتف${branchNote}`,
+          customer_id: isSameBranch ? dupCustomer.id : null,
           customer_name: dupCustomer.full_name ?? null,
           customer_status: dupCustomer.status ?? null,
           is_closed: !isActive,
+          dup_branch_id: dupCustomer.branch_id ?? null,
+          dup_branch_name: dupBranchName,
+          is_same_branch: isSameBranch,
         },
         { status: 409 },
       );

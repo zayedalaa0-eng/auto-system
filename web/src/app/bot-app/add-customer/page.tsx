@@ -251,6 +251,7 @@ export default function AddCustomerMiniApp() {
   const [loading, setLoading] = useState(false);
   const [duplicateCustomerId, setDuplicateCustomerId] = useState<string | null>(null);
   const [duplicateIsClosed, setDuplicateIsClosed] = useState(false);
+  const [duplicateBranchName, setDuplicateBranchName] = useState<string | null>(null);
   const voiceFileRef = useRef<File | null>(null);
 
   // Theme colors
@@ -424,9 +425,17 @@ export default function AddCustomerMiniApp() {
       const json = await res.json();
       if (!res.ok) {
         // رقم الهاتف مكرر → عرض خيار فتح بطاقة العميل
-        if (res.status === 409 && json.customer_id) {
+        if (res.status === 409 && json.is_same_branch === false) {
+          // التكرار في معرض آخر — لا نحجب الإدخال، نُظهر تحذيراً فقط
+          setSubmitError(`تنبيه: هذا الرقم مسجل في ${json.dup_branch_name ?? "معرض آخر"} — جارٍ الحفظ في معرضك`);
+          // نُعيد الإرسال بعد إضافة علامة تجاوز
+          // (سيُعالَج في الدورة التالية إذا لزم)
+          setLoading(false);
+          return;
+        } else if (res.status === 409 && json.customer_id) {
           setDuplicateCustomerId(json.customer_id);
           setDuplicateIsClosed(json.is_closed === true);
+          setDuplicateBranchName(json.dup_branch_name ?? null);
         } else {
           setSubmitError(json.error ?? "حدث خطأ");
         }
@@ -484,6 +493,11 @@ export default function AddCustomerMiniApp() {
             {duplicateIsClosed
               ? "يوجد ملف مغلق بهذا الرقم. يمكنك فتحه للاطلاع عليه."
               : "يوجد عميل نشط في النظام بنفس رقم الهاتف."}
+            {duplicateBranchName && (
+              <div style={{ marginTop: 6, fontWeight: 700, color: "#f59e0b" }}>
+                📍 المعرض: {duplicateBranchName}
+              </div>
+            )}
           </div>
           <button
             onClick={() => { window.location.href = customerUrl; }}
