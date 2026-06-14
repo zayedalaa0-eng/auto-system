@@ -40,8 +40,12 @@ export async function GET(request: Request) {
     .eq("is_active", true)
     .limit(1);
 
-  if (!capabilities.isGeneralManager && profile?.branch_id) {
-    activeQuery = activeQuery.eq("branch_id", profile.branch_id);
+  if (!capabilities.isGeneralManager) {
+    if (profile?.branch_id) {
+      activeQuery = activeQuery.eq("branch_id", profile.branch_id);
+    } else {
+      activeQuery = activeQuery.is("branch_id", null);
+    }
   }
 
   const { data: activeCustomer } = await activeQuery.maybeSingle();
@@ -64,8 +68,12 @@ export async function GET(request: Request) {
     .order("cycle_number", { ascending: false })
     .limit(1);
 
-  if (!capabilities.isGeneralManager && profile?.branch_id) {
-    closedQuery = closedQuery.eq("branch_id", profile.branch_id);
+  if (!capabilities.isGeneralManager) {
+    if (profile?.branch_id) {
+      closedQuery = closedQuery.eq("branch_id", profile.branch_id);
+    } else {
+      closedQuery = closedQuery.is("branch_id", null);
+    }
   }
 
   const { data: latestClosed } = await closedQuery.maybeSingle();
