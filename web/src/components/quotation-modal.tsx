@@ -32,7 +32,8 @@ export function QuotationModal({ isOpen, onClose, customerName, car, branchName 
     if (!printRef.current) return;
     setIsExporting(true);
     try {
-      const canvas = await html2canvas(printRef.current, { scale: 2, useCORS: true });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const canvas = await (html2canvas as any)(printRef.current, { scale: 2, useCORS: true });
       const dataUrl = canvas.toDataURL("image/png");
       const link = document.createElement("a");
       link.href = dataUrl;
@@ -50,8 +51,9 @@ export function QuotationModal({ isOpen, onClose, customerName, car, branchName 
     if (!printRef.current) return;
     setIsExporting(true);
     try {
-      const canvas = await html2canvas(printRef.current, { scale: 2, useCORS: true });
-      canvas.toBlob((blob) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const canvas = await (html2canvas as any)(printRef.current, { scale: 2, useCORS: true });
+      canvas.toBlob((blob: Blob | null) => {
         if (!blob) return;
         const file = new File([blob], `عرض-سعر-${model}.png`, { type: "image/png" });
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
