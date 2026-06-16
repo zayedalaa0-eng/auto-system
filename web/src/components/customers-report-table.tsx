@@ -87,11 +87,11 @@ export function CustomersReportTable({
       <table className="premium-table">
         <thead className="legacy-standard-head">
           <tr>
-            <th style={{ width: "145px" }}>المعرض / الموظف</th>
-            <th style={{ width: "150px" }}>العميل والهاتف</th>
+            <th style={{ width: "145px", paddingInlineEnd: "8px" }}>المعرض / الموظف</th>
+            <th style={{ width: "195px", paddingInlineStart: "8px" }}>العميل والهاتف</th>
             <th style={{ width: "250px" }}>السيارة</th>
-            <th style={{ width: "175px" }}>الحالة</th>
-            <th style={{ width: "95px" }}>آخر تواصل</th>
+            <th style={{ width: "135px", paddingInlineEnd: "8px" }}>الحالة</th>
+            <th style={{ width: "95px", paddingInlineStart: "8px" }}>آخر تواصل</th>
             <th style={{ width: "90px" }}>الإجراءات</th>
           </tr>
         </thead>
@@ -107,7 +107,7 @@ export function CustomersReportTable({
               return (
                 <tr key={customer.id}>
                   {/* المعرض / التاريخ / الموظف */}
-                  <td>
+                  <td style={{ paddingInlineEnd: "8px" }}>
                     <div className="flex flex-col gap-1.5">
                       {customer.branch_name ? (
                         <div className="flex items-center gap-1.5">
@@ -127,7 +127,7 @@ export function CustomersReportTable({
                   </td>
 
                   {/* العميل والهاتف */}
-                  <td>
+                  <td style={{ paddingInlineStart: "8px" }}>
                     <div className="flex flex-col gap-1.5">
                       {/* الاسم + أيقونة صغيرة + الكنية */}
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -208,7 +208,7 @@ export function CustomersReportTable({
                   </td>
 
                   {/* الحالة وموعد المتابعة */}
-                  <td>
+                  <td style={{ paddingInlineEnd: "8px" }}>
                     <div className="flex flex-col gap-1.5 items-start">
                       <StatusPill value={customer.status} />
                       {customer.payment_method ? (
@@ -226,7 +226,7 @@ export function CustomersReportTable({
                   </td>
 
                   {/* آخر تواصل */}
-                  <td>
+                  <td style={{ paddingInlineStart: "8px" }}>
                     <div className="flex flex-col gap-1 items-center">
                       <span className="text-xs font-semibold text-emerald-700 whitespace-nowrap">
                         {formatDate(customer.last_contact_at ?? customer.updated_at ?? null)}
