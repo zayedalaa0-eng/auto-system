@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CAR_MAKES } from "@/lib/suggestions";
 
@@ -16,10 +16,12 @@ export function AddInventoryForm({
   isGeneralManager,
   branches,
   branchId,
+  employeeBranchName,
 }: {
   isGeneralManager: boolean;
   branches: Branch[];
   branchId: string | null;
+  employeeBranchName?: string | null;
 }) {
   const router = useRouter();
 
@@ -34,11 +36,23 @@ export function AddInventoryForm({
   const [condition,       setCondition]      = useState("مستعملة");
   const [dealType,        setDealType]       = useState("شراء");
   const [status,          setStatus]         = useState("متوفرة");
-  const [ownerName,       setOwnerName]      = useState("");
+  const [ownerName,       setOwnerName]      = useState(employeeBranchName ?? "");
   const [specs,           setSpecs]          = useState("");
   const [inspection,      setInspection]     = useState("");
   const [notes,           setNotes]          = useState("");
   const [selectedBranch,  setSelectedBranch] = useState(branchId ?? "");
+
+  // تعبئة حقل المالك تلقائياً باسم معرض المدير العام عند اختياره — فقط إذا لم يُعدّله المستخدم يدوياً
+  const lastAutoOwner = useRef(employeeBranchName ?? "");
+  useEffect(() => {
+    if (!isGeneralManager) return;
+    const branchName = branches.find((b) => b.id === selectedBranch)?.name ?? "";
+    if (ownerName === lastAutoOwner.current) {
+      setOwnerName(branchName);
+      lastAutoOwner.current = branchName;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBranch]);
 
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState<string | null>(null);
@@ -83,7 +97,7 @@ export function AddInventoryForm({
     setSuccess(true);
     // إعادة تعيين الحقول
     setModel(""); setYear(""); setColor(""); setPrice(""); setChassis("");
-    setMileage(""); setOwnerName(""); setSpecs(""); setInspection(""); setNotes("");
+    setMileage(""); setOwnerName(lastAutoOwner.current); setSpecs(""); setInspection(""); setNotes("");
     setGearbox("اتوماتيك"); setFuel("بنزين"); setCondition("مستعملة");
     setDealType("شراء"); setStatus("متوفرة");
     setTimeout(() => setSuccess(false), 3000);

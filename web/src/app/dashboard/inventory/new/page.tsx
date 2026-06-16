@@ -22,10 +22,11 @@ export default async function NewInventoryPage() {
 
   const caps = getRoleCapabilities(profile?.role, profile?.full_name);
 
-  // جلب المعارض للمدير العام
-  const { data: branches } = caps.isGeneralManager
-    ? await supabase.from("branches").select("id, name").eq("is_active", true).order("name")
-    : { data: [] };
+  // جلب كل المعارض (نحتاجها لتعبئة اسم المعرض تلقائياً في حقل المالك)
+  const { data: allBranches } = await supabase.from("branches").select("id, name").eq("is_active", true).order("name");
+  const employeeBranchName = profile?.branch_id
+    ? (allBranches ?? []).find((b) => b.id === profile.branch_id)?.name ?? null
+    : null;
 
   return (
     <div className="legacy-grid gap-6 max-w-2xl mx-auto">
@@ -38,8 +39,9 @@ export default async function NewInventoryPage() {
 
       <AddInventoryForm
         isGeneralManager={caps.isGeneralManager}
-        branches={branches ?? []}
+        branches={caps.isGeneralManager ? (allBranches ?? []) : []}
         branchId={profile?.branch_id ?? null}
+        employeeBranchName={employeeBranchName}
       />
     </div>
   );
