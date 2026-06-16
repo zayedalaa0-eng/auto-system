@@ -55,6 +55,8 @@ export type CustomerItem = {
   selected_inventory_id?: string | null;
   /** حالة سيارة العميل في المخزون (محجوزة / مباعة / متوفرة / مسحوبة) */
   inventory_availability?: string | null;
+  /** حالة كل سيارة مطلوبة على حدة — مفتاح: اسم السيارة المُطبَّع، قيمة: حالة التوفر */
+  inventory_availability_by_car?: Record<string, string>;
   /** حالة سيارة العميل (trade_in) — للعرض في عمود الحالة */
   trade_in_status?: string | null;
   /** موديل سيارة الاستبدال (buyer_tradein) أو سيارة العميل (sell_on_behalf) */
@@ -552,10 +554,9 @@ async function enrichCustomersWithSaleOfferInReport(
     }
   }
 
-  // ── ربط تلقائي بالاسم لكل مشترٍ غير مرتبط ───────────────────────────────
-  function cleanRequestedCarName(raw: string): string {
+  // ── ربط تلقائي بالاسم — يُطبَّق على كل سيارة مطلوبة على حدة (لا نقتصر على الأولى) ──
+  function cleanCarSegment(raw: string): string {
     return raw
-      .split("|")[0]
       .replace(/\(?\s*طلب\s+خاص\s*\)?/gi, "")
       .replace(/\s*-\s*موديل\s*:?\s*\S+/gi, "")
       .replace(/\s*-\s*model\s*:?\s*\S+/gi, "")
@@ -566,13 +567,10 @@ async function enrichCustomersWithSaleOfferInReport(
       .replace(/\s+/g, " ");
   }
 
-  const invByNameMatch = new Map<string, string>(); // customerId → availability_status
-  for (const c of unlinkedBuyers) {
-    const normReq = cleanRequestedCarName(c.requested_car ?? "");
-    if (!normReq || normReq.length < 2) continue;
-
-    const hasBranch = Boolean(c.branch_id);
-    const branchPrefix = (c.branch_id ?? "") + "::";
+  function matchInventoryStatus(normReq: string, branchId: string | null): string | null {
+    if (!normReq || normReq.length < 2) return null;
+    const hasBranch = Boolean(branchId);
+    const branchPrefix = (branchId ?? "") + "::";
     let bestStatus: string | null = null;
     let bestPriority = -1;
 
@@ -600,9 +598,23 @@ async function enrichCustomersWithSaleOfferInReport(
       }
     }
 
-    if (bestStatus !== null) {
-      invByNameMatch.set(c.id, bestStatus);
-    }
+    return bestStatus;
+  }
+
+  const invByNameMatch = new Map<string, string>(); // customerId → availability_status (السيارة الأولى — توافقاً مع الحقل القديم)
+  const invByNameMatchPerCar = new Map<string, Record<string, string>>(); // customerId → { normCarName → status } لكل السيارات
+  for (const c of unlinkedBuyers) {
+    const segments = (c.requested_car ?? "").split("|");
+    const perCar: Record<string, string> = {};
+    segments.forEach((seg, idx) => {
+      const normReq = cleanCarSegment(seg);
+      const status = matchInventoryStatus(normReq, c.branch_id ?? null);
+      if (status !== null) {
+        perCar[normReq] = status;
+        if (idx === 0) invByNameMatch.set(c.id, status);
+      }
+    });
+    if (Object.keys(perCar).length > 0) invByNameMatchPerCar.set(c.id, perCar);
   }
 
   return baseCustomers.map((customer) => {
@@ -617,7 +629,19 @@ async function enrichCustomersWithSaleOfferInReport(
           ? (invById.get(customer.selected_inventory_id) ?? null)
           : (invByNameMatch.get(customer.id) ?? null);
 
-    if (!trade) return { ...customer, inventory_availability, trade_in_status: null };
+    // حالة كل سيارة مطلوبة على حدة
+    const inventory_availability_by_car: Record<string, string> = {};
+    if (opType !== "sell_on_behalf") {
+      if (customer.selected_inventory_id) {
+        const status = invById.get(customer.selected_inventory_id);
+        const firstSeg = cleanCarSegment((customer.requested_car ?? "").split("|")[0] ?? "");
+        if (status && firstSeg) inventory_availability_by_car[firstSeg] = status;
+      } else {
+        Object.assign(inventory_availability_by_car, invByNameMatchPerCar.get(customer.id) ?? {});
+      }
+    }
+
+    if (!trade) return { ...customer, inventory_availability, inventory_availability_by_car, trade_in_status: null };
 
     const reportBase = (customer.requested_car ?? "").trim();
     const requested_car_report = reportBase
@@ -632,6 +656,7 @@ async function enrichCustomersWithSaleOfferInReport(
       sale_offer_car: trade.isOffer ? trade.model : (customer.sale_offer_car ?? null),
       trade_in_model: trade.model ?? null,
       inventory_availability,
+      inventory_availability_by_car,
       trade_in_status: trade.status ?? null,
     };
   });

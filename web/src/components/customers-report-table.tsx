@@ -6,6 +6,18 @@ import { StatusPill } from "@/components/status-pill";
 import type { CustomerItem } from "@/lib/data";
 import { formatDate } from "@/lib/format";
 
+/** يبحث عن حالة توفر سيارة محددة داخل خريطة كل سيارة على حدة — مطابقة جزئية مرنة بالاسم */
+function findCarAvailability(carName: string, byCarMap: Record<string, string> | null | undefined): string | null {
+  if (!byCarMap) return null;
+  const norm = carName.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!norm) return null;
+  for (const [key, status] of Object.entries(byCarMap)) {
+    if (!key) continue;
+    if (key.includes(norm) || norm.includes(key)) return status;
+  }
+  return null;
+}
+
 function inventoryAvailabilityBadge(status: string | null | undefined) {
   const s = (status ?? "").trim();
   if (!s) return null;
@@ -173,11 +185,13 @@ export function CustomersReportTable({
                         )
                       ) : (
                         <>
-                          {/* السيارات المطلوبة — كل سيارة في سطر مع شارتها بجانبها (بدون لف) */}
+                          {/* السيارات المطلوبة — كل سيارة في سطر مع شارة توفّرها الخاصة بها */}
                           {requestedCars.length > 0 ? (
                             requestedCars.map((rc, i) => {
-                              // شارة توفر السيارة بالمخزون — تظهر على أول سيارة فقط
-                              const availBadge = i === 0 ? inventoryAvailabilityBadge(customer.inventory_availability) : null;
+                              // شارة توفر هذه السيارة بالتحديد — مطابقة بالاسم، مع رجوع للحقل القديم (أول سيارة فقط) إن لم تتوفر خريطة لكل سيارة
+                              const status = findCarAvailability(rc.name, customer.inventory_availability_by_car)
+                                ?? (i === 0 ? customer.inventory_availability : null);
+                              const availBadge = inventoryAvailabilityBadge(status);
                               return (
                                 <div key={i} className="flex items-center gap-1.5 whitespace-nowrap">
                                   <Car className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
