@@ -187,13 +187,31 @@ export function CustomerForm({ customer, options, returnPath }: CustomerFormProp
                 />
               </label>
 
-              <label className="space-y-2">
+              <label className="space-y-2 md:col-span-2">
                 <span className="text-sm font-medium text-slate-700">السيارة المطلوبة</span>
                 <input
                   name="requested_car"
+                  list="requested-car-options"
                   defaultValue={customer?.requested_car ?? ""}
+                  placeholder="اكتب أو اختر من القائمة (مخزون المعرض / مخزون العملاء)"
                   className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-slate-900 outline-none transition focus:border-sky-300 focus:bg-white"
                 />
+                <datalist id="requested-car-options">
+                  {options.inventoryOptions
+                    .filter((option) => option.category !== "customer")
+                    .map((option) => (
+                      <option key={option.id} value={option.label}>
+                        {`🏢 مخزون المعرض — ${option.label}`}
+                      </option>
+                    ))}
+                  {options.inventoryOptions
+                    .filter((option) => option.category === "customer")
+                    .map((option) => (
+                      <option key={option.id} value={option.label}>
+                        {`👤 مخزون العملاء — ${option.label}`}
+                      </option>
+                    ))}
+                </datalist>
               </label>
 
               <label className="space-y-2">
