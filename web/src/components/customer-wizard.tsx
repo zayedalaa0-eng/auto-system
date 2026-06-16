@@ -106,6 +106,7 @@ export function CustomerWizard({ options, errorMessage, initialParentId, initial
   const [useInventory, setUseInventory] = useState(true);
   const [useCustomRequest, setUseCustomRequest] = useState(false);
   const [inventoryToAdd, setInventoryToAdd] = useState("");
+  const [invCategory, setInvCategory] = useState<"showroom" | "customer">("showroom");
   const [selectedCars, setSelectedCars] = useState<InventoryChoice[]>([]);
   const [customType, setCustomType] = useState("");
   const [customYear, setCustomYear] = useState("");
@@ -302,6 +303,22 @@ export function CustomerWizard({ options, errorMessage, initialParentId, initial
   function handleFormSubmit(event: React.FormEvent) {
     setNegotiationError("");
     const isIncomplete = incompleteRef.current;
+
+    // فحص حجم الملفات المرفقة قبل الإرسال — تجاوز الحد يفشل الحفظ بالكامل
+    const fileInputs = formRef.current?.querySelectorAll<HTMLInputElement>('input[type="file"]');
+    let totalFilesSize = 0;
+    fileInputs?.forEach((input) => {
+      Array.from(input.files ?? []).forEach((file) => { totalFilesSize += file.size; });
+    });
+    const MAX_TOTAL_UPLOAD = 6 * 1024 * 1024; // هامش أمان تحت حد 8MB
+    if (totalFilesSize > MAX_TOTAL_UPLOAD) {
+      event.preventDefault();
+      setNegotiationError(
+        `⚠️ حجم الملفات المرفقة كبير جداً (${(totalFilesSize / 1024 / 1024).toFixed(1)} MB). يرجى حفظ بيانات العميل أولاً بدون المرفقات، ثم إضافة الصور من شاشة ملف العميل بعد الحفظ (لا يوجد حد على عدد الصور هناك).`,
+      );
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
 
     // المعرض إلزامي للمدير العام دائماً
     if (canChooseBranch && !branchId) {
@@ -787,18 +804,47 @@ export function CustomerWizard({ options, errorMessage, initialParentId, initial
                     </label>
 
                     {useInventory ? (
-                      <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-                        <select className="legacy-select" value={inventoryToAdd} onChange={(event) => setInventoryToAdd(event.target.value)}>
-                          <option value="">اختر من المخزون</option>
-                          {options.inventoryOptions.map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                        <button type="button" className="legacy-btn legacy-btn-info" onClick={addInventoryChoice}>
-                          إضافة السيارة
-                        </button>
+                      <div className="space-y-3">
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { setInvCategory("showroom"); setInventoryToAdd(""); }}
+                            className={`flex-1 rounded-lg py-2 text-sm font-bold transition flex items-center justify-center gap-1 ${
+                              invCategory === "showroom"
+                                ? "bg-blue-600 text-white"
+                                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                            }`}
+                          >
+                            🏢 سيارات المعرض ({options.inventoryOptions.filter(o => o.category !== "customer").length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setInvCategory("customer"); setInventoryToAdd(""); }}
+                            className={`flex-1 rounded-lg py-2 text-sm font-bold transition flex items-center justify-center gap-1 ${
+                              invCategory === "customer"
+                                ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-sm"
+                                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                            }`}
+                          >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                            سيارات العملاء ({options.inventoryOptions.filter(o => o.category === "customer").length})
+                          </button>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                          <select className="legacy-select" value={inventoryToAdd} onChange={(event) => setInventoryToAdd(event.target.value)}>
+                            <option value="">اختر من {invCategory === "customer" ? "سيارات العملاء" : "سيارات المعرض"}</option>
+                            {options.inventoryOptions
+                              .filter((o) => (invCategory === "customer" ? o.category === "customer" : o.category !== "customer"))
+                              .map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          <button type="button" className="legacy-btn legacy-btn-info" onClick={addInventoryChoice}>
+                            إضافة السيارة
+                          </button>
+                        </div>
                       </div>
                     ) : null}
 

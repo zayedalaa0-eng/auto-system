@@ -167,8 +167,73 @@ function getClosureReason(status: string | null | undefined) {
   return null;
 }
 
+/* ─── مرفقات سيارة العميل — رفع مستقل لكل ملف (بلا حد على العدد) ── */
+function IndependentFileUploader({ customerId, name, label }: { customerId: string; name: string; label: string }) {
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [uploadedCount, setUploadedCount] = useState(0);
+  const [errors, setErrors] = useState<string[]>([]);
+
+  async function handleFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    setUploading(true);
+    setErrors([]);
+    setProgress({ done: 0, total: files.length });
+    let ok = 0;
+    const failedNames: string[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const fd = new FormData();
+        fd.set("customer_id", customerId);
+        fd.set("category", name);
+        fd.set("file", file);
+        const res = await fetch("/api/customers/upload-attachment", { method: "POST", body: fd });
+        const json = await res.json();
+        if (!res.ok) {
+          failedNames.push(`${file.name}: ${json.error ?? "فشل"}`);
+        } else {
+          ok++;
+        }
+      } catch {
+        failedNames.push(`${file.name}: فشل الاتصال`);
+      }
+      setProgress({ done: i + 1, total: files.length });
+    }
+
+    setUploadedCount((prev) => prev + ok);
+    setErrors(failedNames);
+    setUploading(false);
+  }
+
+  return (
+    <label className="legacy-field">
+      <span className="legacy-field__label">{label}</span>
+      <input
+        type="file"
+        accept="image/*,.pdf,.doc,.docx"
+        multiple
+        disabled={uploading}
+        onChange={(e) => { void handleFiles(e.target.files); e.target.value = ""; }}
+        className="legacy-input"
+      />
+      {uploading && progress ? (
+        <span className="text-xs text-slate-500">جارٍ الرفع: {progress.done}/{progress.total}...</span>
+      ) : null}
+      {!uploading && uploadedCount > 0 ? (
+        <span className="text-xs font-semibold text-emerald-600">✔ تم رفع {uploadedCount} ملف بنجاح</span>
+      ) : null}
+      {!uploading && errors.length > 0 ? (
+        <span className="text-xs font-semibold text-rose-600">فشل رفع: {errors.join(" | ")}</span>
+      ) : null}
+    </label>
+  );
+}
+
 /* ─── TradeInEditor ──────────────────────────────────────────── */
-function TradeInEditor({ primaryTrade }: { primaryTrade: CustomerDetail["tradeIns"][number] | null }) {
+function TradeInEditor({ primaryTrade, customerId }: { primaryTrade: CustomerDetail["tradeIns"][number] | null; customerId: string }) {
   return (
     <div className="profile-section__body" style={{ borderTop: "1px solid #f1f5f9" }}>
       <input type="hidden" name="trade_in_id" value={primaryTrade?.id ?? ""} />
@@ -232,20 +297,17 @@ function TradeInEditor({ primaryTrade }: { primaryTrade: CustomerDetail["tradeIn
         </label>
       </div>
 
-      {/* File uploads */}
+      {/* File uploads — رفع مستقل لكل ملف فوراً، بلا حد على العدد */}
       <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-        <p className="mb-3 text-sm font-bold text-slate-500">مستندات سيارة العميل (اختياري) — حتى 20 ملف لكل خانة</p>
+        <p className="mb-3 text-sm font-bold text-slate-500">مستندات سيارة العميل (اختياري) — يُرفع كل ملف فوراً عند اختياره، بدون حد على العدد</p>
         <div className="grid gap-3 md:grid-cols-2">
           {[
-            { name: "trade_files_photos", label: "📷 صور" },
-            { name: "trade_files_inspection", label: "🔍 فحص" },
-            { name: "trade_files_license", label: "📄 رخصة" },
-            { name: "trade_files_insurance", label: "🛡️ تأمين" },
+            { name: "trade_photo", label: "📷 صور" },
+            { name: "trade_inspection", label: "🔍 فحص" },
+            { name: "trade_license", label: "📄 رخصة" },
+            { name: "trade_insurance", label: "🛡️ تأمين" },
           ].map(({ name, label }) => (
-            <label key={name} className="legacy-field">
-              <span className="legacy-field__label">{label}</span>
-              <input type="file" name={name} className="legacy-input" accept="image/*,.pdf,.doc,.docx" multiple />
-            </label>
+            <IndependentFileUploader key={name} customerId={customerId} name={name} label={label} />
           ))}
         </div>
       </div>
@@ -1057,7 +1119,7 @@ export function CustomerProfileContent({
             <div className="profile-section__header">
               <div className="profile-section__title"><CarFront className="h-4 w-4 text-sky-500" /> سيارة العميل</div>
             </div>
-            <TradeInEditor primaryTrade={primaryTrade} />
+            <TradeInEditor primaryTrade={primaryTrade} customerId={customer.id} />
             <div className="profile-section__body" style={{ borderTop: "1px solid #f1f5f9" }}>
               <label className="legacy-field">
                 <span className="legacy-field__label">تاريخ المراجعة / الحجز</span>
@@ -1555,7 +1617,7 @@ export function CustomerProfileContent({
               )}
 
               {editTradeEnabled
-                ? <TradeInEditor primaryTrade={primaryTrade} />
+                ? <TradeInEditor primaryTrade={primaryTrade} customerId={customer.id} />
                 : <input type="hidden" name="trade_in_id" value={primaryTrade?.id ?? ""} />
               }
 
