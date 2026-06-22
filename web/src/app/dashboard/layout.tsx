@@ -106,7 +106,6 @@ export default async function DashboardLayout({
                 pendingEvaluation={pendingEvaluation ?? []}
                 currentUserRole={profile?.role ?? "employee"}
                 currentUserId={profile?.id ?? null}
-                detailBasePath={capabilities.isManager ? "/dashboard/management" : "/dashboard/customers"}
               />
             </div>
           ) : null}

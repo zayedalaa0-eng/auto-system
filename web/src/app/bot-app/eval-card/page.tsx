@@ -164,11 +164,17 @@ export default function EvalCardPage() {
   const { trade, customer, photos } = data;
 
   if (submitted) return (
-    <div className="flex items-center justify-center min-h-screen bg-[#0f172a] p-6">
+    <div className="flex items-center justify-center min-h-screen bg-[#0f172a] p-6" dir="rtl">
       <div className="bg-green-900/30 border border-green-600 rounded-2xl p-8 text-center max-w-sm w-full">
         <div className="text-5xl mb-4">✅</div>
         <h2 className="text-green-300 text-xl font-bold mb-2">تم إرسال التقييم!</h2>
-        <p className="text-slate-400 text-sm">سيُرسَل إشعار للموظف المعني فوراً</p>
+        <p className="text-slate-400 text-sm mb-6">سيُرسَل إشعار للموظف المعني فوراً</p>
+        <button
+          onClick={() => { try { window.Telegram?.WebApp?.close?.(); } catch { window.close(); } }}
+          className="w-full bg-slate-800 text-white font-bold py-3 rounded-xl border border-slate-700 transition-all hover:bg-slate-700"
+        >
+          ✕ إغلاق
+        </button>
       </div>
     </div>
   );

@@ -2,7 +2,11 @@
   "crons": [
     {
       "path": "/api/reports/daily-morning",
-      "schedule": "0 5 * * *"
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/reports/daily-evening",
+      "schedule": "0 16 * * *"
     },
     {
       "path": "/api/reports/overdue-escalation",

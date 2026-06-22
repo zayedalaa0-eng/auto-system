@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getRoleCapabilities } from "@/lib/roles";
 import { isClosedStatus } from "@/lib/statuses";
 import { isValidPhone, normalizePhone, PHONE_ERROR_MESSAGE } from "@/lib/phone";
-import { pushCustomerUpdateToManagers, pushEvaluationRequestToMaalamManager } from "@/lib/telegram/push";
+import { pushCustomerUpdateToManagers, pushEvaluationRequestToManagers } from "@/lib/telegram/push";
 
 export async function POST(req: NextRequest) {
   try {
@@ -89,9 +89,9 @@ export async function POST(req: NextRequest) {
     // • المدير العام   : يعدّل كل العملاء في جميع المعارض
     // • مدير + موظف   : يعدّلون أي عميل في نفس المعرض
     // • موظف معيَّن    : يعدّل عملاءه حتى لو من معرض آخر (حالة استثنائية)
-    const isGeneralManager = caps.isGeneralManager;
+    const isGlobal = caps.isGeneralManager && !user.branch_id;
     const canEditCustomer =
-      isGeneralManager ||
+      isGlobal ||
       customer.branch_id === user.branch_id ||
       customer.assigned_user_id === user.id;
 
@@ -197,7 +197,7 @@ export async function POST(req: NextRequest) {
       updates.metadata = {
         ...currentMeta2,
         ...(payment_method !== undefined ? { payment_method: payment_method || null } : {}),
-        ...(deal_value !== undefined ? { deal_value: deal_value ? Number(deal_value) : null } : {}),
+        ...(deal_value !== undefined ? { deal_value: deal_value !== null && deal_value !== "" ? Number(deal_value) : null } : {}),
       };
     }
 
@@ -354,14 +354,14 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // ── إرسال طلب التقييم لمدير معرض المعلم (استبدال جديد فقط) ─────────────
+      // ── إرسال طلب التقييم لمدير معرض لمعلم (استبدال جديد فقط) ─────────────
       if (opCode === "buyer_tradein_pending" && ti.model?.trim() && !existingTradeInId) {
         let branchNameStr: string | null = null;
         if (customer.branch_id) {
           const { data: branchRow } = await admin.from("branches").select("name").eq("id", customer.branch_id).maybeSingle();
           branchNameStr = branchRow?.name ?? null;
         }
-        void pushEvaluationRequestToMaalamManager({
+        void pushEvaluationRequestToManagers({
           tradeInId: newTradeInId ?? customer_id,
           customerId: customer_id,
           customerName: String(updates.full_name ?? customer.full_name),
@@ -369,6 +369,7 @@ export async function POST(req: NextRequest) {
           submitterUserId: user.id,
           submitterName: user.full_name,
           submitterChatId: String(chat_id),
+          branchId: customer.branch_id,
           branchName: branchNameStr,
           car: {
             model: ti.model.trim(),

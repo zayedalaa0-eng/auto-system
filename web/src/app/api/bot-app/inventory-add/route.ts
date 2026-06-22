@@ -29,7 +29,8 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
 
   const caps = getRoleCapabilities(user.role, user.full_name);
-  const resolvedBranchId = caps.isGeneralManager
+  const isGlobal = caps.isGeneralManager && !user.branch_id;
+  const resolvedBranchId = isGlobal
     ? (branch_id || null)
     : user.branch_id;
 
@@ -37,11 +38,11 @@ export async function POST(req: NextRequest) {
     .from("inventory")
     .insert({
       model: model.trim(),
-      production_year: production_year ? Number(production_year) : null,
+      production_year: production_year !== null && production_year !== undefined && production_year !== "" ? Number(production_year) : null,
       color: color?.trim() || null,
-      price: price ? Number(price) : null,
+      price: price !== null && price !== undefined && price !== "" ? Number(price) : null,
       chassis_no: chassis_no?.trim() || null,
-      mileage: mileage ? Number(mileage) : null,
+      mileage: mileage !== null && mileage !== undefined && mileage !== "" ? Number(mileage) : null,
       gearbox: gearbox?.trim() || null,
       fuel_type: fuel_type?.trim() || null,
       condition_label: condition_label?.trim() || "مستعملة",

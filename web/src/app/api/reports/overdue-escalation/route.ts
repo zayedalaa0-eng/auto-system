@@ -90,28 +90,26 @@ async function handler(req: NextRequest) {
       if (criticalOverdue.length > 0) {
         msg += `🔴 منهم <b>${criticalOverdue.length}</b> متأخر أكثر من 7 أيام!\n`;
       }
-      msg += `<blockquote>`;
-
       myOverdue.slice(0, 10).forEach((c, i) => {
         const daysAgo = Math.floor((now.getTime() - new Date(c.next_follow_up_at!).getTime()) / 86400000);
         const display = c.nickname ? `${c.full_name} (${c.nickname})` : c.full_name;
         const urgency = daysAgo >= 7 ? "🔴" : daysAgo >= 3 ? "🟠" : "🟡";
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const assignedName = (c.app_users as any)?.full_name ?? "غير محدد";
-        msg += `${urgency} <b>${i + 1}. ${display}</b>\n`;
-        msg += `   📱 ${c.phone}\n`;
-        msg += `   📌 ${c.status ?? "—"}\n`;
-        msg += `   ⏰ متأخر <b>${daysAgo} يوم</b>\n`;
-        msg += `   👤 ${assignedName}\n`;
+        msg += `<blockquote>`;
+        msg += `${urgency} <b>العميل: ${display}</b>\n`;
+        msg += `📱 الهاتف: <code>${c.phone}</code>\n`;
+        msg += `📌 الحالة: ${c.status ?? "—"}\n`;
+        msg += `⏰ التأخير: <b>${daysAgo} يوم</b>\n`;
+        msg += `👤 الموظف المسؤول: ${assignedName}\n`;
+        msg += `</blockquote>\n\n`;
       });
 
       if (myOverdue.length > 10) {
-        msg += `   ... و${myOverdue.length - 10} عميلاً آخر\n`;
+        msg += `<blockquote>... و${myOverdue.length - 10} عميلاً آخر لم يتم عرضهم هنا.</blockquote>\n\n`;
       }
 
-      msg += `</blockquote>\n\n`;
       msg += `💡 <i>راجع ملفات هؤلاء العملاء فوراً وحدّث مواعيد المتابعة أو أغلق الملف.</i>\n`;
-      msg += `🤖 <i>نظام المعرض الذكي — تنبيه تصعيد تلقائي</i>`;
 
       await sendMessage(manager.telegram_chat_id as string, msg);
       sent++;

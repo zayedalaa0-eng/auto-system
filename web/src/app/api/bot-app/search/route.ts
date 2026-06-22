@@ -42,16 +42,13 @@ export async function GET(req: NextRequest) {
     .range(offset, offset + limit - 1);
 
   // تصفية حسب الفرع للموظف العادي
-  if (!caps.isGeneralManager) {
-    if (caps.isManager && user.branch_id) {
+  const isGlobal = caps.isGeneralManager && !user.branch_id;
+  if (!isGlobal) {
+    if (user.branch_id) {
       query = query.eq("branch_id", user.branch_id);
     } else if (!caps.isManager) {
-      // الموظف العادي: عملاء فرعه فقط
-      if (user.branch_id) {
-        query = query.eq("branch_id", user.branch_id);
-      } else {
-        query = query.eq("assigned_user_id", user.id);
-      }
+      // الموظف العادي: عملاء فرعه فقط، إذا لم يكن له فرع نربطه بـ assigned_user_id
+      query = query.eq("assigned_user_id", user.id);
     }
   }
 

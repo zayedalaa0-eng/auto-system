@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Download, Phone, X, Share2 } from "lucide-react";
 import html2canvas from "html2canvas";
+import { getColorSwatch } from "@/lib/colors";
 
 type QuotationModalProps = {
   isOpen: boolean;
@@ -123,7 +124,23 @@ export function QuotationModal({ isOpen, onClose, customerName, car, branchName 
                   {color && (
                     <div>
                       <div className="text-xs text-slate-500 mb-1">اللون</div>
-                      <div className="font-semibold text-slate-800">{color}</div>
+                      <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                        {(() => {
+                          const swatch = getColorSwatch(color);
+                          return swatch ? (
+                            <span
+                              className="inline-block rounded-full border shadow-sm"
+                              style={{
+                                background: swatch.bg,
+                                borderColor: swatch.border,
+                                width: "12px",
+                                height: "12px",
+                              }}
+                            />
+                          ) : null;
+                        })()}
+                        {color}
+                      </div>
                     </div>
                   )}
                 </div>

@@ -532,35 +532,8 @@ export default function AddCustomerMiniApp() {
           <div style={{ fontSize: 20, fontWeight: 700, color: textColor, marginBottom: 6 }}>تم إضافة العميل!</div>
           <div style={{ fontSize: 14, color: hintColor, marginBottom: 24, lineHeight: 1.6 }}>تم حفظ بيانات العميل بنجاح</div>
 
-          {cardUrl && (
-            <button
-              onClick={() => { window.location.href = cardUrl; }}
-              style={{ width: "100%", padding: "13px", borderRadius: 12, border: "none", background: btnBg, color: btnText, fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}
-            >
-              👤 فتح بطاقة العميل
-            </button>
-          )}
           <button
             onClick={() => {
-              // إضافة عميل جديد — مسح كل الحقول
-              setSuccess(false);
-              setSavedCustomerId(null);
-              setFullName(""); setNickname(""); setAddress(""); setWhatsappPrefix("+970"); setPhone("");
-              setRcUseInventory(false); setRcSelectedCars([]); setRcNegotiations({});
-              setRcInventoryToAdd(""); setRcUseCustom(false);
-              setRcCustomType(""); setRcCustomYear(""); setRcCustomNeg("");
-              setRcNegError(null); setRcBranchId(""); setRcBranchInventory([]);
-              setTradeInModel(""); setTradeInChassis(""); setTradeInPrice("");
-              setNotes(""); setNextFollowUp("");
-              setOperationType("buyer");
-            }}
-            style={{ width: "100%", padding: "12px", borderRadius: 12, border: `1px solid ${borderColor}`, background: "transparent", color: textColor, fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 8 }}
-          >
-            ➕ إضافة عميل آخر
-          </button>
-          <button
-            onClick={() => {
-              // إرسال بيانات للبوت ثم إغلاق
               if (twa.current) {
                 try {
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -570,9 +543,9 @@ export default function AddCustomerMiniApp() {
                 }
               }
             }}
-            style={{ width: "100%", padding: "10px", borderRadius: 12, border: "none", background: "transparent", color: hintColor, fontSize: 13, cursor: "pointer" }}
+            style={{ width: "100%", padding: "13px", borderRadius: 12, border: "none", background: btnBg, color: btnText, fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}
           >
-            ✕ إنهاء وإغلاق
+            ✕ إغلاق
           </button>
         </div>
       </div>

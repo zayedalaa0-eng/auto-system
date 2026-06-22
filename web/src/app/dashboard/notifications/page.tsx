@@ -30,12 +30,13 @@ function getKindLabel(kind: KindFilter) {
 export default async function NotificationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ kind?: string; status?: string; q?: string }>;
+  searchParams: Promise<{ kind?: string; status?: string; q?: string; period?: string }>;
 }) {
-  const center = await getNotificationsCenter(220);
-  const { kind, status, q } = await searchParams;
+  const center = await getNotificationsCenter(500); // Increased limit to allow broader time search
+  const { kind, status, q, period } = await searchParams;
   const activeKind = (kind as KindFilter | undefined) ?? "all";
   const activeStatus = status ?? "all";
+  const activePeriod = period ?? "all";
   const query = (q ?? "").trim().toLowerCase();
 
   const kindCounts = center.items.reduce<Record<KindFilter, number>>(
@@ -47,23 +48,39 @@ export default async function NotificationsPage({
     { all: center.items.length, new_customer: 0, customer_update: 0, sales_opportunity: 0, followup: 0, other: 0 },
   );
 
+  const now = new Date();
+  
   const filtered = center.items.filter((item) => {
     const itemKind = getNotificationKind(item);
     if (activeKind !== "all" && itemKind !== activeKind) return false;
     if (activeStatus !== "all" && item.status !== activeStatus) return false;
+    
+    if (activePeriod !== "all") {
+      const itemDate = new Date(item.created_at);
+      const diffTime = Math.abs(now.getTime() - itemDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+      
+      if (activePeriod === "today" && diffDays > 1) return false;
+      if (activePeriod === "last_2_days" && diffDays > 2) return false;
+      if (activePeriod === "last_week" && diffDays > 7) return false;
+      if (activePeriod === "last_month" && diffDays > 30) return false;
+    }
+    
     if (!query) return true;
     const payloadSource = typeof item.payload?.source === "string" ? item.payload.source : "";
     const haystack = `${item.title ?? ""} ${item.message} ${item.recipient_label ?? ""} ${payloadSource}`.toLowerCase();
     return haystack.includes(query);
   });
 
-  const makeHref = (next: { kind?: string; status?: string; q?: string }) => {
+  const makeHref = (next: { kind?: string; status?: string; q?: string; period?: string }) => {
     const params = new URLSearchParams();
     const finalKind = next.kind ?? activeKind;
     const finalStatus = next.status ?? activeStatus;
+    const finalPeriod = next.period ?? activePeriod;
     const finalQ = next.q ?? q ?? "";
     if (finalKind && finalKind !== "all") params.set("kind", finalKind);
     if (finalStatus && finalStatus !== "all") params.set("status", finalStatus);
+    if (finalPeriod && finalPeriod !== "all") params.set("period", finalPeriod);
     if (finalQ.trim()) params.set("q", finalQ.trim());
     const text = params.toString();
     return text ? `/dashboard/notifications?${text}` : "/dashboard/notifications";
@@ -87,8 +104,15 @@ export default async function NotificationsPage({
           </div>
         </div>
 
-        <form method="get" action="/dashboard/notifications" className="mb-3 mt-3 grid gap-2 md:grid-cols-[1fr_180px_180px_auto]">
+        <form method="get" action="/dashboard/notifications" className="mb-3 mt-3 grid gap-2 md:grid-cols-[1fr_140px_140px_140px_auto]">
           <input className="legacy-input" name="q" defaultValue={q ?? ""} placeholder="بحث في التنبيهات..." />
+          <select className="legacy-select" name="period" defaultValue={activePeriod}>
+            <option value="all">كل الأوقات</option>
+            <option value="today">اليوم</option>
+            <option value="last_2_days">آخر يومين</option>
+            <option value="last_week">آخر أسبوع</option>
+            <option value="last_month">آخر شهر</option>
+          </select>
           <select className="legacy-select" name="status" defaultValue={activeStatus}>
             <option value="all">كل الحالات</option>
             <option value="unread">غير مقروء</option>

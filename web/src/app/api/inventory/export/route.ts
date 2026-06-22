@@ -26,13 +26,13 @@ export async function GET(req: NextRequest) {
     const branchFilter = sp.get("branch") ?? "";  // فلتر المعرض (للمدير العام)
     const qFilter      = normalize(sp.get("q") ?? "");
 
-    // ── أسماء المعارض + اسم معرض المستخدم (للتصنيف حسب المالك وكشف المعلم) ──
+    // ── أسماء المعارض + اسم معرض المستخدم (للتصنيف حسب المالك وكشف لمعلم) ──
     const { data: branchRows } = await supabase.from("branches").select("id, name").eq("is_active", true);
     const branchNameSet = new Set((branchRows ?? []).map(b => normalize(b.name as string)));
     const userBranchName = normalize(
       (branchRows ?? []).find(b => b.id === profile.branch_id)?.name as string ?? ""
     );
-    const isMuallim = userBranchName.includes("المعلم");
+    const isMuallim = userBranchName.includes("لمعلم");
 
     // ── جلب المخزون ──────────────────────────────────────────────────────────
     let query = supabase
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
       .order("updated_at", { ascending: false })
       .limit(1000);
 
-    // النطاق: المدير العام = الكل، معرض المعلم = الكل (cross-branch)، غيرهما = فرعه
+    // النطاق: المدير العام = الكل، معرض لمعلم = الكل (cross-branch)، غيرهما = فرعه
     if (!caps.isGeneralManager && profile.branch_id && !isMuallim) {
       query = query.eq("branch_id", profile.branch_id) as typeof query;
     }
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
       return Boolean(owner) && !branchNameSet.has(owner);
     };
 
-    // ── معرض المعلم: من المعارض الأخرى يأخذ فقط المعروضة (برسم البيع/استبدال/حيازة) ──
+    // ── معرض لمعلم: من المعارض الأخرى يأخذ فقط المعروضة (برسم البيع/استبدال/حيازة) ──
     if (isMuallim && !caps.isGeneralManager) {
       const ownNorm = userBranchName;
       items = items.filter(i => {
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
         const br = (i as any).branches;
         const bName = normalize((Array.isArray(br) ? br[0]?.name : br?.name) as string ?? "");
         if (bName === ownNorm) return true; // كل سيارات معرضه
-        // من المعارض الأخرى: فقط سيارات معروضة للبيع/استبدال/حيازة (تطابق جدول المعلم)
+        // من المعارض الأخرى: فقط سيارات معروضة للبيع/استبدال/حيازة (تطابق جدول لمعلم)
         const deal = normalize(i.deal_type as string);
         return deal.includes("برسم البيع") || deal.includes("استبدال") || deal.includes("حيازة");
       });

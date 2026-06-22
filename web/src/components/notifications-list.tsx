@@ -270,7 +270,7 @@ function NotificationCard({ item }: { item: NotificationsCenterItem }) {
             }}
           />
 
-          {/* زر رد التقييم لمدير معرض المعلم */}
+          {/* زر رد التقييم لمدير معرض لمعلم */}
           {item.notification_type === "trade_in_evaluation" &&
             Boolean((item.payload as Record<string,unknown>)?.customer_id) && (
             <EvaluationReplyForm item={item} />

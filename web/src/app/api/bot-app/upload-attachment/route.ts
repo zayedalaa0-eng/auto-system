@@ -62,9 +62,9 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (customer) {
-      const isGeneralManager = getRoleCapabilities(user.role, user.full_name).isGeneralManager;
+      const isGlobal = getRoleCapabilities(user.role, user.full_name).isGeneralManager && !user.branch_id;
       const canUpload =
-        isGeneralManager ||
+        isGlobal ||
         customer.branch_id === user.branch_id ||
         customer.assigned_user_id === user.id;
 

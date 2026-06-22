@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRoleCapabilities } from "@/lib/roles";
+import { logAuditAction } from "@/lib/audit";
 
 /**
  * POST /api/inventory/add
@@ -45,11 +46,11 @@ export async function POST(req: NextRequest) {
     .from("inventory")
     .insert({
       model: model.trim(),
-      production_year: production_year ? Number(production_year) : null,
+      production_year: production_year !== null && production_year !== undefined && production_year !== "" ? Number(production_year) : null,
       color: color?.trim() || null,
-      price: price ? Number(price) : null,
+      price: price !== null && price !== undefined && price !== "" ? Number(price) : null,
       chassis_no: chassis_no?.trim() || null,
-      mileage: mileage ? Number(mileage) : null,
+      mileage: mileage !== null && mileage !== undefined && mileage !== "" ? Number(mileage) : null,
       gearbox: gearbox?.trim() || null,
       fuel_type: fuel_type?.trim() || null,
       condition_label: condition_label?.trim() || null,
@@ -66,6 +67,15 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAuditAction({
+    action: "إضافة مخزون (سيارة)",
+    entity_type: "inventory",
+    entity_id: data.id,
+    details: { model: model.trim(), chassis_no: chassis_no?.trim() },
+    supabase,
+    actorId: profile.id
+  });
 
   return NextResponse.json({ ok: true, id: data.id });
 }

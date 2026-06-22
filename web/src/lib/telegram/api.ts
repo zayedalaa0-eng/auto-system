@@ -12,29 +12,98 @@ type ReplyKeyboardRemove = {
   remove_keyboard: true;
 };
 
+export function forceRTL(text: string | undefined): string | undefined;
+export function forceRTL(text: string): string;
+export function forceRTL(text: string | undefined): string | undefined {
+  if (!text) return text;
+  return text.split('\n').map(line => {
+    if (!line.trim()) return line;
+    const match = line.match(/^(\s*<[^>]+>\s*)+/);
+    if (match) {
+      return match[0] + '\u200F' + line.slice(match[0].length);
+    }
+    return '\u200F' + line;
+  }).join('\n');
+}
+
 type ForceReply = {
   force_reply: true;
   input_field_placeholder?: string;
 };
+
+function reverseMarkup(markup: any) {
+  if (!markup) return markup;
+  const newMarkup = { ...markup };
+  if (newMarkup.inline_keyboard) {
+    newMarkup.inline_keyboard = newMarkup.inline_keyboard.map((row: any[]) => [...row].reverse());
+  }
+  if (newMarkup.keyboard) {
+    newMarkup.keyboard = newMarkup.keyboard.map((row: any[]) => [...row].reverse());
+  }
+  return newMarkup;
+}
 
 export async function sendMessage(
   chatId: number | string,
   text: string,
   options?: {
     parseMode?: "HTML" | "Markdown";
-    replyMarkup?: ReplyKeyboardMarkup | ReplyKeyboardRemove | ForceReply;
+    replyMarkup?: ReplyKeyboardMarkup | ReplyKeyboardRemove | ForceReply | any;
     replyToMessageId?: number;
   },
 ) {
+  const finalMarkup = options?.replyMarkup ? reverseMarkup(options.replyMarkup) : undefined;
   const res = await fetch(`${getBaseUrl()}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: chatId,
-      text,
+      text: forceRTL(text),
       parse_mode: options?.parseMode ?? "HTML",
-      ...(options?.replyMarkup ? { reply_markup: options.replyMarkup } : {}),
+      ...(finalMarkup ? { reply_markup: finalMarkup } : {}),
       ...(options?.replyToMessageId ? { reply_to_message_id: options.replyToMessageId } : {}),
+    }),
+  });
+  return res.json();
+}
+
+export async function editMessageText(
+  chatId: number | string,
+  messageId: number,
+  text: string,
+  options?: {
+    parseMode?: "HTML" | "Markdown";
+    replyMarkup?: ReplyKeyboardMarkup | ReplyKeyboardRemove | ForceReply | any;
+  },
+) {
+  const finalMarkup = options?.replyMarkup ? reverseMarkup(options.replyMarkup) : undefined;
+  const res = await fetch(`${getBaseUrl()}/editMessageText`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      message_id: messageId,
+      text: forceRTL(text),
+      parse_mode: options?.parseMode ?? "HTML",
+      ...(finalMarkup ? { reply_markup: finalMarkup } : {}),
+    }),
+  });
+  return res.json();
+}
+
+export async function editMessageReplyMarkup(
+  chatId: number | string,
+  messageId: number,
+  replyMarkup: any,
+) {
+  const finalMarkup = replyMarkup ? reverseMarkup(replyMarkup) : undefined;
+  const res = await fetch(`${getBaseUrl()}/editMessageReplyMarkup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: finalMarkup,
     }),
   });
   return res.json();
@@ -48,14 +117,17 @@ export async function sendPhoto(
   chatId: number | string,
   photo: string,
   caption?: string,
+  replyMarkup?: any,
 ) {
+  const finalMarkup = replyMarkup ? reverseMarkup(replyMarkup) : undefined;
   const res = await fetch(`${getBaseUrl()}/sendPhoto`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: chatId,
       photo,
-      ...(caption ? { caption, parse_mode: "HTML" } : {}),
+      ...(caption ? { caption: forceRTL(caption), parse_mode: "HTML" } : {}),
+      ...(finalMarkup ? { reply_markup: finalMarkup } : {}),
     }),
   });
   return res.json();
@@ -74,7 +146,7 @@ export async function sendMediaGroup(
   const media = batch.map((url, i) => ({
     type: "photo",
     media: url,
-    ...(i === 0 && caption ? { caption, parse_mode: "HTML" } : {}),
+    ...(i === 0 && caption ? { caption: forceRTL(caption), parse_mode: "HTML" } : {}),
   }));
   const res = await fetch(`${getBaseUrl()}/sendMediaGroup`, {
     method: "POST",
@@ -82,6 +154,34 @@ export async function sendMediaGroup(
     body: JSON.stringify({ chat_id: chatId, media }),
   });
   return res.json();
+}
+
+/**
+ * يرسل ألبوم صور (MediaGroup) أو صورة واحدة أو نص فقط،
+ * وإذا كان هناك أزرار شفافة (Inline Keyboard) مع ألبوم صور، يرسلها كرسالة نصية منفصلة بعدها
+ * لأن تيليجرام لا يدعم الأزرار الشفافة مع الألبومات.
+ */
+export async function sendMediaWithKeyboard(
+  chatId: number | string,
+  photos: string[],
+  caption: string,
+  inlineKeyboard?: any[][],
+) {
+  if (photos.length > 1) {
+    await sendMediaGroup(chatId, photos.slice(0, 10), caption);
+    if (inlineKeyboard && inlineKeyboard.length > 0) {
+      await new Promise(r => setTimeout(r, 200));
+      await sendMessage(chatId, "الخيارات 👇", {
+        replyMarkup: { inline_keyboard: inlineKeyboard }
+      });
+    }
+  } else if (photos.length === 1) {
+    const replyMarkup = inlineKeyboard && inlineKeyboard.length > 0 ? { inline_keyboard: inlineKeyboard } : undefined;
+    await sendPhoto(chatId, photos[0], caption, replyMarkup);
+  } else {
+    const replyMarkup = inlineKeyboard && inlineKeyboard.length > 0 ? { inline_keyboard: inlineKeyboard } : undefined;
+    await sendMessage(chatId, caption, { replyMarkup });
+  }
 }
 
 export async function sendChatAction(chatId: number | string, action = "typing") {
@@ -107,7 +207,7 @@ export async function sendVoice(
     body: JSON.stringify({
       chat_id: chatId,
       voice,
-      ...(caption ? { caption, parse_mode: "HTML" } : {}),
+      ...(caption ? { caption: forceRTL(caption), parse_mode: "HTML" } : {}),
     }),
   });
   return res.json();
@@ -165,7 +265,7 @@ export function mainMenuKeyboard(
   if (isGeneralManager) {
     row4.push(BTN.STAFF);
   }
-  // زر خاص لمدير معرض المعلم
+  // زر خاص لمدير معرض لمعلم
   if (isMaalamMgr) {
     row5.push(BTN.EVAL);
   }
@@ -232,14 +332,14 @@ export async function sendMessageWithWebApp(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: chatId,
-      text,
+      text: forceRTL(text),
       parse_mode: "HTML",
-      reply_markup: {
+      reply_markup: reverseMarkup({
         inline_keyboard: [
           buttons.map((btn) => ({ text: btn.text, web_app: { url: btn.url } })),
           [{ text: "🏠 القائمة الرئيسية", callback_data: "main_menu" }],
         ],
-      } satisfies InlineKeyboardMarkup,
+      }) as InlineKeyboardMarkup,
     }),
   });
   const json = await res.json() as { ok: boolean; description?: string };
@@ -298,12 +398,15 @@ export async function sendMessageWithInlineKeyboard(
   text: string,
   inlineKeyboard: Array<Array<{ text: string; callback_data?: string; web_app?: { url: string } }>>,
 ) {
+  const finalMarkup = reverseMarkup({ inline_keyboard: inlineKeyboard });
   const res = await fetch(`${getBaseUrl()}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      chat_id: chatId, text, parse_mode: "HTML",
-      reply_markup: { inline_keyboard: inlineKeyboard },
+      chat_id: chatId,
+      text: forceRTL(text),
+      parse_mode: "HTML",
+      reply_markup: finalMarkup,
     }),
   });
   return res.json();
@@ -319,7 +422,7 @@ export async function sendMessageWithWebAppList(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: chatId,
-      text,
+      text: forceRTL(text),
       parse_mode: "HTML",
       reply_markup: {
         inline_keyboard: [

@@ -1,4 +1,4 @@
-﻿import { hasSupabaseEnv } from "@/lib/env";
+import { hasSupabaseEnv } from "@/lib/env";
 import { getRoleCapabilities, type RoleCapabilities } from "@/lib/roles";
 import {
   ALL_CUSTOMER_STATUSES,
@@ -19,6 +19,7 @@ export type DashboardProfile = {
   full_name: string;
   role: string;
   branch_id: string | null;
+  branch_name?: string | null;
 };
 
 export type DashboardMetric = {
@@ -128,6 +129,7 @@ export type ReminderItem = {
   assigned_user_name: string | null;
   assigned_user_id: string | null;
   branch_id: string | null;
+  customer_id: string | null;
 };
 
 export type DashboardOverview = {
@@ -140,6 +142,7 @@ export type DashboardOverview = {
   followUps: CustomerItem[];
   recentCustomers: CustomerItem[];
   recentInventory: InventoryItem[];
+  unavailableRequests: CustomerItem[];
 };
 
 export type NotificationsCenterItem = {
@@ -698,6 +701,14 @@ async function getScopedProfile() {
   const { profile } = await getDashboardContext();
   const capabilities = getRoleCapabilities(profile?.role, profile?.full_name);
 
+  if (profile && profile.branch_id && !profile.branch_name) {
+    const supabase = await createClient();
+    const { data: b } = await supabase.from("branches").select("name").eq("id", profile.branch_id).maybeSingle();
+    if (b) {
+      profile.branch_name = b.name;
+    }
+  }
+
   return {
     profile,
     capabilities,
@@ -740,36 +751,63 @@ export async function getDashboardMetrics(): Promise<DashboardMetric[]> {
   const branchId = profile?.branch_id ?? null;
 
   const customersCountQuery = supabase.from("customers").select("*", { count: "exact", head: true });
-  const inventoryCountQuery = supabase.from("inventory").select("*", { count: "exact", head: true });
   const remindersCountQuery = supabase.from("reminders").select("*", { count: "exact", head: true }).eq("status", "pending");
-  const notificationsCountQuery = supabase.from("notifications").select("*", { count: "exact", head: true }).eq("status", "unread");
+  
+  const inventoryQuery = supabase.from("inventory").select("condition_label, owner_name, source_customer_id, deal_type, is_active, availability_status");
 
-  const [customersResult, inventoryResult, remindersResult, notificationsResult] = await Promise.all([
+  const [customersResult, inventoryResult, remindersResult, branchesResult] = await Promise.all([
     applyBranchScope(customersCountQuery, branchId, capabilities.isGeneralManager) as typeof customersCountQuery,
-    applyBranchScope(inventoryCountQuery, branchId, capabilities.isGeneralManager) as typeof inventoryCountQuery,
+    applyBranchScope(inventoryQuery, branchId, capabilities.isGeneralManager) as typeof inventoryQuery,
     applyBranchScope(
       remindersCountQuery,
       branchId,
       capabilities.isGeneralManager,
     ) as typeof remindersCountQuery,
-    applyBranchScope(
-      notificationsCountQuery,
-      branchId,
-      capabilities.isGeneralManager,
-      "recipient_branch_id",
-    ) as typeof notificationsCountQuery,
+    supabase.from("branches").select("name").eq("is_active", true)
   ]);
 
   const customersCount = "count" in customersResult ? customersResult.count : 0;
-  const inventoryCount = "count" in inventoryResult ? inventoryResult.count : 0;
   const remindersCount = "count" in remindersResult ? remindersResult.count : 0;
-  const notificationsCount = "count" in notificationsResult ? notificationsResult.count : 0;
+
+  let newCars = 0;
+  let usedCars = 0;
+  let customerCars = 0;
+
+  const branchNameSet = new Set((branchesResult.data ?? []).map(b => (b.name ?? "").trim().toLowerCase()));
+
+  for (const item of (inventoryResult.data ?? [])) {
+    // Only count active cars
+    if (!item.is_active) continue;
+    
+    // Skip sold or withdrawn cars from the dashboard count
+    const status = (item.availability_status ?? "").trim();
+    if (status.includes("مباع") || status.includes("مباعة") || status.includes("مسحوب") || status === "sold" || status === "withdrawn") {
+       continue;
+    }
+
+    const owner = (item.owner_name ?? "").trim().toLowerCase();
+    const isCustomer = Boolean(owner) && !branchNameSet.has(owner);
+    const deal = (item.deal_type ?? "").trim();
+    const isCustomerCar = isCustomer || Boolean(item.source_customer_id) || ["استبدال", "حيازة", "برسم البيع"].includes(deal);
+
+    if (isCustomerCar) {
+      customerCars++;
+    } else {
+      const condition = (item.condition_label ?? "").trim();
+      if (condition === "جديدة" || condition === "جديد" || condition === "زيرو") {
+        newCars++;
+      } else {
+        usedCars++;
+      }
+    }
+  }
 
   return [
-    { label: "العملاء", value: customersCount ?? 0, hint: "إجمالي السجلات النشطة داخل قاعدة البيانات", tone: "sky" },
-    { label: "المخزون", value: inventoryCount ?? 0, hint: "كل المركبات المسجلة على الويب الجديد", tone: "emerald" },
+    { label: "العملاء", value: customersCount ?? 0, hint: "إجمالي السجلات النشطة", tone: "sky" },
+    { label: "سيارات جديدة", value: newCars, hint: "مركبات المعرض الجديدة", tone: "emerald" },
+    { label: "سيارات مستعملة", value: usedCars, hint: "مركبات المعرض المستعملة", tone: "emerald" },
+    { label: "سيارات العملاء", value: customerCars, hint: "سيارات معروضة للعملاء", tone: "emerald" },
     { label: "المهام المفتوحة", value: remindersCount ?? 0, hint: "المهام التي لم تُغلق بعد", tone: "amber" },
-    { label: "تنبيهات غير مقروءة", value: notificationsCount ?? 0, hint: "المركز اليومي يحتاج مراجعة", tone: "rose" },
   ];
 }
 
@@ -805,7 +843,7 @@ export async function getInventoryFilterContext(): Promise<InventoryFilterContex
     isManager: capabilities.isManager,
     branchId: profile?.branch_id ?? null,
     branchName,
-    isMuallimBranch: (branchName ?? "").includes("المعلم"),
+    isMuallimBranch: (branchName ?? "").includes("لمعلم"),
     branches,
     branchObjects,
   };
@@ -1181,7 +1219,7 @@ export async function getInventoryDirectory(
     .eq("id", profile.branch_id)
     .maybeSingle();
   const branchName = (branchRow?.name ?? "").trim();
-  const isMuallimBranch = branchName.includes("المعلم");
+  const isMuallimBranch = branchName.includes("لمعلم");
   if (!isMuallimBranch) {
     return scopedItems;
   }
@@ -1291,6 +1329,7 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
       followUps: [],
       recentCustomers: [],
       recentInventory: [],
+      unavailableRequests: [],
     };
   }
 
@@ -1316,21 +1355,27 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
     .eq("is_active", true)
     .order("next_follow_up_at", { ascending: true });
 
-  const dashboardNotificationsQuery = supabase
-    .from("notifications")
-    .select("id, message, status, created_at, recipient_label")
-    .order("created_at", { ascending: false });
+  const dashboardUnavailableRequestsQuery = supabase
+    .from("customers")
+    .select(
+      "id, full_name, nickname, phone, requested_car, payment_plan, status, next_follow_up_at, assigned_user_id, branch_id, source, is_active, last_contact_at, notes, created_at, updated_at, visit_count, operation_type, metadata, branches(name), app_users(full_name)",
+    )
+    .eq("is_active", true)
+    .not("requested_car", "is", null)
+    .neq("requested_car", "")
+    .order("updated_at", { ascending: false });
+
   const dashboardRemindersQuery = supabase
     .from("reminders")
     .select(
-      "id, title, message, due_at, status, assigned_user_id, branch_id, branches(name), customers(full_name), app_users(full_name)",
+      "id, title, message, due_at, status, assigned_user_id, branch_id, customer_id, branches(name), customers(full_name), app_users(full_name)",
     )
     .order("due_at", { ascending: true });
 
   const [
     metrics,
     { data: followUpRows },
-    { data: notificationRows },
+    { data: unavailableRows },
     { data: reminderRows },
   ] = await Promise.all([
     getDashboardMetrics(),
@@ -1340,16 +1385,10 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
       capabilities.isManager,
     ) as typeof dashboardFollowUpsQuery).limit(6),
     (applyStaffScope(
-      applyBranchScope(
-        dashboardNotificationsQuery,
-        branchId,
-        capabilities.isGeneralManager,
-        "recipient_branch_id",
-      ) as typeof dashboardNotificationsQuery,
+      applyBranchScope(dashboardUnavailableRequestsQuery, branchId, capabilities.isGeneralManager) as typeof dashboardUnavailableRequestsQuery,
       userId,
       capabilities.isManager,
-      "recipient_user_id",
-    ) as typeof dashboardNotificationsQuery).limit(6),
+    ) as typeof dashboardUnavailableRequestsQuery).limit(50),
     (applyStaffScope(
       applyBranchScope(dashboardRemindersQuery, branchId, capabilities.isGeneralManager) as typeof dashboardRemindersQuery,
       userId,
@@ -1359,20 +1398,23 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
 
   // المتابعات جاءت مُفلترة مسبقاً من DB — نحوّلها مباشرة
   const followUps = (followUpRows ?? []).map(mapCustomerRow);
+  
+  const enrichedUnavailableRequests = await enrichCustomersWithSaleOfferInReport(
+    (unavailableRows ?? []).map(mapCustomerRow),
+    supabase
+  );
+  
+  const unavailableRequests = enrichedUnavailableRequests.filter(c => {
+     return !c.inventory_availability || !c.inventory_availability.includes("متوفرة");
+  });
 
   return {
     metrics,
     customerStatus: [],   // غير مستخدمة حالياً — مجال لتوسع مستقبلي
     inventoryStatus: [],  // غير مستخدمة حالياً
     branches: [],         // غير مستخدمة حالياً
-    notifications: (notificationRows ?? []).map((item) => ({
-      id: item.id,
-      message: item.message,
-      status: item.status,
-      created_at: item.created_at,
-      recipient_label: item.recipient_label,
-    })),
-    reminders: (reminderRows ?? []).map((item) => ({
+    notifications: [],
+    reminders: (reminderRows ?? []).map((item: any) => ({
       id: item.id,
       title: item.title,
       message: item.message,
@@ -1383,10 +1425,12 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
       assigned_user_name: getRelationshipFullName(item.app_users),
       assigned_user_id: item.assigned_user_id ?? null,
       branch_id: item.branch_id ?? null,
+      customer_id: item.customer_id ?? null,
     })),
     followUps,
     recentCustomers: [],
     recentInventory: [],
+    unavailableRequests,
   };
 }
 
@@ -1824,7 +1868,7 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
   const AR_SOLD_F = "مباعة";
   const AR_RESERVED = "محجوز";
   const AR_WITHDRAWN = "مسحوب";
-  const AR_MUALLIM = "المعلم";
+  const AR_MUALLIM = "لمعلم";
   const AR_DEAL_SWAP = "استبدال";
   const AR_DEAL_HIAZA = "حيازة";
   const AR_DEAL_CONSIGN = "برسم البيع";
@@ -1952,9 +1996,12 @@ export async function getCustomerById(customerId: string): Promise<CustomerDetai
     )
     .eq("id", customerId);
 
+  const isMuallim = (profile?.branch_name ?? "").includes("لمعلم");
+  const bypassScope = capabilities.isGeneralManager || (isMuallim && capabilities.isManager);
+
   const [{ data: customer }, { data: logs }, { data: reminders }, { data: attachments }, { data: tradeIns }] =
     await Promise.all([
-      (applyBranchScope(customerQuery, branchId, capabilities.isGeneralManager) as typeof customerQuery).maybeSingle(),
+      (applyBranchScope(customerQuery, branchId, bypassScope) as typeof customerQuery).maybeSingle(),
       // admin لتجاوز RLS — السجلات المُدخلة من البوت/المني-آب قد لا تكون مرئية للـ RLS العادي
       (hasSupabaseServiceRoleEnv() ? createAdminClient() : supabase)
         .from("customer_logs")
@@ -1965,7 +2012,7 @@ export async function getCustomerById(customerId: string): Promise<CustomerDetai
       supabase
         .from("reminders")
         .select(
-          "id, title, message, due_at, status, assigned_user_id, branch_id, branches(name), customers(full_name), app_users(full_name)",
+          "id, title, message, due_at, status, assigned_user_id, branch_id, customer_id, branches(name), customers(full_name), app_users(full_name)",
         )
         .eq("customer_id", customerId)
         .order("created_at", { ascending: false })
@@ -2123,6 +2170,7 @@ export async function getCustomerById(customerId: string): Promise<CustomerDetai
       assigned_user_name: getRelationshipFullName(item.app_users),
       assigned_user_id: item.assigned_user_id ?? null,
       branch_id: item.branch_id ?? null,
+      customer_id: item.customer_id ?? null,
     })),
     attachments: attachmentsWithUrls,
     tradeIns: (tradeIns ?? []).map((item) => ({
@@ -2213,9 +2261,9 @@ export async function getDataQualityCounts(): Promise<{
   const { profile, capabilities } = await getScopedProfile();
   const branchId = profile?.branch_id ?? null;
 
-  const base = supabase.from("customers").select("*", { count: "exact", head: true });
-  const scoped = (q: typeof base) =>
-    applyBranchScope(q, branchId, capabilities.isGeneralManager) as typeof base;
+  const createBase = () => supabase.from("customers").select("*", { count: "exact", head: true });
+  const scoped = (q: ReturnType<typeof createBase>) =>
+    applyBranchScope(q, branchId, capabilities.isGeneralManager) as ReturnType<typeof createBase>;
 
   const [
     { count: active },
@@ -2223,10 +2271,10 @@ export async function getDataQualityCounts(): Promise<{
     { count: missingFollowup },
     { count: missingRequestedCar },
   ] = await Promise.all([
-    scoped(base.eq("is_active", true)),
-    scoped(base.eq("is_active", false)),
-    scoped(base.eq("is_active", true).is("next_follow_up_at", null)),
-    scoped(base.eq("is_active", true).or("requested_car.is.null,requested_car.eq.")),
+    scoped(createBase().eq("is_active", true)),
+    scoped(createBase().eq("is_active", false)),
+    scoped(createBase().eq("is_active", true).is("next_follow_up_at", null)),
+    scoped(createBase().eq("is_active", true).or("requested_car.is.null,requested_car.eq.")),
   ]);
 
   return {
@@ -2425,6 +2473,8 @@ export type PendingEvaluationItem = {
   photos: Array<{ id: string; public_url: string; file_name: string }>;
   // موظفو الفرع (لزر التذكير) — يشمل مدير الفرع والموظفين والمدير العام
   branch_staff: EvaluationStaffMember[];
+  // السجل التاريخي للعميل
+  logs: Array<{ actor_name: string | null; action: string | null; details: string | null; created_at: string }>;
 };
 
 export async function getPendingEvaluationWithDetails(): Promise<PendingEvaluationItem[]> {
@@ -2438,13 +2488,16 @@ export async function getPendingEvaluationWithDetails(): Promise<PendingEvaluati
   const query = supabase
     .from("customers")
     .select(
-      "id, full_name, phone, status, operation_type, requested_car, notes, branch_id, assigned_user_id, branches(name), app_users(full_name), trade_ins(id, model, color, production_year, mileage, price, chassis_no, inspection, status, is_active)",
+      "id, full_name, phone, status, operation_type, requested_car, notes, branch_id, assigned_user_id, branches(name), app_users(full_name), trade_ins(id, model, color, production_year, mileage, price, chassis_no, inspection, status, is_active), customer_logs(actor_name, action, details, created_at)",
     )
-    .or("status.ilike.%التقييم%")
+    .or("status.ilike.%تحت التقييم%,status.ilike.%بانتظار التقييم%")
     .eq("is_active", true);
 
+  const isMuallim = (profile?.branch_name ?? "").includes("لمعلم");
+  const bypassScope = capabilities.isGeneralManager || (isMuallim && capabilities.isManager);
+
   const scoped = applyStaffScope(
-    applyBranchScope(query, branchId, capabilities.isGeneralManager) as typeof query,
+    applyBranchScope(query, branchId, bypassScope) as typeof query,
     userId,
     capabilities.isManager,
   ) as typeof query;
@@ -2530,6 +2583,14 @@ export async function getPendingEvaluationWithDetails(): Promise<PendingEvaluati
       trade_in_status: (t?.status as string | null) ?? null,
       photos: photosByCustomer.get(customer.id) ?? [],
       branch_staff: uniqueStaff,
+      logs: Array.isArray(customer.customer_logs)
+        ? (customer.customer_logs as any[]).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((l) => ({
+            actor_name: l.actor_name,
+            action: l.action,
+            details: l.details,
+            created_at: l.created_at,
+          }))
+        : [],
     };
   });
 

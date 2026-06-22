@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     if (key in fields) {
       const v = fields[key];
       if (key === "production_year" || key === "price" || key === "mileage") {
-        payload[key] = v ? Number(v) : null;
+        payload[key] = v !== null && v !== undefined && v !== "" ? Number(v) : null;
       } else if (typeof v === "string") {
         payload[key] = v.trim() || null;
       } else {

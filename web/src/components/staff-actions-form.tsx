@@ -17,7 +17,7 @@ type Action = "invite" | "password" | "instruction";
 const ACTIONS: { value: Action; label: string; icon: React.ElementType; color: string }[] = [
   { value: "invite",      label: "تعيين موظف جديد",           icon: UserPlus, color: "sky"   },
   { value: "password",    label: "إرسال رابط تغيير كلمة المرور", icon: KeyRound, color: "amber" },
-  { value: "instruction", label: "إرسال توجيه للموظفين",       icon: Send,     color: "red"   },
+  { value: "instruction", label: "إدارة الموظفين",       icon: Send,     color: "red"   },
 ];
 
 type Props = {
@@ -29,6 +29,7 @@ type Props = {
 export function StaffActionsForm({ staff, branches, isGeneralManager }: Props) {
   const [action, setAction] = useState<Action>("invite");
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isConfirmed, setIsConfirmed] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   const current = ACTIONS.find((a) => a.value === action)!;
@@ -63,8 +64,10 @@ export function StaffActionsForm({ staff, branches, isGeneralManager }: Props) {
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     if (!needsConfirm) return;
-    e.preventDefault();
-    setShowConfirm(true);
+    if (!isConfirmed) {
+      e.preventDefault();
+      setShowConfirm(true);
+    }
   }
 
   return (
@@ -144,7 +147,7 @@ export function StaffActionsForm({ staff, branches, isGeneralManager }: Props) {
         </div>
       )}
 
-      {/* ── حقول إرسال توجيه ── */}
+      {/* ── حقول إرسال توجيه / إدارة الموظفين ── */}
       {action === "instruction" && (
         <div className="grid gap-3">
           <StaffAdminForm
@@ -153,13 +156,6 @@ export function StaffActionsForm({ staff, branches, isGeneralManager }: Props) {
             isGeneralManager={isGeneralManager}
           />
           <input type="hidden" name="recipient_mode" value="single" />
-          <textarea
-            name="message"
-            required
-            className="legacy-textarea"
-            rows={3}
-            placeholder="اكتب التوجيه هنا ليصل كتنبيه داخلي..."
-          />
         </div>
       )}
 
@@ -170,14 +166,18 @@ export function StaffActionsForm({ staff, branches, isGeneralManager }: Props) {
 
     <ConfirmDialog
       open={showConfirm}
-      title="إرسال توجيه للموظفين"
-      description="أنت على وشك إرسال توجيه إداري. سيصل كتنبيه داخلي للموظف أو الموظفين المختارين فوراً."
-      confirmLabel="إرسال التوجيه"
+      title="تأكيد الإجراء"
+      description="أنت على وشك تنفيذ إجراء إداري، هل أنت متأكد؟"
+      confirmLabel="تنفيذ"
       variant="warning"
       onClose={() => setShowConfirm(false)}
       onConfirm={() => {
         setShowConfirm(false);
-        formRef.current?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: false }));
+        setIsConfirmed(true);
+        setTimeout(() => {
+          formRef.current?.requestSubmit();
+          setIsConfirmed(false);
+        }, 0);
       }}
     />
     </>

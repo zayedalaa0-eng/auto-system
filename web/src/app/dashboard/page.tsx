@@ -3,10 +3,15 @@ import { Bell, CalendarClock, ChartBar, CircleAlert, Clock, FolderKanban, IdCard
 
 import { sendQuickReminderAction } from "@/app/dashboard/actions";
 import { StatusPill } from "@/components/status-pill";
-import { getDataQualityCounts, getDashboardOverview, getEmployeeDashboardStats, getLicenseAlertText, getOperationalAlerts } from "@/lib/data";
+import { AgendaCustomerCard } from "@/components/agenda-customer-card";
+import { CustomerForm } from "@/components/customer-form";
+import { CustomerModalShell } from "@/components/customer-modal-shell";
+import { CustomerProfileContent } from "@/components/customer-profile-content";
+import { getDataQualityCounts, getDashboardOverview, getEmployeeDashboardStats, getLicenseAlertText, getOperationalAlerts, getPendingEvaluationWithDetails, getCustomerById, getCustomerFormOptions } from "@/lib/data";
 import { formatRelativeDate } from "@/lib/format";
 import { getRoleCapabilities } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/server";
+import { DashboardAccordion } from "@/components/dashboard-accordion";
 
 function DashboardReminderBtn({
   userId,
@@ -42,7 +47,15 @@ function DashboardReminderBtn({
   );
 }
 
-export default async function DashboardPage() {
+
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ customer?: string; mode?: string; focus?: string }>;
+}) {
+  const { customer: customerId, mode, focus } = await searchParams;
+
   // تحديد دور المستخدم
   const supabase = await createClient();
   const { data: { session } } = await supabase.auth.getSession();
@@ -52,11 +65,14 @@ export default async function DashboardPage() {
   const capabilities = getRoleCapabilities(profileRow?.role);
   const isEmployee = !capabilities.isManager;
 
-  const [overview, operational, quality, empStats] = await Promise.all([
+  const [overview, operational, quality, empStats, pendingEvaluation, selectedCustomer, options] = await Promise.all([
     getDashboardOverview(),
     getOperationalAlerts(),
     getDataQualityCounts(),
     isEmployee ? getEmployeeDashboardStats() : Promise.resolve(null),
+    getPendingEvaluationWithDetails(),
+    customerId ? getCustomerById(customerId) : Promise.resolve(null),
+    customerId ? getCustomerFormOptions() : Promise.resolve(null),
   ]);
   const { active: activeCount, closed: closedCount, missingFollowup, missingRequestedCar } = quality;
 
@@ -89,84 +105,52 @@ export default async function DashboardPage() {
           ))}
         </section>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          {/* المتابعات المتأخرة */}
-          <div className="legacy-card">
-            <div className="legacy-card-header mb-3">
-              <h3 className="legacy-title flex items-center gap-2">
-                <Clock className="h-4 w-4 text-rose-500" />
-                متابعاتي المتأخرة
-                {empStats.myOverdueFollowups > 0 && (
-                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-700">
-                    {empStats.myOverdueFollowups}
-                  </span>
-                )}
-              </h3>
-            </div>
-            {empStats.myOverdueList.length > 0 ? (
-              <div className="space-y-2">
-                {empStats.myOverdueList.map((c) => (
-                  <Link
-                    key={c.id}
-                    href={`/dashboard/customers?customer=${c.id}&mode=view`}
-                    className="flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 hover:bg-rose-100 transition-colors"
-                  >
-                    <div>
-                      <div className="font-semibold text-slate-900 text-sm">{c.full_name}</div>
-                      <div className="text-xs text-slate-500">{c.phone}</div>
-                    </div>
-                    <div className="text-left">
-                      <StatusPill value={c.status} />
-                      <div className="text-xs text-rose-600 mt-1">{formatRelativeDate(c.next_follow_up_at)}</div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-state text-sm">✅ لا توجد متابعات متأخرة</div>
-            )}
-          </div>
-
+        <div className="flex flex-col gap-4">
           {/* آخر العملاء */}
-          <div className="legacy-card">
-            <div className="legacy-card-header mb-3">
-              <h3 className="legacy-title flex items-center gap-2">
-                <UserCheck className="h-4 w-4 text-sky-500" />
-                آخر عملائي
-              </h3>
-            </div>
+          <DashboardAccordion title="آخر عملائي" icon={UserCheck} iconColor="text-sky-500" count={empStats.myRecentCustomers.length} badgeColor="#0284c7">
             {empStats.myRecentCustomers.length > 0 ? (
               <div className="space-y-2">
                 {empStats.myRecentCustomers.map((c) => (
-                  <Link
-                    key={c.id}
-                    href={`/dashboard/customers?customer=${c.id}&mode=view`}
-                    className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 hover:bg-slate-100 transition-colors"
-                  >
-                    <div className="font-semibold text-slate-900 text-sm">{c.full_name}</div>
-                    <div className="flex items-center gap-2">
-                      <StatusPill value={c.status} />
-                      {c.next_follow_up_at && (
-                        <span className="text-xs text-amber-600">{formatRelativeDate(c.next_follow_up_at)}</span>
-                      )}
-                    </div>
-                  </Link>
+                  <AgendaCustomerCard
+                    key={c.id} id={c.id} name={c.full_name!}
+                    sub1={`📌 ${c.status}`}
+                    sub2={c.next_follow_up_at ? `📅 ${formatRelativeDate(c.next_follow_up_at)}` : undefined}
+                    badge="جديد" badgeColor="#0284c7" detailBasePath={"/dashboard"}
+                  />
                 ))}
               </div>
             ) : (
               <div className="empty-state text-sm">لا يوجد عملاء بعد</div>
             )}
-          </div>
+          </DashboardAccordion>
         </div>
 
-        {/* نسبة الأداء */}
+        {/* نسبة الأداء والأهداف */}
         <div className="legacy-card">
           <div className="legacy-card-header mb-3">
             <h3 className="legacy-title flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-emerald-500" />
-              ملخص أدائي
+              أهدافي وملخص الأداء
             </h3>
           </div>
+
+          {/* شريط الأهداف (KPIs) */}
+          <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:bg-slate-800 dark:border-slate-700">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-bold text-slate-700 dark:text-slate-300">الهدف الشهري للمبيعات</span>
+              <span className="text-sm font-bold text-sky-600">{empStats.mySales} / 5 سيارات</span>
+            </div>
+            <div className="h-3 w-full rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+              <div 
+                className="h-full bg-sky-500 rounded-full transition-all duration-500" 
+                style={{ width: `${Math.min(100, (empStats.mySales / 5) * 100)}%` }} 
+              />
+            </div>
+            {empStats.mySales >= 5 && (
+              <div className="mt-2 text-xs font-bold text-emerald-600 text-center">🎉 مبروك! لقد حققت الهدف الشهري.</div>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 text-center">
             <div className="rounded-xl bg-slate-50 p-4">
               <div className="text-2xl font-bold text-slate-700">{empStats.myActiveCustomers + empStats.myClosedCustomers}</div>
@@ -208,208 +192,82 @@ export default async function DashboardPage() {
           <div className="text-4xl font-bold text-rose-600">{operational.incompleteTrades.length}</div>
           <div className="mt-2 font-bold text-slate-500">نواقص الاستبدال</div>
         </div>
-        <div className="stat-card" style={{ borderRightColor: "#f59e0b" }}>
-          <div className="text-4xl font-bold text-amber-600">{operational.licenseDue.length}</div>
-          <div className="mt-2 font-bold text-slate-500">تنبيهات الرخص</div>
-        </div>
       </section>
 
-      <section className="legacy-grid legacy-grid-2">
-        <div className="legacy-card">
-          <div className="legacy-card-header">
-            <h3 className="legacy-title">أقرب المتابعات</h3>
-            <CalendarClock className="h-5 w-5 text-amber-500" />
-          </div>
-          <div className="space-y-3">
-            {overview.followUps.length > 0 ? (
-              overview.followUps.map((customer) => (
-                <div key={customer.id} className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="font-bold text-slate-900">{customer.full_name}</div>
-                      <div className="mt-1 text-sm text-slate-600">
-                        {customer.branch_name ?? "بدون فرع"} | {customer.phone}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <StatusPill value={customer.status} />
-                      <DashboardReminderBtn
-                        userId={customer.assigned_user_id ?? null}
-                        branchId={customer.branch_id ?? null}
-                        label={customer.assigned_user_name ?? null}
-                        title={`متابعة: ${customer.full_name}`}
-                        message={`موعد متابعة العميل ${customer.full_name} (${customer.phone}) — الحالة: ${customer.status}`}
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-2 text-sm text-slate-700">
-                    السيارة: {customer.requested_car ?? "غير محدد"} | الموعد: {formatRelativeDate(customer.next_follow_up_at)}
-                  </div>
-                </div>
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        <div className="flex-1 flex flex-col gap-4 w-full">
+          <DashboardAccordion title="سيارات مطلوبة غير متوفرة" icon={CircleAlert} iconColor="text-red-500" count={overview.unavailableRequests.length} badgeColor="#ef4444">
+            {overview.unavailableRequests.length > 0 ? (
+              overview.unavailableRequests.map((req) => (
+                <AgendaCustomerCard
+                  key={req.id} id={req.id} name={req.full_name!}
+                  sub1={`🚗 ${req.requested_car ?? "غير محدد"}`}
+                  sub2={req.sale_offer_car ? `💡 فرصة بيع: ${req.sale_offer_car}` : `📌 غير متوفرة`}
+                  badge="مطلوبة" badgeColor="#ef4444" detailBasePath={"/dashboard"} linkQuery="?mode=view"
+                />
               ))
             ) : (
-              <div className="empty-state">لا توجد متابعات مجدولة بعد.</div>
+              <div className="empty-state">لا توجد طلبات سيارات غير متوفرة حالياً.</div>
             )}
-          </div>
+          </DashboardAccordion>
         </div>
 
-        <div className="legacy-card">
-          <div className="legacy-card-header">
-            <h3 className="legacy-title">المهام والتنبيهات القادمة</h3>
-            <FolderKanban className="h-5 w-5 text-sky-600" />
-          </div>
-          <div className="space-y-3">
-            {overview.reminders.length > 0 ? (
-              overview.reminders.map((reminder) => (
-                <div key={reminder.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="font-bold text-slate-900">{reminder.title ?? "تذكير بدون عنوان"}</div>
-                    <StatusPill value={reminder.status} />
-                  </div>
-                  <div className="mt-2 text-sm text-slate-600">
-                    {reminder.customer_name ?? "بدون عميل"} | {reminder.branch_name ?? "بدون فرع"}
-                  </div>
-                  <div className="mt-2 text-sm text-slate-700">{reminder.message ?? "لا توجد ملاحظات إضافية."}</div>
-                </div>
-              ))
-            ) : (
-              <div className="empty-state">لا توجد مهام ظاهرة حاليًا.</div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className="legacy-grid legacy-grid-2">
-        <div className="legacy-card">
-          <div className="legacy-card-header">
-            <h3 className="legacy-title">نواقص الاستبدال</h3>
-            <TriangleAlert className="h-5 w-5 text-red-500" />
-          </div>
-          <div className="space-y-3">
-            {operational.incompleteTrades.length > 0 ? (
-              operational.incompleteTrades.slice(0, 6).map((item) => (
-                <div key={item.trade_in_id} className="trade-issue-card">
-                  <div>
-                    <h6 className="fw-bold text-primary mb-1">{item.customer_name}</h6>
-                    <div className="small text-muted fw-bold">{item.trade_in_model}</div>
-                    <div className="small text-muted fw-bold">الموظف: {item.staff_name ?? "بدون موظف"} | المعرض: {item.branch_name ?? "بدون فرع"}</div>
-                    <div className="mt-2 text-sm font-semibold text-rose-700">النواقص: {item.trade_in_missing_fields.join("، ")}</div>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <DashboardReminderBtn
-                      userId={item.staff_id ?? null}
-                      branchId={item.branch_id ?? null}
-                      label={item.staff_name ?? null}
-                      title={`نواقص استبدال: ${item.customer_name}`}
-                      message={`يرجى إكمال بيانات الاستبدال للعميل ${item.customer_name} (${item.trade_in_model}). النواقص: ${item.trade_in_missing_fields.join("، ")}`}
-                    />
-                    <Link href={`/dashboard/customers?customer=${item.customer_id}&mode=edit`} className="legacy-btn legacy-btn-danger">
-                      إكمال البيانات
-                    </Link>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="empty-state">لا توجد نواقص استبدال حاليًا.</div>
-            )}
-          </div>
-        </div>
-
-        <div className="legacy-card">
-          <div className="legacy-card-header">
-            <h3 className="legacy-title">تنبيهات الرخص</h3>
-            <IdCard className="h-5 w-5 text-danger" />
-          </div>
-          <div className="space-y-3">
-            {operational.licenseDue.length > 0 ? (
-              operational.licenseDue.slice(0, 6).map((item) => (
-                <div key={item.trade_in_id} className="license-due-card">
-                  <div className="d-flex justify-content-between gap-3 align-items-center flex-wrap">
-                    <div>
-                      <h6 className="fw-bold text-danger mb-1">{getLicenseAlertText(item.trade_in_license_expiry)}</h6>
-                      <div className="fw-bold text-dark">{item.customer_name} | {item.trade_in_model}</div>
-                      <div className="license-due-card__meta">
-                        الرخصة: {item.trade_in_license_expiry ?? "-"} | الموظف: {item.staff_name ?? "بدون موظف"} | المعرض: {item.branch_name ?? "بدون فرع"}
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <DashboardReminderBtn
-                        userId={item.staff_id ?? null}
-                        branchId={item.branch_id ?? null}
-                        label={item.staff_name ?? null}
-                        title={`تحديث رخصة: ${item.customer_name}`}
-                        message={`يرجى تحديث رخصة سيارة العميل ${item.customer_name} (${item.trade_in_model}) — الرخصة: ${item.trade_in_license_expiry ?? "غير محدد"}`}
-                      />
-                      <Link href={`/dashboard/customers?customer=${item.customer_id}&mode=edit`} className="legacy-btn legacy-btn-danger">
-                        فتح وتحديث
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="empty-state">لا توجد رخص تحتاج متابعة.</div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className="legacy-grid legacy-grid-2">
-        <div className="legacy-card">
-          <div className="legacy-card-header">
-            <h3 className="legacy-title">آخر التنبيهات</h3>
-            <Bell className="h-5 w-5 text-red-500" />
-          </div>
-          <div className="space-y-3">
-            {overview.notifications.length > 0 ? (
-              overview.notifications.map((notification) => (
-                <div key={notification.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="font-bold text-slate-900">{notification.recipient_label ?? "تنبيه عام"}</div>
-                    <StatusPill value={notification.status} />
-                  </div>
-                  <div className="mt-2 text-sm text-slate-700">{notification.message}</div>
-                </div>
-              ))
-            ) : (
-              <div className="empty-state">لا توجد تنبيهات بعد.</div>
-            )}
-          </div>
-        </div>
-
-        <div className="legacy-card">
-          <div className="legacy-card-header">
-            <h3 className="legacy-title">جودة البيانات التشغيلية</h3>
-            <CircleAlert className="h-5 w-5 text-sky-600" />
-          </div>
-          <div className="space-y-3">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-700">الدورات النشطة</span>
-                <span className="text-lg font-extrabold text-emerald-700">{activeCount}</span>
-              </div>
+        <div className="w-full lg:w-80 shrink-0">
+          <div className="legacy-card sticky top-4">
+            <div className="legacy-card-header">
+              <h3 className="legacy-title">جودة البيانات التشغيلية</h3>
+              <CircleAlert className="h-5 w-5 text-sky-600" />
             </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-700">الدورات المغلقة</span>
-                <span className="text-lg font-extrabold text-slate-700">{closedCount}</span>
-              </div>
-            </div>
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-amber-800">ملفات نشطة بلا موعد متابعة</span>
-                <span className="text-lg font-extrabold text-amber-700">{missingFollowup}</span>
-              </div>
-            </div>
-            <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-rose-800">ملفات نشطة بلا سيارة مطلوبة</span>
-                <span className="text-lg font-extrabold text-rose-700">{missingRequestedCar}</span>
-              </div>
+            <div className="space-y-3">
+              <Link href="/dashboard/customers?status=active" className="block rounded-lg border border-slate-200 bg-white p-3 text-sm transition hover:bg-slate-50 hover:shadow-sm dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">الدورات النشطة</span>
+                  <span className="text-lg font-extrabold text-emerald-600">{activeCount}</span>
+                </div>
+              </Link>
+              <Link href="/dashboard/customers?status=closed" className="block rounded-lg border border-slate-200 bg-white p-3 text-sm transition hover:bg-slate-50 hover:shadow-sm dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">الدورات المغلقة</span>
+                  <span className="text-lg font-extrabold text-slate-500 dark:text-slate-400">{closedCount}</span>
+                </div>
+              </Link>
+              <Link href="/dashboard/customers?missing=followup" className="block rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm transition hover:bg-amber-100 hover:shadow-sm dark:bg-amber-900/20 dark:border-amber-800 dark:hover:bg-amber-900/40">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-amber-800 dark:text-amber-500">ملفات نشطة بلا موعد متابعة</span>
+                  <span className="text-lg font-extrabold text-amber-600">{missingFollowup}</span>
+                </div>
+              </Link>
+              <Link href="/dashboard/customers?missing=car" className="block rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm transition hover:bg-rose-100 hover:shadow-sm dark:bg-rose-900/20 dark:border-rose-800 dark:hover:bg-rose-900/40">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-rose-800 dark:text-rose-400">ملفات نشطة بلا سيارة مطلوبة</span>
+                  <span className="text-lg font-extrabold text-rose-600">{missingRequestedCar}</span>
+                </div>
+              </Link>
             </div>
           </div>
         </div>
-      </section>
+      </div>
+
+      {selectedCustomer && options ? (
+        <CustomerModalShell closeHref="/dashboard" title="">
+          {mode === "edit" ? (
+            <CustomerForm
+              customer={selectedCustomer}
+              options={options}
+              returnPath={`/dashboard?customer=${selectedCustomer.id}&mode=view`}
+            />
+          ) : (
+            <CustomerProfileContent
+              customer={selectedCustomer}
+              options={options}
+              isManager={capabilities.isManager}
+              initialOpenTradeEditor={focus === "trade"}
+              compactTradeOnly={focus === "trade"}
+              returnPath={`/dashboard?customer=${selectedCustomer.id}&mode=view`}
+            />
+          )}
+        </CustomerModalShell>
+      ) : null}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-﻿import { type NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { STATUS_BY_TYPE } from "@/lib/statuses";
 import { getRoleCapabilities } from "@/lib/roles";
@@ -76,8 +76,9 @@ export async function GET(req: NextRequest) {
     // ── فحص صلاحية العرض ────────────────────────────────────────────────────────
     // الموظف والمدير لا يمكنهما رؤية عملاء معارض أخرى
     const caps = getRoleCapabilities(user.role, user.full_name);
+    const isGlobal = caps.isGeneralManager && !user.branch_id;
     const canView =
-      caps.isGeneralManager ||
+      isGlobal ||
       customer.branch_id === user.branch_id ||
       user.id === customer.assigned_user_id;
 
@@ -115,9 +116,9 @@ export async function GET(req: NextRequest) {
 
     const isGeneralManager = caps.isGeneralManager;
 
-    // جلب قائمة المعارض للمدير العام فقط
+    // جلب قائمة المعارض للمدير العام فقط (إذا لم يكن مقيداً بفرع)
     let branches: { id: string; name: string }[] = [];
-    if (isGeneralManager) {
+    if (isGlobal) {
       const { data: branchesData } = await admin
         .from("branches")
         .select("id, name")
@@ -185,11 +186,11 @@ export async function GET(req: NextRequest) {
         });
       })(),
       canEdit:
-        isGeneralManager ||
+        isGlobal ||
         customer.branch_id === user.branch_id ||
         user.id === customer.assigned_user_id,
       isManager: caps.isManager,
-      isGeneralManager,
+      isGeneralManager: isGlobal,
       branches,
     });
   } catch (err) {

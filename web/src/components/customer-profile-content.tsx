@@ -26,6 +26,7 @@ import {
 import { convertToSellOnBehalfAction, convertToTradeInAction, deleteCustomerAction, saveCustomerProfileAction, sendQuickReminderAction, updateCustomerBasicInfoAction } from "@/app/dashboard/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { StatusPill } from "@/components/status-pill";
+import { getColorSwatch } from "@/lib/colors";
 import { VoiceRecorder } from "@/components/voice-recorder";
 import type { CustomerAttachmentItem, CustomerDetail, CustomerFormOptions } from "@/lib/data";
 import { PALESTINE_CITIES, CAR_MAKES } from "@/lib/suggestions";
@@ -714,12 +715,9 @@ export function CustomerProfileContent({
     setConfirmAction(opts);
   }
 
-  // ── مودال واتساب المعرض ──
-  const [showWaModal, setShowWaModal] = useState(false);
-  const [waMessage, setWaMessage] = useState("");
-  const [waSending, setWaSending] = useState(false);
-  const [waResult, setWaResult] = useState<{ ok: boolean; msg: string } | null>(null);
-  const waTextareaRef = useRef<HTMLTextAreaElement>(null);
+  // ── مودال واتساب المعرض (تم الإلغاء) ──
+  // علم تأكيد إتمام البيع — يمنع تكرار نافذة التأكيد عند إعادة الإرسال
+  const isSubmitConfirmed = useRef(false);
 
   // ── Edit basic info modal ──
   const [showEditBasic, setShowEditBasic] = useState(false);
@@ -959,7 +957,7 @@ export function CustomerProfileContent({
     // ── التحقق من اختيار سيارة/شاصي عند حالات البيع ────────────
     if (!needsInventoryChassis) {
       // ── تأكيد عند إتمام عملية البيع ──────────────────────────
-      if (currentStatus.includes("تمت عملية البيع")) {
+      if (currentStatus.includes("تمت عملية البيع") && !isSubmitConfirmed.current) {
         event.preventDefault();
         const form = event.currentTarget;
         const dealInput = form.querySelector<HTMLInputElement>("[name='deal_value']");
@@ -969,8 +967,12 @@ export function CustomerProfileContent({
           description: `سيتم تسجيل إتمام عملية البيع للعميل "${customer.full_name}"${dealInput?.value ? ` بقيمة ${dealVal}` : ""}. هذا الإجراء سيُغلق الملف نهائياً.`,
           confirmLabel: "تأكيد إتمام البيع",
           variant: "warning",
-          onConfirm: () => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: false })),
+          onConfirm: () => {
+            isSubmitConfirmed.current = true;
+            form.requestSubmit();
+          },
         });
+        return;
       }
       return;
     }
@@ -978,7 +980,7 @@ export function CustomerProfileContent({
     if (!selected) {
       event.preventDefault();
       window.alert("هذه الحالة تحتاج اختيار سيارة/شاصي من المخزون قبل الحفظ.");
-    } else if (currentStatus.includes("تمت عملية البيع")) {
+    } else if (currentStatus.includes("تمت عملية البيع") && !isSubmitConfirmed.current) {
       // ── تأكيد البيع مع سيارة مختارة ─────────────────────────
       event.preventDefault();
       const form = event.currentTarget;
@@ -989,7 +991,10 @@ export function CustomerProfileContent({
         description: `سيتم تسجيل إتمام عملية البيع للعميل "${customer.full_name}"${dealInput?.value ? ` بقيمة ${dealVal}` : ""}. هذا الإجراء سيُغلق الملف نهائياً.`,
         confirmLabel: "تأكيد إتمام البيع",
         variant: "warning",
-        onConfirm: () => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: false })),
+        onConfirm: () => {
+          isSubmitConfirmed.current = true;
+          form.requestSubmit();
+        },
       });
     }
   }
@@ -1210,31 +1215,15 @@ export function CustomerProfileContent({
             ) : null}
 
             <div className="flex flex-wrap gap-2 mt-1">
-              {/* زر واتساب شخصي — يفتح المحادثة على هاتف الموظف */}
               <a
                 href={buildWhatsAppHref(customer.whatsapp_prefix, customer.phone)}
                 target="_blank"
                 rel="noreferrer"
                 className="profile-whatsapp-btn"
+                style={{ background: "linear-gradient(135deg,#1da462,#128c7e)", color: "#fff", border: "none" }}
               >
-                <Phone className="h-4 w-4" /> واتساب شخصي
+                <Phone className="h-4 w-4" /> واتساب
               </a>
-
-              {/* زر واتساب المعرض — يرسل عبر API من رقم المعرض الرسمي */}
-              <button
-                type="button"
-                onClick={() => {
-                  const branch = options.branches.find((b) => b.id === customer.branch_id);
-                  setWaMessage(`السلام عليكم ${customer.full_name}،\nنتواصل معك من ${branch?.name ?? "المعرض"}.\n`);
-                  setWaResult(null);
-                  setShowWaModal(true);
-                  setTimeout(() => waTextareaRef.current?.focus(), 100);
-                }}
-                className="profile-whatsapp-btn"
-                style={{ background: "linear-gradient(135deg,#1da462,#128c7e)", color: "#fff" }}
-              >
-                <Phone className="h-4 w-4" /> واتساب المعرض
-              </button>
             </div>
           </div>
         </div>
@@ -1564,7 +1553,28 @@ export function CustomerProfileContent({
                     { label: "النوع", value: primaryTrade.model },
                     { label: "السعر", value: formatCurrency(primaryTrade.price) },
                     { label: "الشاصي", value: primaryTrade.chassis_no, ltr: true },
-                    { label: "اللون", value: primaryTrade.color },
+                    { 
+                      label: "اللون", 
+                      value: primaryTrade.color ? (
+                        <span className="flex items-center gap-1.5">
+                          {(() => {
+                            const swatch = getColorSwatch(primaryTrade.color);
+                            return swatch ? (
+                              <span
+                                className="inline-block rounded-full border shadow-sm"
+                                style={{
+                                  background: swatch.bg,
+                                  borderColor: swatch.border,
+                                  width: "12px",
+                                  height: "12px",
+                                }}
+                              />
+                            ) : null;
+                          })()}
+                          {primaryTrade.color}
+                        </span>
+                      ) : null
+                    },
                     { label: "السنة", value: primaryTrade.production_year?.toString() },
                     { label: "العداد", value: primaryTrade.mileage ? `${primaryTrade.mileage.toLocaleString("en-US")} كم` : null },
                     { label: "الرخصة", value: primaryTrade.license_expiry },
@@ -1850,16 +1860,27 @@ export function CustomerProfileContent({
                 }}
               />
 
-              <label className="legacy-inline-toggle">
-                <input
-                  type="checkbox"
-                  name="count_as_interaction"
-                  checked={countAsInteraction}
-                  onChange={(e) => setCountAsInteraction(e.target.checked)}
-                />
-                <span>{countAsInteraction ? "✓ احتساب كتواصل جديد" : "✗ لا تحتسب كتواصل"}</span>
-                <span className="legacy-inline-toggle__dot" />
-              </label>
+              <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+                <p className="text-sm font-bold text-emerald-800">طريقة التواصل (اختياري، تُضاف للملاحظات):</p>
+                <label className="flex items-center gap-2 text-sm text-emerald-700 font-medium">
+                  <input
+                    type="checkbox"
+                    name="contact_phone_whatsapp"
+                    className="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
+                    onChange={() => markDirty()}
+                  />
+                  التواصل من خلال اتصال هاتفي او تواصل واتس اب
+                </label>
+                <label className="flex items-center gap-2 text-sm text-emerald-700 font-medium">
+                  <input
+                    type="checkbox"
+                    name="contact_showroom_visit"
+                    className="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
+                    onChange={() => markDirty()}
+                  />
+                  من خلال زيارة المعرض
+                </label>
+              </div>
 
               <div className="profile-status-block">
                 <label className="legacy-label">تحديث الحالة النهائية</label>
@@ -2124,19 +2145,6 @@ export function CustomerProfileContent({
               )
             : (
                 <>
-                  {/* إشعار الموظف المسؤول (صاحب الملف) */}
-                  {customer.assigned_user_id && (
-                    <button
-                      type="button"
-                      onClick={handleSendReminder}
-                      disabled={isPendingReminder}
-                      className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
-                      title={`إشعار ${customer.assigned_user_name ?? "الموظف المسؤول"} عبر تيليغرام`}
-                    >
-                      <Send className="h-4 w-4" />
-                      {isPendingReminder ? "جاري الإرسال..." : `إشعار ${customer.assigned_user_name ?? "الموظف"}`}
-                    </button>
-                  )}
                   {/* إشعار مدير الفرع */}
                   {customer.branch_id && (
                     <button
@@ -2290,111 +2298,7 @@ export function CustomerProfileContent({
         />
       )}
 
-      {/* ── مودال إرسال رسالة واتساب من المعرض ── */}
-      {showWaModal && (
-        <div
-          className="legacy-album-overlay"
-          role="dialog"
-          aria-modal="true"
-          onClick={(e) => { if (e.target === e.currentTarget) setShowWaModal(false); }}
-        >
-          <div className="legacy-album-card" style={{ maxWidth: 480, width: "95%" }}>
-            {/* Header */}
-            <div className="legacy-album-head">
-              <span style={{ fontWeight: 700, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
-                <Phone className="h-4 w-4 text-emerald-600" />
-                إرسال واتساب من المعرض
-              </span>
-              <button
-                type="button"
-                className="legacy-album-close"
-                onClick={() => setShowWaModal(false)}
-                aria-label="إغلاق"
-                style={{ position: "static", width: 34, height: 34 }}
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
 
-            {/* Body */}
-            <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
-              <div style={{ fontSize: 13, color: "#64748b" }}>
-                إلى: <strong style={{ color: "#0f172a" }}>{customer.full_name}</strong>
-                {" · "}{(customer.whatsapp_prefix ?? "+966")} {customer.phone}
-              </div>
-
-              <textarea
-                ref={waTextareaRef}
-                value={waMessage}
-                onChange={(e) => setWaMessage(e.target.value)}
-                rows={5}
-                className="legacy-input"
-                placeholder="اكتب رسالتك هنا..."
-                style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.6 }}
-                disabled={waSending}
-              />
-
-              {waResult && (
-                <div
-                  style={{
-                    borderRadius: 10,
-                    padding: "10px 14px",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    background: waResult.ok ? "#ecfdf5" : "#fff1f2",
-                    color: waResult.ok ? "#065f46" : "#9f1239",
-                    border: `1px solid ${waResult.ok ? "#6ee7b7" : "#fecdd3"}`,
-                  }}
-                >
-                  {waResult.ok ? "✅ " : "⚠️ "}{waResult.msg}
-                </div>
-              )}
-
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button
-                  type="button"
-                  className="legacy-btn border"
-                  onClick={() => setShowWaModal(false)}
-                  disabled={waSending}
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="button"
-                  className="legacy-btn legacy-btn-info"
-                  disabled={waSending || !waMessage.trim()}
-                  onClick={async () => {
-                    setWaSending(true);
-                    setWaResult(null);
-                    try {
-                      const res = await fetch("/api/whatsapp-send", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ customer_id: customer.id, message: waMessage }),
-                      });
-                      const json = await res.json();
-                      if (res.ok) {
-                        setWaResult({ ok: true, msg: "تم الإرسال بنجاح ✓" });
-                        setTimeout(() => setShowWaModal(false), 1500);
-                      } else {
-                        setWaResult({ ok: false, msg: json.error ?? "فشل الإرسال" });
-                      }
-                    } catch {
-                      setWaResult({ ok: false, msg: "تعذّر الاتصال بالسيرفر" });
-                    } finally {
-                      setWaSending(false);
-                    }
-                  }}
-                >
-                  {waSending ? "جاري الإرسال..." : (
-                    <><Send className="h-4 w-4" /> إرسال</>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── مودال تعديل البيانات الأساسية ── */}
       {showEditBasic && (

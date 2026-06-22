@@ -3,7 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getRoleCapabilities } from "@/lib/roles";
 import { PHONE_ERROR_MESSAGE, isValidPhone, normalizePhone } from "@/lib/phone";
 import { isClosedStatus } from "@/lib/statuses";
-import { pushNewCustomerToManagers, pushEvaluationRequestToMaalamManager } from "@/lib/telegram/push";
+import { pushNewCustomerToManagers, pushEvaluationRequestToManagers } from "@/lib/telegram/push";
+import { logAuditAction } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -52,7 +53,8 @@ export async function POST(req: NextRequest) {
 
     // للمدير العام: يمكنه تحديد المعرض يدوياً
     // استخدام || بدلاً من ?? لتحويل السلسلة الفارغة "" إلى null
-    const resolvedBranchId = caps.isGeneralManager
+    const isGlobal = caps.isGeneralManager && !user.branch_id;
+    const resolvedBranchId = isGlobal
       ? ((bodyBranchId as string | null | undefined) || null)
       : (user.branch_id || null);
 
@@ -216,7 +218,7 @@ export async function POST(req: NextRequest) {
         if (invErr) console.error("[add-customer] inventory insert failed:", invErr.message);
       }
 
-      // ── إرسال طلب التقييم لمدير معرض المعلم (للاستبدال فقط) ─────────────
+      // ── إرسال طلب التقييم لمدير معرض لمعلم (للاستبدال فقط) ─────────────
       if (opCode === "buyer_tradein_pending" && ti.model?.trim() && inserted?.id) {
         // جلب اسم المعرض
         let branchNameStr: string | null = null;
@@ -224,7 +226,7 @@ export async function POST(req: NextRequest) {
           const { data: branchRow } = await admin.from("branches").select("name").eq("id", resolvedBranchId).maybeSingle();
           branchNameStr = branchRow?.name ?? null;
         }
-        void pushEvaluationRequestToMaalamManager({
+        void pushEvaluationRequestToManagers({
           tradeInId: insertedTi?.id ?? inserted.id,
           customerId: inserted.id,
           customerName: full_name.trim(),
@@ -232,6 +234,7 @@ export async function POST(req: NextRequest) {
           submitterUserId: user.id,
           submitterName: user.full_name,
           submitterChatId: String(chat_id),
+          branchId: resolvedBranchId,
           branchName: branchNameStr,
           car: {
             model: ti.model.trim(),
@@ -258,6 +261,14 @@ export async function POST(req: NextRequest) {
 
     // #16: إشعار المديرين (notifications + Telegram)
     if (inserted?.id) {
+      await logAuditAction({
+        action: "إضافة عميل جديد",
+        entity_type: "customer",
+        entity_id: inserted.id,
+        details: { name: full_name.trim(), phone: normalizedPhone, source: "telegram_bot" },
+        actorId: user.id
+      });
+
       // جلب اسم الفرع للإشعار
       let notifBranchName: string | null = null;
       if (resolvedBranchId) {

@@ -13,6 +13,9 @@ import {
   selectionKeyboard,
   sendChatAction,
   sendMessage,
+  sendPhoto,
+  sendMediaGroup,
+  sendMediaWithKeyboard,
   sendMessageWithInlineKeyboard,
   sendMessageWithWebApp,
   sendMessageWithWebAppList,
@@ -41,6 +44,8 @@ import { clearSession, getSession, setSession } from "./sessions";
 import { PHONE_LENGTH, normalizePhone } from "@/lib/phone";
 import { STATUS_BY_TYPE } from "@/lib/statuses";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getColorEmoji } from "@/lib/colors";
+import { getInventoryCarAttachments } from "@/lib/data";
 
 export type TelegramUpdate = {
   message?: {
@@ -82,7 +87,7 @@ function menuKeyboard(user: BotUser, isMaalamMgr = false) {
   return mainMenuKeyboard(user.capabilities.isManager, user.capabilities.isGeneralManager, isMaalamMgr);
 }
 
-// Cache: مدراء معرض المعلم (تُحسَب مرة لكل جلسة بوت)
+// Cache: مدراء معرض لمعلم (تُحسَب مرة لكل جلسة بوت)
 const maalamMgrCache = new Map<string, { value: boolean; ts: number }>();
 async function checkIsMaalamMgr(userId: string): Promise<boolean> {
   const cached = maalamMgrCache.get(userId);
@@ -152,6 +157,47 @@ function defaultFollowupDate() {
 
 // ─── /start & welcome ───────────────────────────────────────────────────────
 
+export async function sendMainMenu(chatId: number | string, user: BotUser) {
+  const isMaalam = await checkIsMaalamMgr(user.id);
+  const role = user.capabilities.isGeneralManager
+    ? "مدير عام 👑"
+    : user.capabilities.isManager
+      ? "مدير معرض 🏢"
+      : "موظف مبيعات 👤";
+
+  // Dynamic greeting based on Riyadh time (UTC+3)
+  const hour = (new Date().getUTCHours() + 3) % 24;
+  let greeting = "أهلاً بك";
+  if (hour >= 5 && hour < 12) greeting = "صباح الخير ☀️";
+  else if (hour >= 12 && hour < 18) greeting = "مساء الخير 🌤️";
+  else greeting = "مساء الخير 🌙";
+
+  let welcome = `${greeting}، <b>${escapeHtml(user.full_name)}</b> 👋\n\n`;
+  welcome += `<blockquote>🪪 <b>الصلاحية:</b> ${role}\n`;
+  if (user.branch_name) {
+    welcome += `🏢 <b>المعرض:</b> ${escapeHtml(user.branch_name)}\n`;
+  }
+  welcome += `</blockquote>\nاختر من القائمة أدناه:`;
+
+  // Dynamic banner based on branch
+  const { getAppUrl, sendPhoto } = require('./api');
+  const appUrl = getAppUrl();
+  let bannerUrl = `${appUrl}/logos/lemalem.jpg`; // Default
+
+  const branch = user.branch_name || "";
+  if (branch.includes("شيري")) {
+    bannerUrl = `${appUrl}/logos/chery.jpg`;
+  } else if (branch.includes("فورثنج") || branch.includes("فورثينج")) {
+    bannerUrl = `${appUrl}/logos/forthing.jpg`;
+  }
+
+  try {
+    return await sendPhoto(chatId, bannerUrl, welcome, menuKeyboard(user, isMaalam));
+  } catch (e) {
+    return sendMessage(chatId, welcome, { replyMarkup: menuKeyboard(user, isMaalam) });
+  }
+}
+
 async function handleStart(chatId: number, user: BotUser | null) {
   if (!user) {
     return sendMessage(
@@ -161,22 +207,7 @@ async function handleStart(chatId: number, user: BotUser | null) {
   }
 
   await clearSession(String(chatId));
-  const isMaalam = await checkIsMaalamMgr(user.id);
-
-  const role = user.capabilities.isGeneralManager
-    ? "مدير عام 👑"
-    : user.capabilities.isManager
-      ? "مدير معرض 🏢"
-      : "موظف مبيعات 👤";
-
-  let welcome = `أهلاً وسهلاً، <b>${escapeHtml(user.full_name)}</b> 👋\n\n`;
-  welcome += `<blockquote>🪪 <b>الصلاحية:</b> ${role}\n`;
-  if (user.branch_name) {
-    welcome += `🏢 <b>المعرض:</b> ${escapeHtml(user.branch_name)}\n`;
-  }
-  welcome += `</blockquote>\nاختر من القائمة أدناه:`;
-
-  return sendMessage(chatId, welcome, { replyMarkup: menuKeyboard(user, isMaalam) });
+  return sendMainMenu(chatId, user);
 }
 
 // ─── Cancel ─────────────────────────────────────────────────────────────────
@@ -200,7 +231,7 @@ function formatFollowupDate(iso: string | null): string {
   } catch { return ""; }
 }
 
-async function handleToday(chatId: number, user: BotUser) {
+export async function handleToday(chatId: number, user: BotUser) {
   await sendChatAction(chatId);
 
   let agenda: Awaited<ReturnType<typeof getAgendaData>>;
@@ -261,11 +292,12 @@ async function handleToday(chatId: number, user: BotUser) {
   if (agenda.followupsToday.length > 0) {
     text += `⏰ <b>متابعات اليوم (${agenda.followupsToday.length})</b>\n`;
     for (const [i, c] of agenda.followupsToday.entries()) {
-      const car = c.requested_car ? ` 🚗 ${escapeHtml(c.requested_car)}` : "";
       const dateStr = formatFollowupDate(c.next_follow_up_at);
-      text += `${i + 1}. <b>${escapeHtml(c.full_name)}</b>${car}\n`;
-      text += `   📌 ${escapeHtml(c.status)}${dateStr ? ` | 📅 ${dateStr}` : ""}\n`;
-      if (c.phone) text += `   📱 ${escapeHtml(c.phone)}\n`;
+      text += `<blockquote><b>${i + 1}. ${escapeHtml(c.full_name)}</b>\n`;
+      if (c.phone) text += `<b>📱 الهاتف:</b> <code>${escapeHtml(c.phone)}</code>\n`;
+      text += `<b>📌 الحالة:</b> ${escapeHtml(c.status)}${dateStr ? ` | 📅 ${dateStr}` : ""}\n`;
+      if (c.requested_car) text += `<b>🚗 السيارة:</b> ${escapeHtml(c.requested_car)}\n`;
+      text += `</blockquote>\n`;
     }
     text += "\n";
   }
@@ -274,11 +306,12 @@ async function handleToday(chatId: number, user: BotUser) {
   if (agenda.followupsOverdue.length > 0) {
     text += `⚠️ <b>متابعات متأخرة (${agenda.followupsOverdue.length})</b>\n`;
     for (const [i, c] of agenda.followupsOverdue.entries()) {
-      const car = c.requested_car ? ` 🚗 ${escapeHtml(c.requested_car)}` : "";
       const dateStr = formatFollowupDate(c.next_follow_up_at);
-      text += `${i + 1}. <b>${escapeHtml(c.full_name)}</b>${car}\n`;
-      text += `   📌 ${escapeHtml(c.status)}${dateStr ? ` | ⏰ ${dateStr}` : ""}\n`;
-      if (c.phone) text += `   📱 ${escapeHtml(c.phone)}\n`;
+      text += `<blockquote><b>${i + 1}. ${escapeHtml(c.full_name)}</b>\n`;
+      if (c.phone) text += `<b>📱 الهاتف:</b> <code>${escapeHtml(c.phone)}</code>\n`;
+      text += `<b>📌 الحالة:</b> ${escapeHtml(c.status)}${dateStr ? ` | ⏰ ${dateStr}` : ""}\n`;
+      if (c.requested_car) text += `<b>🚗 السيارة:</b> ${escapeHtml(c.requested_car)}\n`;
+      text += `</blockquote>\n`;
     }
     text += "\n";
   }
@@ -365,7 +398,7 @@ async function handleToday(chatId: number, user: BotUser) {
 
 // ─── My customers ───────────────────────────────────────────────────────────
 
-async function handleMy(chatId: number, user: BotUser) {
+async function handleMy(chatId: number, user: BotUser, messageId?: number) {
   await sendChatAction(chatId);
   const customers = await getMyCustomers(user);
 
@@ -381,19 +414,106 @@ async function handleMy(chatId: number, user: BotUser) {
     });
   }
 
-  let text = `👥 <b>العملاء النشطون — ${scopeLabel} (${customers.length}):</b>\n\n`;
-  for (const [i, c] of customers.entries()) {
-    text += `${i + 1}. <b>${escapeHtml(c.full_name)}</b>\n`;
-    text += `   📱 ${c.phone}\n`;
-    text += `   📌 ${escapeHtml(c.status)}\n`;
-    if (c.requested_car) text += `   🚗 ${escapeHtml(c.requested_car)}\n`;
-    if (user.capabilities.isGeneralManager && c.branch_name) {
-      text += `   🏢 ${escapeHtml(c.branch_name)}\n`;
-    }
-    text += "\n";
+  const newCount = customers.filter((c) => c.status === "جديد").length;
+  const followUpCount = customers.filter((c) => c.status.includes("متابعة")).length;
+
+  let text = `👥 <b>العملاء النشطون — ${scopeLabel} (${customers.length} الأحدث):</b>\n\nاختر الفئة التي تود عرضها من الأزرار أدناه:`;
+
+  const inlineRows: Array<Array<{ text: string; callback_data?: string; web_app?: { url: string } }>> = [];
+
+  const row1 = [];
+  if (newCount > 0) row1.push({ text: `🌟 جديد (${newCount})`, callback_data: "my_new" });
+  if (followUpCount > 0) row1.push({ text: `🔄 قيد المتابعة (${followUpCount})`, callback_data: "my_followup" });
+  if (row1.length > 0) inlineRows.push(row1);
+
+  const row2 = [];
+  row2.push({ text: `📋 عرض الكل (${customers.length})`, callback_data: "my_all" });
+  inlineRows.push(row2);
+
+  const appUrl = getAppUrl();
+  if (appUrl) {
+    inlineRows.push([{ text: "🔍 البحث والتصفح المتقدم", web_app: { url: `${appUrl}/bot-app/search?chat_id=${chatId}` } }]);
   }
 
-  return sendMessage(chatId, text.trimEnd(), { replyMarkup: menuKeyboard(user) });
+  if (messageId) {
+    try {
+      const { editMessageText } = require('./api');
+      return await editMessageText(chatId, messageId, text, { replyMarkup: { inline_keyboard: inlineRows } });
+    } catch (e) {
+      return await sendMessageWithInlineKeyboard(chatId, text, inlineRows);
+    }
+  }
+
+  return sendMessageWithInlineKeyboard(chatId, text, inlineRows);
+}
+
+async function handleMyCategory(chatId: number, user: BotUser, category: string, messageId?: number, page: number = 0) {
+  await sendChatAction(chatId);
+  const customers = await getMyCustomers(user);
+
+  const scopeLabel = user.capabilities.isGeneralManager
+    ? "جميع الفروع"
+    : user.capabilities.isManager
+      ? "فرعك"
+      : "ملفاتك";
+
+  let filtered = customers;
+  let title = `👥 جميع العملاء النشطين (${scopeLabel})`;
+
+  if (category === "new") {
+    filtered = customers.filter((c) => c.status === "جديد");
+    title = `🌟 عملاء (جديد) — ${scopeLabel}`;
+  } else if (category === "followup") {
+    filtered = customers.filter((c) => c.status.includes("متابعة"));
+    title = `🔄 عملاء (قيد المتابعة) — ${scopeLabel}`;
+  } else if (category === "all") {
+    filtered = customers;
+    title = `📋 جميع العملاء (${scopeLabel})`;
+  }
+
+  if (filtered.length === 0) {
+    return sendMessage(chatId, `لا يوجد عملاء في هذه الفئة حالياً.`);
+  }
+
+  const PAGE_SIZE = 5;
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE) || 1;
+  const safePage = Math.max(0, Math.min(page, totalPages - 1));
+  const startIndex = safePage * PAGE_SIZE;
+  const listToRender = filtered.slice(startIndex, startIndex + PAGE_SIZE);
+
+  let text = `<b>${title} (${filtered.length}):</b>\n\n`;
+  for (let idx = 0; idx < listToRender.length; idx++) {
+    const c = listToRender[idx];
+    const displayNum = startIndex + idx + 1;
+    text += `<blockquote><b>${displayNum}. ${escapeHtml(c.full_name)}</b>\n`;
+    text += `<b>📱 الهاتف:</b> <code>${c.phone}</code>\n`;
+    text += `<b>📌 الحالة:</b> ${escapeHtml(c.status)}\n`;
+    if (c.requested_car) text += `<b>🚗 السيارة:</b> ${escapeHtml(c.requested_car)}\n`;
+    if (user.capabilities.isGeneralManager && c.branch_name) {
+      text += `<b>🏢 الفرع:</b> ${escapeHtml(c.branch_name)}\n`;
+    }
+    text += `</blockquote>\n`;
+  }
+
+  const buttons = [];
+  const paginationRow = [];
+  if (safePage > 0) paginationRow.push({ text: "⬅️ السابق", callback_data: `my_${category}_${safePage - 1}` });
+  paginationRow.push({ text: `${safePage + 1} / ${totalPages}`, callback_data: "ignore" });
+  if (safePage < totalPages - 1) paginationRow.push({ text: "التالي ➡️", callback_data: `my_${category}_${safePage + 1}` });
+  
+  if (paginationRow.length > 1) buttons.push(paginationRow);
+  buttons.push([{ text: "⬅️ رجوع", callback_data: "my_customers" }]); // my_customers does not exist yet as a callback, but we will add it
+
+  if (messageId) {
+    try {
+      const { editMessageText } = require('./api');
+      return await editMessageText(chatId, messageId, text.trimEnd(), { replyMarkup: { inline_keyboard: buttons } });
+    } catch (e) {
+      return await sendMessageWithInlineKeyboard(chatId, text.trimEnd(), buttons);
+    }
+  }
+
+  return sendMessageWithInlineKeyboard(chatId, text.trimEnd(), buttons);
 }
 
 // ─── Search ─────────────────────────────────────────────────────────────────
@@ -428,14 +548,14 @@ async function handleSearchQuery(chatId: number, user: BotUser, query: string) {
 
   let text = `🔍 <b>نتائج "${escapeHtml(query)}" (${results.length}):</b>\n\n`;
   for (const [i, c] of results.entries()) {
-    text += `${i + 1}. <b>${escapeHtml(c.full_name)}</b>\n`;
-    text += `   📱 ${c.phone}\n`;
-    text += `   📌 ${escapeHtml(c.status)}\n`;
-    if (c.requested_car) text += `   🚗 ${escapeHtml(c.requested_car)}\n`;
+    text += `<blockquote><b>${i + 1}. ${escapeHtml(c.full_name)}</b>\n`;
+    text += `<b>📱 الهاتف:</b> <code>${c.phone}</code>\n`;
+    text += `<b>📌 الحالة:</b> ${escapeHtml(c.status)}\n`;
+    if (c.requested_car) text += `<b>🚗 السيارة:</b> ${escapeHtml(c.requested_car)}\n`;
     if (user.capabilities.isGeneralManager && c.branch_name) {
-      text += `   🏢 ${escapeHtml(c.branch_name)}\n`;
+      text += `<b>🏢 الفرع:</b> ${escapeHtml(c.branch_name)}\n`;
     }
-    text += "\n";
+    text += `</blockquote>\n`;
   }
 
   // عند نتيجة واحدة — نتيح إضافة ملاحظة صوتية مباشرة
@@ -499,9 +619,9 @@ async function handleCardSearchQuery(chatId: number, user: BotUser, query: strin
 
 // ─── Inventory ──────────────────────────────────────────────────────────────
 
-async function handleInventory(chatId: number, user: BotUser) {
+async function handleInventory(chatId: number, user: BotUser, messageId?: number) {
   await sendChatAction(chatId);
-  const items = await getInventory(user);
+  const { items, branchNamesSet } = await getInventory(user);
 
   const scopeLabel = user.capabilities.isGeneralManager ? "جميع الفروع" : "فرعك";
 
@@ -511,45 +631,210 @@ async function handleInventory(chatId: number, user: BotUser) {
     });
   }
 
-  const available = items.filter((i) => i.availability_status === "متوفرة");
-  const unavailable = items.filter((i) => i.availability_status !== "متوفرة");
-
-  let text = `📦 <b>المخزون — ${scopeLabel} (${items.length}):</b>\n\n`;
-
-  if (available.length > 0) {
-    text += `✅ <b>متوفرة (${available.length}):</b>\n`;
-    for (const car of available) {
-      const year = car.production_year ? ` ${car.production_year}` : "";
-      const name = `${escapeHtml(car.model)}${year}`;
-      const price = car.price ? ` | ${Number(car.price).toLocaleString("en-US")} ₪` : "";
-      const color = car.color ? ` | ${escapeHtml(car.color)}` : "";
-      text += `• <b>${name}</b>${color}${price}\n`;
-      if (user.capabilities.isGeneralManager && car.branch_name) {
-        text += `  🏢 ${escapeHtml(car.branch_name)}\n`;
-      }
+  // تقسيم المخزون
+  const isCustomerCar = (item: any) => {
+    const deal = item.deal_type || "";
+    if (deal.includes("برسم البيع")) {
+      const owner = (item.owner_name || "").trim().toLowerCase();
+      return !branchNamesSet.has(owner);
     }
-    text += "\n";
+    if (deal.includes("استبدال")) {
+      return Boolean(item.source_customer_id);
+    }
+    return false;
+  };
+
+  const availableNewCars: typeof items = [];
+  const availableUsedCars: typeof items = [];
+  const customerCars: typeof items = [];
+
+  for (const car of items) {
+    if (isCustomerCar(car)) {
+      customerCars.push(car);
+    } else {
+      const condition = car.condition_label || "";
+      const isAvailable = car.availability_status === "متوفرة";
+      if (isAvailable && condition.includes("جديد")) availableNewCars.push(car);
+      else if (isAvailable && !condition.includes("جديد")) availableUsedCars.push(car);
+    }
   }
 
-  if (unavailable.length > 0) {
-    text += `❌ <b>غير متوفرة (${unavailable.length}):</b>\n`;
-    for (const car of unavailable) {
-      const year = car.production_year ? ` ${car.production_year}` : "";
-      const name = `${escapeHtml(car.model)}${year}`;
-      text += `• ${name} — ${escapeHtml(car.availability_status)}\n`;
-    }
+  let text = `📦 <b>المخزون — ${scopeLabel} (${items.length}):</b>\n\nاختر الفئة التي تود عرضها من الأزرار أدناه:`;
+
+  const inlineRows: Array<Array<{ text: string; callback_data?: string; web_app?: { url: string } }>> = [];
+
+  if (availableNewCars.length > 0) {
+    inlineRows.push([{ text: `✨ السيارات المتوفرة الجديدة (${availableNewCars.length})`, callback_data: "inv_new_avail" }]);
+  }
+  if (availableUsedCars.length > 0) {
+    inlineRows.push([{ text: `🚘 سيارات المتوفرة المستعملة (${availableUsedCars.length})`, callback_data: "inv_used_avail" }]);
+  }
+  if (customerCars.length > 0) {
+    inlineRows.push([{ text: `✅ 👤 سيارات العملاء برسم البيع (${customerCars.length})`, callback_data: "inv_cust" }]);
   }
 
-  // زر إضافة سيارة للمخزون عبر المني-آب
+  inlineRows.push([{ text: `📋 عرض الكل (${items.length})`, callback_data: "inv_all" }]);
+
   const appUrl = getAppUrl();
   if (appUrl) {
-    return sendMessageWithWebApp(
-      chatId,
-      text.trimEnd(),
-      [{ text: "➕ إضافة سيارة للمخزون", url: `${appUrl}/bot-app/inventory-add?chat_id=${chatId}` }],
-    );
+    inlineRows.push([{ text: "➕ إضافة سيارة للمخزون", web_app: { url: `${appUrl}/bot-app/inventory-add?chat_id=${chatId}` } }]);
   }
-  return sendMessage(chatId, text.trimEnd(), { replyMarkup: menuKeyboard(user) });
+
+  return sendMessageWithInlineKeyboard(chatId, text, inlineRows);
+}
+
+async function handleInventoryCategory(chatId: number, user: BotUser, category: string, messageId?: number, page: number = 0) {
+  await sendChatAction(chatId);
+  const { items, branchNamesSet } = await getInventory(user);
+
+  const scopeLabel = user.capabilities.isGeneralManager ? "جميع الفروع" : "فرعك";
+
+  const isCustomerCar = (item: any) => {
+    const deal = item.deal_type || "";
+    if (deal.includes("برسم البيع")) {
+      const owner = (item.owner_name || "").trim().toLowerCase();
+      return !branchNamesSet.has(owner);
+    }
+    if (deal.includes("استبدال")) {
+      return Boolean(item.source_customer_id);
+    }
+    return false;
+  };
+
+  let filtered = items;
+  let title = `📦 جميع السيارات (${scopeLabel})`;
+
+  if (category === "new_avail") {
+    filtered = items.filter((car) => !isCustomerCar(car) && (car.condition_label || "").includes("جديد") && car.availability_status === "متوفرة");
+    title = `✨ السيارات المتوفرة الجديدة (${scopeLabel})`;
+  } else if (category === "used_avail") {
+    filtered = items.filter((car) => !isCustomerCar(car) && !(car.condition_label || "").includes("جديد") && car.availability_status === "متوفرة");
+    title = `🚘 سيارات المتوفرة المستعملة (${scopeLabel})`;
+  } else if (category === "cust") {
+    filtered = items.filter((car) => isCustomerCar(car));
+    title = `✅ 👤 سيارات العملاء برسم البيع (${scopeLabel})`;
+  } else if (category === "all") {
+    filtered = items;
+    title = `📋 جميع السيارات في المخزون (${scopeLabel})`;
+  }
+
+  if (filtered.length === 0) {
+    return sendMessage(chatId, `لا يوجد سيارات في هذه الفئة حالياً.`);
+  }
+
+  const buttons: Array<Array<{ text: string; callback_data?: string; web_app?: { url: string } }>> = [];
+
+  const PAGE_SIZE = 10;
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE) || 1;
+  const safePage = Math.max(0, Math.min(page, totalPages - 1));
+  const startIndex = safePage * PAGE_SIZE;
+  const listToRender = filtered.slice(startIndex, startIndex + PAGE_SIZE);
+
+  for (const car of listToRender) {
+    const year = car.production_year ? ` ${car.production_year}` : "";
+    const name = `${escapeHtml(car.model)}${year}`;
+    const price = car.price ? ` | ${Number(car.price).toLocaleString("en-US")} ₪` : "";
+    const colorEmoji = getColorEmoji(car.color);
+    
+    let prefix = "✅";
+    if (car.availability_status !== "متوفرة") prefix = "❌";
+
+    buttons.push([
+      {
+        text: `${prefix} ${colorEmoji} ${name}${price}`,
+        callback_data: `invcar:${car.id}`
+      }
+    ]);
+  }
+
+  // Pagination row
+  const paginationRow = [];
+  if (safePage > 0) {
+    paginationRow.push({ text: "⬅️ السابق", callback_data: `inv_${category}_${safePage - 1}` });
+  }
+  paginationRow.push({ text: `${safePage + 1} / ${totalPages}`, callback_data: "ignore" });
+  if (safePage < totalPages - 1) {
+    paginationRow.push({ text: "التالي ➡️", callback_data: `inv_${category}_${safePage + 1}` });
+  }
+  if(paginationRow.length > 1) buttons.push(paginationRow);
+
+  buttons.push([{ text: "⬅️ رجوع", callback_data: "inventory_menu" }]);
+
+  const text = `<b>${title} (${filtered.length}):</b>\n<i>اضغط على أي سيارة لعرض بطاقتها الكاملة 👇</i>`;
+
+  if (messageId) {
+    try {
+      const { editMessageText } = require('./api');
+      return await editMessageText(chatId, messageId, text, { replyMarkup: { inline_keyboard: buttons } });
+    } catch (e) {
+      return await sendMessageWithInlineKeyboard(chatId, text, buttons);
+    }
+  }
+
+  if (messageId) {
+    try {
+      const { editMessageText } = require('./api');
+      return await editMessageText(chatId, messageId, text, { replyMarkup: { inline_keyboard: buttons } });
+    } catch (e) {
+      return await sendMessageWithInlineKeyboard(chatId, text, buttons);
+    }
+  }
+  return sendMessageWithInlineKeyboard(chatId, text, buttons);
+}
+
+async function handleSendCarCard(chatId: number, user: BotUser, carId: string) {
+  await sendChatAction(chatId);
+  const admin = createAdminClient();
+  const { data: car } = await admin.from("inventory").select("*").eq("id", carId).single();
+  if (!car) {
+    return sendMessage(chatId, "❌ السيارة لم تعد موجودة أو تم بيعها.");
+  }
+  
+  const attachments = await getInventoryCarAttachments(car.id, car.source_customer_id, car.photo_urls ?? []);
+  const photos = attachments.filter((a: any) => a.isImage).map((a: any) => a.url);
+
+  const year = car.production_year ? ` ${car.production_year}` : "";
+  const name = `${escapeHtml(car.model)}${year}`;
+  const price = car.price ? `💰 <b>السعر:</b> ${Number(car.price).toLocaleString("en-US")} ₪\n` : "";
+  const colorEmoji = getColorEmoji(car.color);
+  
+  let caption = `<b>🚘 ${name}</b>\n\n`;
+  caption += `🎨 <b>اللون:</b> ${colorEmoji} ${escapeHtml(car.color ?? "غير محدد")}\n`;
+  if (price) caption += price;
+  caption += `⛽ <b>الوقود:</b> ${escapeHtml(car.fuel_type ?? "—")} | ⚙️ <b>القير:</b> ${escapeHtml(car.gearbox ?? "—")}\n`;
+  caption += `🛣 <b>العداد:</b> ${car.mileage ? Number(car.mileage).toLocaleString("en-US") + " كم" : "—"}\n`;
+  caption += `📌 <b>الحالة:</b> ${escapeHtml(car.condition_label ?? "—")} | 🏷️ <b>التوفر:</b> ${escapeHtml(car.availability_status ?? "—")}\n`;
+  
+  if (car.specs) {
+    caption += `\n📝 <b>المواصفات:</b>\n${escapeHtml(car.specs)}\n`;
+  }
+  if (car.inspection) {
+    caption += `\n🔍 <b>الفحص:</b>\n${escapeHtml(car.inspection)}\n`;
+  }
+  
+  const appUrl = getAppUrl();
+  const inlineButtons = [];
+  if (appUrl) {
+    inlineButtons.push([{ text: "📋 فتح البطاقة الكاملة بالموقع", web_app: { url: `${appUrl}/dashboard/inventory?car=${car.id}` } }]);
+  }
+  inlineButtons.push([{ text: "⬅️ قائمة المخزون", callback_data: "inventory_menu" }]);
+  
+  if (photos.length > 1) {
+    caption += `\n<i>📸 (مرفق ${photos.length} صور للسيارة، اضغط زر فتح البطاقة بالموقع لرؤية ألبوم الصور بالكامل)</i>`;
+  }
+
+  const replyMarkup = inlineButtons.length > 0 ? { inline_keyboard: inlineButtons } : undefined;
+
+  try {
+    if (photos.length > 0) {
+      await sendPhoto(chatId, photos[0], caption, replyMarkup);
+    } else {
+      await sendMessage(chatId, caption, { replyMarkup });
+    }
+  } catch (e) {
+    console.error("Failed to send car card", e);
+    await sendMessage(chatId, caption, { replyMarkup });
+  }
 }
 
 // ─── Notifications ──────────────────────────────────────────────────────────
@@ -664,12 +949,12 @@ async function handleStaff(chatId: number, user: BotUser) {
   return sendMessage(chatId, text.trimEnd(), { replyMarkup: menuKeyboard(user) });
 }
 
-// ─── Evaluation Requests (مدير معرض المعلم) ─────────────────────────────────
+// ─── Evaluation Requests (مدير معرض لمعلم) ─────────────────────────────────
 
 async function handleEvalRequests(chatId: number, user: BotUser) {
   const isAllowed = await checkIsMaalamMgr(user.id);
   if (!isAllowed && !user.capabilities.isGeneralManager) {
-    return sendMessage(chatId, "⛔ هذا الأمر مخصص لمدير معرض المعلم فقط.", {
+    return sendMessage(chatId, "⛔ هذا الأمر مخصص لمدير معرض لمعلم فقط.", {
       replyMarkup: menuKeyboard(user),
     });
   }
@@ -720,20 +1005,6 @@ async function handleEvalRequests(chatId: number, user: BotUser) {
       `</blockquote>\n\n` +
       `<i>اضغط الزر أدناه لإرسال قيمة التقييم للموظف 👇</i>`;
 
-    // ── caption مختصر للصور (حد تيليجرام 1024 حرف) ─────────────────────────
-    let photoCaption =
-      `🚘 <b>تقييم #${i + 1} — ${escapeHtml(e.model)}</b>\n` +
-      `👤 ${escapeHtml(e.customer_name)}`;
-    if (e.customer_phone) photoCaption += ` | 📱 ${escapeHtml(e.customer_phone)}`;
-    if (e.color)           photoCaption += `\n🎨 ${escapeHtml(e.color)}`;
-    if (e.production_year) photoCaption += ` | 📅 ${e.production_year}`;
-    if (e.mileage)         photoCaption += ` | 🛣 ${e.mileage.toLocaleString("en-US")} كم`;
-    if (e.chassis_no)      photoCaption += `\n🔢 ${escapeHtml(e.chassis_no)}`;
-    if (e.staff_name)      photoCaption += `\n👨‍💼 ${escapeHtml(e.staff_name)}`;
-
-    // ── الأزرار inline ─────────────────────────────────────────────────────
-    // callback_data محدود بـ 64 بايت — نخزّن trade_in_id فقط ونجلب الباقي من DB
-    // "er:" اختصار لـ eval_reply — 40 بايت ✓
     const callbackData = `er:${e.trade_in_id}`;
     const inlineButtons: Array<Array<{ text: string; callback_data?: string; web_app?: { url: string } }>> = [
       [{ text: "✍️ إرسال قيمة التقييم للموظف", callback_data: callbackData }],
@@ -747,65 +1018,16 @@ async function handleEvalRequests(chatId: number, user: BotUser) {
     inlineButtons.push([{ text: "🏠 القائمة الرئيسية", callback_data: "main_menu" }]);
     const replyMarkupInline = { inline_keyboard: inlineButtons };
 
+    let finalCaption = fullText;
+    if (e.photo_urls.length > 1) {
+      finalCaption += `\n\n📸 <i>(هذه البطاقة تحتوي على ${e.photo_urls.length} صور)</i>`;
+    }
+
     try {
-      if (e.photo_urls.length === 1) {
-        // صورة واحدة → sendPhoto مع caption مختصر + أزرار
-        const photoRes = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendPhoto`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: chatId,
-            photo: e.photo_urls[0],
-            caption: photoCaption,
-            parse_mode: "HTML",
-          }),
-        });
-        const photoJson = await photoRes.json() as { ok: boolean };
-        // إذا فشل الإرسال بالصورة (رابط منتهي الصلاحية) — أرسل النص فقط
-        if (!photoJson.ok) {
-          await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: chatId, text: fullText, parse_mode: "HTML", reply_markup: replyMarkupInline }),
-          });
-        } else {
-          // رسالة التفاصيل الكاملة مع الأزرار
-          await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: chatId, text: fullText, parse_mode: "HTML", reply_markup: replyMarkupInline }),
-          });
-        }
-      } else if (e.photo_urls.length > 1) {
-        // عدة صور → media group أولاً (caption مختصر على الأولى)
-        const media = e.photo_urls.slice(0, 10).map((url, idx) => ({
-          type: "photo",
-          media: url,
-          ...(idx === 0 ? { caption: photoCaption + `\n📷 ${e.photo_urls.length} صور`, parse_mode: "HTML" } : {}),
-        }));
-        const mgRes = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMediaGroup`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: chatId, media }),
-        });
-        const mgJson = await mgRes.json() as { ok: boolean };
-        if (!mgJson.ok) console.warn(`[evalCards] mediaGroup #${i + 1} failed, sending text only`);
-        // رسالة التفاصيل الكاملة مع الأزرار (دائماً)
-        await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: chatId, text: fullText, parse_mode: "HTML", reply_markup: replyMarkupInline }),
-        });
-      } else {
-        // لا توجد صور → رسالة نصية كاملة مع الأزرار
-        await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: chatId, text: fullText, parse_mode: "HTML", reply_markup: replyMarkupInline }),
-        });
-      }
+      await sendMediaWithKeyboard(chatId, e.photo_urls, finalCaption, inlineButtons);
     } catch (err) {
       console.error(`[evalCards] card ${i + 1} send failed:`, err);
+      await sendMessage(chatId, finalCaption, { replyMarkup: replyMarkupInline });
     }
 
     // تأخير بسيط بين البطاقات لتفادي rate limit
@@ -1325,7 +1547,7 @@ async function proceedToCarStep(chatId: number, user: BotUser, sessionData: Reco
 
   // مشتري / مشتري+استبدال — جلب السيارات المتوفرة
   await sendChatAction(chatId);
-  const allCars = await getInventory(user);
+  const { items: allCars } = await getInventory(user);
   const available = allCars
     .filter((c) => c.availability_status === "متوفرة")
     .slice(0, 8);
@@ -1766,16 +1988,24 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
   if (update.callback_query) {
     const cq     = update.callback_query;
     const chatId = cq.message?.chat.id ?? cq.from.id;
-    await answerCallbackQuery(cq.id);
+    let toastText = undefined;
+    if (cq.data?.startsWith("inv_")) toastText = "⏳ جاري جلب السيارات...";
+    else if (cq.data?.startsWith("invcar:")) toastText = "⏳ جاري إعداد البطاقة...";
+    else if (cq.data?.startsWith("my_")) toastText = "⏳ جاري جلب العملاء...";
+    else if (cq.data?.startsWith("history:")) toastText = "⏳ جاري جلب السجل...";
+    else if (cq.data === "inventory_menu") toastText = "🏠 العودة للمخزون";
+    else if (cq.data === "main_menu") toastText = "🏠 القائمة الرئيسية";
+    await answerCallbackQuery(cq.id, toastText);
 
     let user: BotUser | null = null;
     try { user = await getBotUser(String(chatId)); } catch { /* */ }
     if (!user) return;
 
     if (cq.data === "main_menu") {
+      let toastText = "🏠 القائمة الرئيسية";
+      await answerCallbackQuery(cq.id, toastText);
       await clearSession(String(chatId));
-      const isMaalam = await checkIsMaalamMgr(user.id);
-      return sendMessage(chatId, "🏠 القائمة الرئيسية:", { replyMarkup: menuKeyboard(user, isMaalam) });
+      return sendMainMenu(chatId, user);
     }
 
     // زر "تم" للتذكير
@@ -1814,6 +2044,43 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       return sendMessage(chatId, text, {
         replyToMessageId: messageId,
       });
+    }
+
+    // أزرار فئات المخزون (سيارات جديدة، مستعملة، متوفرة...)
+    if (cq.data?.startsWith("inv_")) {
+      const parts = cq.data.split("_");
+      // Format: inv_{category}_{page} or just inv_{category}
+      const category = parts[1] + (parts[2] && !parseInt(parts[2]) ? "_" + parts[2] : ""); // handle "new_avail" etc
+      const pageStr = parts[parts.length - 1];
+      const page = !isNaN(parseInt(pageStr)) ? parseInt(pageStr) : 0;
+      let actualCat = cq.data.slice(4);
+      if(!isNaN(parseInt(pageStr))) actualCat = cq.data.slice(4, cq.data.lastIndexOf("_"));
+      return handleInventoryCategory(chatId, user, actualCat, cq.message?.message_id, page);
+    }
+
+    // العودة لقائمة المخزون الرئيسية
+        if (cq.data === "my_customers") {
+      return handleMy(chatId, user, cq.message?.message_id);
+    }
+
+    if (cq.data === "inventory_menu") {
+      return handleInventory(chatId, user, cq.message?.message_id);
+    }
+
+    // زر سيارة محددة في المخزون
+    if (cq.data?.startsWith("invcar:")) {
+      const carId = cq.data.slice("invcar:".length);
+      return handleSendCarCard(chatId, user, carId);
+    }
+
+    // أزرار فئات عملائي
+    if (cq.data?.startsWith("my_")) {
+      const parts = cq.data.split("_");
+      const pageStr = parts[parts.length - 1];
+      const page = !isNaN(parseInt(pageStr)) ? parseInt(pageStr) : 0;
+      let actualCat = cq.data.slice(3);
+      if(!isNaN(parseInt(pageStr))) actualCat = cq.data.slice(3, cq.data.lastIndexOf("_"));
+      return handleMyCategory(chatId, user, actualCat, cq.message?.message_id, page);
     }
 
     return;
