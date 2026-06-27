@@ -475,54 +475,67 @@ function WhatsAppSharePopup({
   }
 
   return (
-    <div className="absolute left-0 top-full z-30 mt-1 w-72 rounded-xl border border-green-200 bg-white p-4 shadow-xl">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="flex items-center gap-1.5 font-bold text-green-700 text-sm">
-          <Share2 className="h-4 w-4" />
-          إرسال عبر واتساب
-        </span>
-        <button type="button" onClick={onClose} className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      {imageAttachments.length === 0 ? (
-        <p className="text-xs text-slate-500 mb-3">لا توجد صور في المرفقات.</p>
-      ) : (
-        <p className="text-xs text-slate-500 mb-3">سيتم إرسال روابط {imageAttachments.length} صورة.</p>
-      )}
-
-      <div className="space-y-2">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">رقم الواتساب (اختياري)</label>
-          <input
-            type="tel"
-            placeholder="مثال: 966501234567"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-green-400 focus:outline-none focus:ring-1 focus:ring-green-400"
-            dir="ltr"
-          />
-          <p className="mt-0.5 text-xs text-slate-400">اتركه فارغاً لاختيار جهة الاتصال يدوياً</p>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-slate-100 bg-white p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+        <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
+          <span className="flex items-center gap-2 font-bold text-green-700">
+            <Share2 className="h-5 w-5" />
+            إرسال الألبوم عبر واتساب
+          </span>
+          <button type="button" onClick={onClose} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+            <X className="h-4 w-4" />
+          </button>
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">التعليق</label>
-          <textarea
-            rows={3}
-            placeholder="أدخل التعليق هنا..."
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            className="w-full resize-none rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-green-400 focus:outline-none focus:ring-1 focus:ring-green-400"
-          />
+
+        {imageAttachments.length === 0 ? (
+          <p className="text-sm text-slate-500 mb-4 text-center">لا توجد صور في المرفقات.</p>
+        ) : (
+          <p className="text-sm text-slate-600 mb-4">
+            سيتم تجهيز رسالة تحتوي على روابط لـ <strong className="text-green-600 font-bold">{imageAttachments.length}</strong> صورة.
+          </p>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">رقم الواتساب (اختياري)</label>
+            <input
+              type="tel"
+              placeholder="مثال: 966501234567"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 transition-all"
+              dir="ltr"
+            />
+            <p className="mt-1 text-xs text-slate-500">اتركه فارغاً لاختيار جهة الاتصال يدوياً</p>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">التعليق (اختياري)</label>
+            <textarea
+              rows={3}
+              placeholder="أدخل رسالة مرافقة للصور..."
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 transition-all"
+            />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-1/3 rounded-xl bg-slate-100 px-3 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-200 active:bg-slate-300 transition-colors"
+            >
+              إلغاء
+            </button>
+            <button
+              type="button"
+              onClick={handleSend}
+              className="flex-1 rounded-xl bg-green-500 px-3 py-2.5 text-sm font-bold text-white hover:bg-green-600 active:bg-green-700 flex items-center justify-center gap-2 shadow-sm transition-all hover:shadow"
+            >
+              <Share2 className="h-4 w-4" />
+              فتح واتساب
+            </button>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={handleSend}
-          className="w-full rounded-lg bg-green-500 px-3 py-2 text-sm font-bold text-white hover:bg-green-600 active:bg-green-700 flex items-center justify-center gap-2"
-        >
-          <Share2 className="h-4 w-4" />
-          فتح واتساب
-        </button>
       </div>
     </div>
   );
