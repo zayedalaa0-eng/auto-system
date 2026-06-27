@@ -996,7 +996,40 @@ export function CustomerProfileContent({
 
   const filteredHistoryLogs = useMemo(() => {
     const q = historyQuery.trim().toLowerCase();
-    return customer.logs.filter((log) => {
+    
+    // Group consecutive photo_added events
+    const groupedLogs: any[] = [];
+    for (const log of customer.logs) {
+      if (log.action === "photo_added") {
+        const last = groupedLogs[groupedLogs.length - 1];
+        if (
+          last &&
+          last.action === "photo_added" &&
+          last.actor_user_id === log.actor_user_id &&
+          new Date(last.created_at).toDateString() === new Date(log.created_at).toDateString()
+        ) {
+          last._photoCount = (last._photoCount || 1) + 1;
+          const m = log.details?.match(/إضافة (\d+) صور/);
+          if (m) last._photoCount += (parseInt(m[1], 10) - 1);
+          continue;
+        } else {
+          const m = log.details?.match(/إضافة (\d+) صور/);
+          const initialCount = m ? parseInt(m[1], 10) : 1;
+          groupedLogs.push({ ...log, _photoCount: initialCount });
+        }
+      } else {
+        groupedLogs.push(log);
+      }
+    }
+
+    for (const log of groupedLogs) {
+      if (log.action === "photo_added" && log._photoCount && log._photoCount > 1) {
+        const origin = log.details?.includes("Telegram") ? "بوت Telegram" : "Mini App";
+        log.details = `تم إضافة ${log._photoCount} صور عبر ${origin} — بواسطة ${log.actor_name}`;
+      }
+    }
+
+    return groupedLogs.filter((log) => {
       if (historyKindFilter !== "all" && classifyLogKind(log.action) !== historyKindFilter) return false;
       if (!q) return true;
       const text = `${translateLogAction(log.action)} ${log.details ?? ""} ${log.actor_name ?? ""}`.toLowerCase();
