@@ -1,4 +1,4 @@
-﻿import { hasSupabaseEnv } from "@/lib/env";
+import { hasSupabaseEnv } from "@/lib/env";
 import { getRoleCapabilities, type RoleCapabilities } from "@/lib/roles";
 import {
   ALL_CUSTOMER_STATUSES,
@@ -698,9 +698,17 @@ async function getScopedProfile() {
   const { profile } = await getDashboardContext();
   const capabilities = getRoleCapabilities(profile?.role, profile?.full_name);
 
+  let isMuallim = false;
+  if (profile?.branch_id) {
+    const supabase = await createClient();
+    const { data: bRow } = await supabase.from("branches").select("name").eq("id", profile.branch_id).maybeSingle();
+    isMuallim = (bRow?.name ?? "").includes("المعلم");
+  }
+
   return {
     profile,
     capabilities,
+    isMuallim,
   };
 }
 
@@ -844,7 +852,7 @@ export async function getCustomersDirectory(
   }
 
   const supabase = await createClient();
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
   const userId = profile?.id ?? null;
   const customersDirectoryQuery = supabase
     .from("customers")
@@ -854,7 +862,7 @@ export async function getCustomersDirectory(
   const branchScoped = applyBranchScope(
     customersDirectoryQuery,
     profile?.branch_id,
-    capabilities.isGeneralManager,
+    capabilities.isGeneralManager || isMuallim,
   ) as typeof customersDirectoryQuery;
   const fullyScoped =
     options?.onlyAssignedToCurrentUser && userId
@@ -875,7 +883,7 @@ export async function getCustomersSearchResults(query: string, limit = 120): Pro
   if (!normalized) return [];
 
   const supabase = await createClient();
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
   const customersSearchQuery = supabase
     .from("customers")
     .select(
@@ -885,7 +893,7 @@ export async function getCustomersSearchResults(query: string, limit = 120): Pro
   const scoped = applyBranchScope(
     customersSearchQuery,
     profile?.branch_id,
-    capabilities.isGeneralManager,
+    capabilities.isGeneralManager || isMuallim,
   ) as typeof customersSearchQuery;
 
   // نحذف أحرف wildcards الخاصة بـ SQL لمنع تحريف نتائج البحث
@@ -1943,7 +1951,7 @@ export async function getCustomerById(customerId: string): Promise<CustomerDetai
   }
 
   const supabase = await createClient();
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
   const branchId = profile?.branch_id ?? null;
   const customerQuery = supabase
     .from("customers")
@@ -1954,7 +1962,7 @@ export async function getCustomerById(customerId: string): Promise<CustomerDetai
 
   const [{ data: customer }, { data: logs }, { data: reminders }, { data: attachments }, { data: tradeIns }] =
     await Promise.all([
-      (applyBranchScope(customerQuery, branchId, capabilities.isGeneralManager) as typeof customerQuery).maybeSingle(),
+      (applyBranchScope(customerQuery, branchId, capabilities.isGeneralManager || isMuallim) as typeof customerQuery).maybeSingle(),
       // admin لتجاوز RLS — السجلات المُدخلة من البوت/المني-آب قد لا تكون مرئية للـ RLS العادي
       (hasSupabaseServiceRoleEnv() ? createAdminClient() : supabase)
         .from("customer_logs")

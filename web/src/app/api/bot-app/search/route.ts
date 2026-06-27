@@ -32,6 +32,13 @@ export async function GET(req: NextRequest) {
 
   const caps = getRoleCapabilities(user.role, user.full_name);
 
+  // Check if Al-Moallem branch
+  let isMuallimBranch = false;
+  if (user.branch_id) {
+    const { data: bRow } = await admin.from("branches").select("name").eq("id", user.branch_id).maybeSingle();
+    isMuallimBranch = (bRow?.name ?? "").includes("المعلم");
+  }
+
   // بناء الاستعلام
   let query = admin
     .from("customers")
@@ -42,7 +49,7 @@ export async function GET(req: NextRequest) {
     .range(offset, offset + limit - 1);
 
   // تصفية حسب الفرع للموظف العادي
-  if (!caps.isGeneralManager) {
+  if (!caps.isGeneralManager && !isMuallimBranch) {
     if (caps.isManager && user.branch_id) {
       query = query.eq("branch_id", user.branch_id);
     } else if (!caps.isManager) {

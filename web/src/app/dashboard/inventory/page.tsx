@@ -176,20 +176,38 @@ export default async function InventoryPage({
         return false;
     } else if (ctx.isMuallimBranch) {
       if (branchFilter.mode === "all") {
-        // كل المعارض: سيارات المعلم كلها + سيارات المعارض الأخرى برسم البيع فقط
+        // كل المعارض: سيارات المعلم كلها + سيارات المعارض المسموحة
         const isOtherBranch = itemBranch !== normalize(ctx.branchName);
-        if (isOtherBranch && normalize(item.deal_type) !== "برسم البيع") return false;
+        const isMuallimAllowedCrossBranch = (it: typeof item) => {
+          const deal = normalize(it.deal_type);
+          const cond = normalize(it.condition_label);
+          const isCustomer = Boolean(normalize(it.owner_name) && normalize(it.owner_name) !== normalize(it.branch_name));
+          return deal === "برسم البيع" || deal === "بيع بالوكالة" || cond === "مستعمل" || isCustomer;
+        };
+        if (isOtherBranch && !isMuallimAllowedCrossBranch(item)) return false;
       } else if (branchFilter.mode === "self") {
         if (itemBranch !== normalize(ctx.branchName)) return false;
       } else if (branchFilter.mode === "cross") {
         if (!branchFilter.branchName || itemBranch !== branchFilter.branchName) return false;
-        if (normalize(item.deal_type) !== "برسم البيع") return false;
+        const isMuallimAllowedCrossBranch = (it: typeof item) => {
+          const deal = normalize(it.deal_type);
+          const cond = normalize(it.condition_label);
+          const isCustomer = Boolean(normalize(it.owner_name) && normalize(it.owner_name) !== normalize(it.branch_name));
+          return deal === "برسم البيع" || deal === "بيع بالوكالة" || cond === "مستعمل" || isCustomer;
+        };
+        if (!isMuallimAllowedCrossBranch(item)) return false;
       } else if (branchFilter.mode === "legacy-branch") {
         if (branchFilter.branchName && itemBranch !== branchFilter.branchName) return false;
       } else if (branchFilter.mode === "default") {
-        // معرض المعلم: الافتراضي = كل المعارض (سياراتهم + برسم البيع من غيرهم)
+        // معرض المعلم: الافتراضي = كل المعارض (سياراتهم + المسموح من غيرهم)
         const isOtherBranch = itemBranch !== normalize(ctx.branchName);
-        if (isOtherBranch && normalize(item.deal_type) !== "برسم البيع") return false;
+        const isMuallimAllowedCrossBranch = (it: typeof item) => {
+          const deal = normalize(it.deal_type);
+          const cond = normalize(it.condition_label);
+          const isCustomer = Boolean(normalize(it.owner_name) && normalize(it.owner_name) !== normalize(it.branch_name));
+          return deal === "برسم البيع" || deal === "بيع بالوكالة" || cond === "مستعمل" || isCustomer;
+        };
+        if (isOtherBranch && !isMuallimAllowedCrossBranch(item)) return false;
       }
     } else {
       if (itemBranch !== normalize(ctx.branchName)) return false;

@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
       return Boolean(owner) && !branchNameSet.has(owner);
     };
 
-    // ── معرض المعلم: من المعارض الأخرى يأخذ فقط المعروضة (برسم البيع/استبدال/حيازة) ──
+    // ── معرض المعلم: من المعارض الأخرى يأخذ فقط المسموح ──
     if (isMuallim && !caps.isGeneralManager) {
       const ownNorm = userBranchName;
       items = items.filter(i => {
@@ -66,9 +66,11 @@ export async function GET(req: NextRequest) {
         const br = (i as any).branches;
         const bName = normalize((Array.isArray(br) ? br[0]?.name : br?.name) as string ?? "");
         if (bName === ownNorm) return true; // كل سيارات معرضه
-        // من المعارض الأخرى: فقط سيارات معروضة للبيع/استبدال/حيازة (تطابق جدول المعلم)
+        // من المعارض الأخرى: المسموح فقط
         const deal = normalize(i.deal_type as string);
-        return deal.includes("برسم البيع") || deal.includes("استبدال") || deal.includes("حيازة");
+        const cond = normalize(i.condition_label as string);
+        const isCustomer = isCustomerCar(i);
+        return deal.includes("برسم البيع") || deal.includes("استبدال") || deal.includes("حيازة") || deal.includes("بيع بالوكالة") || cond === "مستعمل" || isCustomer;
       });
     }
 

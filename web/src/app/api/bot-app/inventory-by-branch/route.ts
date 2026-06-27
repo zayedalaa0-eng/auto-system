@@ -1,4 +1,4 @@
-﻿import { type NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(req: NextRequest) {
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     // التحقق من الصلاحية
     const { data: user } = await admin
       .from("app_users")
-      .select("id, role")
+      .select("id, role, branch_id")
       .eq("telegram_chat_id", chatId)
       .eq("is_active", true)
       .maybeSingle();
@@ -26,25 +26,48 @@ export async function GET(req: NextRequest) {
     const [{ data: inv }, { data: branchRows }] = await Promise.all([
       admin
         .from("inventory")
-        .select("id, model, chassis_no, price, color, production_year, availability_status, deal_type, owner_name, condition_label")
+        .select("id, model, chassis_no, price, color, production_year, availability_status, deal_type, owner_name, condition_label, branch_id")
         .eq("branch_id", branchId)
         .not("availability_status", "in", '("مباعة","محجوزة","مسحوبة من المعرض")')
         .eq("is_active", true)
         .order("updated_at", { ascending: false })
-        .limit(50),
-      admin.from("branches").select("name").eq("is_active", true),
+        .limit(200), // increased limit since we will filter in memory
+      admin.from("branches").select("id, name").eq("is_active", true),
     ]);
 
     const branchNames = new Set((branchRows ?? []).map(b => (b.name ?? "").trim().toLowerCase()));
+    
+    // Check user branch name
+    const userBranchRow = (branchRows ?? []).find(b => b.id === user.branch_id);
+    const isMuallimBranch = (userBranchRow?.name ?? "").includes("المعلم");
+    
     // التصنيف حسب المالك: شخص → عميل، معرض/فارغ → معرض
     const isCustomerCar = (ownerName: string | null) => {
       const owner = (ownerName ?? "").trim().toLowerCase();
       return Boolean(owner) && !branchNames.has(owner);
     };
 
+    // فلترة النتائج حسب الصلاحيات
+    let filteredInv = inv ?? [];
+    const isOtherBranch = user.branch_id !== branchId;
+    
+    if (isOtherBranch) {
+      if (isMuallimBranch) {
+        filteredInv = filteredInv.filter((it) => {
+          const deal = (it.deal_type ?? "").trim();
+          const cond = (it.condition_label ?? "").trim();
+          const isCustomer = isCustomerCar(it.owner_name);
+          return deal === "برسم البيع" || deal === "بيع بالوكالة" || cond === "مستعمل" || isCustomer;
+        });
+      } else {
+        // الموظف العادي لا يرى مخزون الفروع الأخرى في المني-آب
+        filteredInv = [];
+      }
+    }
+
     return NextResponse.json({
       ok: true,
-      inventory: (inv ?? []).map(i => ({
+      inventory: filteredInv.map(i => ({
         id: i.id,
         // التسمية المختصرة: النوع — السنة — الحالة — اللون (بدون شاصي)
         label: [i.model, i.production_year ? String(i.production_year) : null, i.condition_label, i.color]
