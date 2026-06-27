@@ -256,6 +256,16 @@ export async function POST(req: NextRequest) {
       details: `تم إنشاء ملف العميل ${full_name.trim()} عبر بوت Telegram.`,
     });
 
+    if (notes && notes.trim()) {
+      await admin.from("customer_logs").insert({
+        customer_id: inserted?.id,
+        actor_user_id: user.id,
+        actor_name: user.full_name,
+        action: "general",
+        details: notes.trim(),
+      });
+    }
+
     // #16: إشعار المديرين (notifications + Telegram)
     if (inserted?.id) {
       // جلب اسم الفرع للإشعار

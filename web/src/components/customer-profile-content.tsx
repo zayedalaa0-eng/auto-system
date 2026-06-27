@@ -1300,6 +1300,22 @@ export function CustomerProfileContent({
                     {filteredHistoryLogs.length} نتيجة
                   </div>
                 </div>
+
+                {/* ── الملاحظات القديمة المحفوظة (كعنصر في السجل) ── */}
+                {customer.notes && customer.notes.trim() && (
+                  <div className="profile-timeline__entry">
+                    <div className="profile-timeline__icon text-amber-500">📌</div>
+                    <div className="profile-timeline__content" style={{ backgroundColor: "#fef3c7", borderColor: "#fde68a" }}>
+                      <div className="profile-timeline__head">
+                        <span className="profile-timeline__action">الملاحظات العامة التراكمية</span>
+                      </div>
+                      <div className="profile-timeline__body whitespace-pre-wrap !text-slate-800">
+                        {customer.notes.trim()}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {filteredHistoryLogs.length > 0 ? (() => {
                   // ── ربط كل تسجيل بالحدث الأقرب إليه زمنياً (مرة واحدة فقط) ──
                   const voiceByLogId = new Map<string, typeof voiceAttachments>();

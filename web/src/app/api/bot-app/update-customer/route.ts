@@ -567,7 +567,7 @@ export async function POST(req: NextRequest) {
     }
 
     // إدراج سجل التعديل العام (إذا كان هناك تعديلات أخرى)
-    const otherParts = changedParts.filter(p => !p.startsWith("الحالة:") && p !== "بيانات السيارة");
+    const otherParts = changedParts.filter(p => !p.startsWith("الحالة:") && p !== "بيانات السيارة" && !p.startsWith("ملاحظة:"));
     if (otherParts.length > 0) {
       await admin.from("customer_logs").insert({
         customer_id,
@@ -575,6 +575,17 @@ export async function POST(req: NextRequest) {
         actor_name: user.full_name,
         action: "customer_updated",
         details: `تم التعديل عبر Mini App — ${otherParts.join(" | ")} — بواسطة ${user.full_name}`,
+      });
+    }
+
+    // إدراج الملاحظة كسجل منفصل (action: general) لتظهر بالكامل في السجل التاريخي للويب
+    if (noteText) {
+      await admin.from("customer_logs").insert({
+        customer_id,
+        actor_user_id: user.id,
+        actor_name: user.full_name,
+        action: "general",
+        details: noteText,
       });
     }
 
