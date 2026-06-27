@@ -1018,7 +1018,7 @@ export function CustomerProfileContent({
         if (
           last &&
           last.action === "photo_added" &&
-          last.actor_user_id === log.actor_user_id &&
+          last.actor_name === log.actor_name &&
           new Date(last.created_at).toDateString() === new Date(log.created_at).toDateString()
         ) {
           last._photoCount = (last._photoCount || 1) + 1;
