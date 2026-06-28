@@ -19,6 +19,7 @@ export type DashboardProfile = {
   full_name: string;
   role: string;
   branch_id: string | null;
+  branch_name?: string | null;
 };
 
 export type DashboardMetric = {
@@ -699,10 +700,13 @@ async function getScopedProfile() {
   const capabilities = getRoleCapabilities(profile?.role, profile?.full_name);
 
   let isMuallim = false;
-  if (profile?.branch_id) {
+  if (profile && profile.branch_id && !profile.branch_name) {
     const supabase = await createClient();
-    const { data: bRow } = await supabase.from("branches").select("name").eq("id", profile.branch_id).maybeSingle();
-    isMuallim = (bRow?.name ?? "").includes("المعلم");
+    const { data: b } = await supabase.from("branches").select("name").eq("id", profile.branch_id).maybeSingle();
+    if (b) {
+      profile.branch_name = b.name;
+      isMuallim = b.name.includes("لمعلم");
+    }
   }
 
   return {
@@ -713,12 +717,34 @@ async function getScopedProfile() {
 }
 
 function applyBranchScope(
-  query: { eq: (column: string, value: string) => unknown },
+  query: any,
   branchId: string | null | undefined,
   isGeneralManager: boolean,
+  isMuallim = false,
+  tableName: "customers" | "inventory" | "other" = "other",
   column = "branch_id",
 ): unknown {
-  if (!isGeneralManager && branchId) {
+  if (isGeneralManager) {
+    return query;
+  }
+
+  if (isMuallim) {
+    if (tableName === "customers") {
+      if (branchId) {
+        return query.or(column + ".eq." + branchId + ",operation_type.in.(buyer_tradein,sell_on_behalf)");
+      } else {
+        return query.in("operation_type", ["buyer_tradein", "sell_on_behalf"]);
+      }
+    } else if (tableName === "inventory") {
+      if (branchId) {
+        return query.or(column + ".eq." + branchId + ",deal_type.in.(استبدال,برسم البيع)");
+      } else {
+        return query.in("deal_type", ["استبدال", "برسم البيع"]);
+      }
+    }
+  }
+
+  if (branchId) {
     return query.eq(column, branchId);
   }
 
@@ -744,7 +770,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetric[]> {
   }
 
   const supabase = await createClient();
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
   const branchId = profile?.branch_id ?? null;
 
   const customersCountQuery = supabase.from("customers").select("*", { count: "exact", head: true });
@@ -753,18 +779,22 @@ export async function getDashboardMetrics(): Promise<DashboardMetric[]> {
   const notificationsCountQuery = supabase.from("notifications").select("*", { count: "exact", head: true }).eq("status", "unread");
 
   const [customersResult, inventoryResult, remindersResult, notificationsResult] = await Promise.all([
-    applyBranchScope(customersCountQuery, branchId, capabilities.isGeneralManager) as typeof customersCountQuery,
-    applyBranchScope(inventoryCountQuery, branchId, capabilities.isGeneralManager) as typeof inventoryCountQuery,
+    applyBranchScope(customersCountQuery, branchId, capabilities.isGeneralManager, isMuallim, "customers") as typeof customersCountQuery,
+    applyBranchScope(inventoryCountQuery, branchId, capabilities.isGeneralManager, isMuallim, "inventory") as typeof inventoryCountQuery,
     applyBranchScope(
       remindersCountQuery,
       branchId,
       capabilities.isGeneralManager,
+      isMuallim,
+      "customers"
     ) as typeof remindersCountQuery,
     applyBranchScope(
       notificationsCountQuery,
       branchId,
       capabilities.isGeneralManager,
-      "recipient_branch_id",
+      isMuallim,
+      "other",
+      "recipient_branch_id"
     ) as typeof notificationsCountQuery,
   ]);
 
@@ -792,7 +822,7 @@ export type InventoryFilterContext = {
 };
 
 export async function getInventoryFilterContext(): Promise<InventoryFilterContext> {
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
   const supabase = await createClient();
 
   const [{ data: branchRow }, { data: branchesRows }] = await Promise.all([
@@ -825,7 +855,7 @@ export async function getRecentCustomers(limit = 8): Promise<CustomerItem[]> {
   }
 
   const supabase = await createClient();
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
   const recentCustomersQuery = supabase
     .from("customers")
     .select(
@@ -835,6 +865,8 @@ export async function getRecentCustomers(limit = 8): Promise<CustomerItem[]> {
     recentCustomersQuery,
     profile?.branch_id,
     capabilities.isGeneralManager,
+    isMuallim,
+    "customers"
   ) as typeof recentCustomersQuery)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -862,7 +894,9 @@ export async function getCustomersDirectory(
   const branchScoped = applyBranchScope(
     customersDirectoryQuery,
     profile?.branch_id,
-    capabilities.isGeneralManager || isMuallim,
+    capabilities.isGeneralManager,
+    isMuallim,
+    "customers"
   ) as typeof customersDirectoryQuery;
   const fullyScoped =
     options?.onlyAssignedToCurrentUser && userId
@@ -893,7 +927,9 @@ export async function getCustomersSearchResults(query: string, limit = 120): Pro
   const scoped = applyBranchScope(
     customersSearchQuery,
     profile?.branch_id,
-    capabilities.isGeneralManager || isMuallim,
+    capabilities.isGeneralManager,
+    isMuallim,
+    "customers"
   ) as typeof customersSearchQuery;
 
   // نحذف أحرف wildcards الخاصة بـ SQL لمنع تحريف نتائج البحث
@@ -921,7 +957,7 @@ export async function getRecentInventory(limit = 8): Promise<InventoryItem[]> {
   }
 
   const supabase = await createClient();
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
   const recentInventoryQuery = supabase
     .from("inventory")
     .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, gearbox, fuel_type, mileage, specs, inspection, photo_urls, source_customer_id, branches(name)");
@@ -929,6 +965,8 @@ export async function getRecentInventory(limit = 8): Promise<InventoryItem[]> {
     recentInventoryQuery,
     profile?.branch_id,
     capabilities.isGeneralManager,
+    isMuallim,
+    "inventory"
   ) as typeof recentInventoryQuery)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -1126,7 +1164,7 @@ export async function getInventoryDirectory(
   }
 
   const supabase = await createClient();
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
   const inventoryDirectoryQuery = supabase
     .from("inventory")
     .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, gearbox, fuel_type, mileage, specs, inspection, photo_urls, source_customer_id, branch_id, branches(name)");
@@ -1134,6 +1172,8 @@ export async function getInventoryDirectory(
     inventoryDirectoryQuery,
     profile?.branch_id,
     capabilities.isGeneralManager,
+    isMuallim,
+    "inventory"
   ) as typeof inventoryDirectoryQuery)
     .order("updated_at", { ascending: false })
     .limit(limit);
@@ -1303,7 +1343,7 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
   }
 
   const supabase = await createClient();
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
   const branchId = profile?.branch_id ?? null;
   const userId = profile?.id ?? null;
 
@@ -1343,7 +1383,7 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
   ] = await Promise.all([
     getDashboardMetrics(),
     (applyStaffScope(
-      applyBranchScope(dashboardFollowUpsQuery, branchId, capabilities.isGeneralManager) as typeof dashboardFollowUpsQuery,
+      applyBranchScope(dashboardFollowUpsQuery, branchId, capabilities.isGeneralManager, isMuallim, "customers") as typeof dashboardFollowUpsQuery,
       userId,
       capabilities.isManager,
     ) as typeof dashboardFollowUpsQuery).limit(6),
@@ -1352,14 +1392,16 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
         dashboardNotificationsQuery,
         branchId,
         capabilities.isGeneralManager,
-        "recipient_branch_id",
+        isMuallim,
+        "other",
+        "recipient_branch_id"
       ) as typeof dashboardNotificationsQuery,
       userId,
       capabilities.isManager,
       "recipient_user_id",
     ) as typeof dashboardNotificationsQuery).limit(6),
     (applyStaffScope(
-      applyBranchScope(dashboardRemindersQuery, branchId, capabilities.isGeneralManager) as typeof dashboardRemindersQuery,
+      applyBranchScope(dashboardRemindersQuery, branchId, capabilities.isGeneralManager, isMuallim, "customers") as typeof dashboardRemindersQuery,
       userId,
       capabilities.isManager,
     ) as typeof dashboardRemindersQuery).limit(8),
@@ -1479,7 +1521,7 @@ export async function getStaffOverview(): Promise<StaffOverviewItem[]> {
   if (!hasSupabaseEnv()) return [];
 
   const supabase = await createClient();
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
 
   const staffQuery = supabase
     .from("app_users")
@@ -1488,8 +1530,8 @@ export async function getStaffOverview(): Promise<StaffOverviewItem[]> {
   const customersQuery = supabase.from("customers").select("assigned_user_id, status, next_follow_up_at");
 
   const [{ data: staffRows }, { data: customerRows }] = await Promise.all([
-    applyBranchScope(staffQuery, profile?.branch_id, capabilities.isGeneralManager) as typeof staffQuery,
-    applyBranchScope(customersQuery, profile?.branch_id, capabilities.isGeneralManager) as typeof customersQuery,
+    applyBranchScope(staffQuery, profile?.branch_id, capabilities.isGeneralManager, isMuallim, "other") as typeof staffQuery,
+    applyBranchScope(customersQuery, profile?.branch_id, capabilities.isGeneralManager, isMuallim, "customers") as typeof customersQuery,
   ]);
 
   const customerStats = new Map<string, { total: number; sold: number; followups: number }>();
@@ -1543,7 +1585,7 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
   }
 
   const supabase = await createClient();
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
   const branchId = profile?.branch_id ?? null;
   const userId = profile?.id ?? null;
   const now = Date.now();
@@ -1589,6 +1631,8 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
         agendaRemindersQuery,
         branchId,
         capabilities.isGeneralManager,
+        isMuallim,
+        "customers"
       ) as typeof agendaRemindersQuery,
       userId,
       capabilities.isManager,
@@ -1600,6 +1644,8 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
         agendaFollowupsQuery,
         branchId,
         capabilities.isGeneralManager,
+        isMuallim,
+        "customers"
       ) as typeof agendaFollowupsQuery,
       userId,
       capabilities.isManager,
@@ -1611,7 +1657,9 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
         agendaNotificationsQuery,
         branchId,
         capabilities.isGeneralManager,
-        "recipient_branch_id",
+        isMuallim,
+        "other",
+        "recipient_branch_id"
       ) as typeof agendaNotificationsQuery,
       userId,
       capabilities.isManager,
@@ -1624,6 +1672,8 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
         agendaIncompleteQuery,
         branchId,
         capabilities.isGeneralManager,
+        isMuallim,
+        "inventory"
       ) as typeof agendaIncompleteQuery,
       userId,
       capabilities.isManager,
@@ -1733,7 +1783,7 @@ export async function getNotificationsCenter(limit = 120): Promise<{
   }
 
   const supabase = await createClient();
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
   const branchId = profile?.branch_id ?? null;
   const userId = profile?.id ?? null;
 
@@ -1750,13 +1800,17 @@ export async function getNotificationsCenter(limit = 120): Promise<{
     unreadCountQuery,
     branchId,
     capabilities.isGeneralManager,
-    "recipient_branch_id",
+    isMuallim,
+    "other",
+    "recipient_branch_id"
   ) as typeof unreadCountQuery;
   const scopedCenter = applyBranchScope(
     centerQuery,
     branchId,
     capabilities.isGeneralManager,
-    "recipient_branch_id",
+    isMuallim,
+    "other",
+    "recipient_branch_id"
   ) as typeof centerQuery;
 
   const userScopedCenter = applyStaffScope(
@@ -1807,7 +1861,7 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
     };
   }
 
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
   const supabase = await createClient();
   const inventoryBaseQuery = supabase
     .from("inventory")
@@ -1824,6 +1878,8 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
       inventoryBaseQuery,
       profile?.branch_id,
       capabilities.isGeneralManager,
+      isMuallim,
+      "inventory"
     ) as typeof inventoryBaseQuery),
   ]);
 
@@ -1962,7 +2018,7 @@ export async function getCustomerById(customerId: string): Promise<CustomerDetai
 
   const [{ data: customer }, { data: logs }, { data: reminders }, { data: attachments }, { data: tradeIns }] =
     await Promise.all([
-      (applyBranchScope(customerQuery, branchId, capabilities.isGeneralManager || isMuallim) as typeof customerQuery).maybeSingle(),
+      (applyBranchScope(customerQuery, branchId, capabilities.isGeneralManager, isMuallim, "customers") as typeof customerQuery).maybeSingle(),
       // admin لتجاوز RLS — السجلات المُدخلة من البوت/المني-آب قد لا تكون مرئية للـ RLS العادي
       (hasSupabaseServiceRoleEnv() ? createAdminClient() : supabase)
         .from("customer_logs")
@@ -2218,12 +2274,12 @@ export async function getDataQualityCounts(): Promise<{
   if (!hasSupabaseEnv()) return { active: 0, closed: 0, missingFollowup: 0, missingRequestedCar: 0 };
 
   const supabase = await createClient();
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
   const branchId = profile?.branch_id ?? null;
 
   const base = supabase.from("customers").select("*", { count: "exact", head: true });
   const scoped = (q: typeof base) =>
-    applyBranchScope(q, branchId, capabilities.isGeneralManager) as typeof base;
+    applyBranchScope(q, branchId, capabilities.isGeneralManager, isMuallim, "customers") as typeof base;
 
   const [
     { count: active },
@@ -2257,7 +2313,7 @@ export async function getOperationalAlerts(): Promise<{
   }
 
   const supabase = await createClient();
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
   const branchId = profile?.branch_id ?? null;
   const userId = profile?.id ?? null;
 
@@ -2268,7 +2324,7 @@ export async function getOperationalAlerts(): Promise<{
     );
 
   const { data } = await (applyStaffScope(
-    applyBranchScope(customersQuery, branchId, capabilities.isGeneralManager) as typeof customersQuery,
+    applyBranchScope(customersQuery, branchId, capabilities.isGeneralManager, isMuallim, "customers") as typeof customersQuery,
     userId,
     capabilities.isManager,
   ) as typeof customersQuery).limit(250);
@@ -2439,7 +2495,7 @@ export async function getPendingEvaluationWithDetails(): Promise<PendingEvaluati
   if (!hasSupabaseEnv()) return [];
 
   const supabase = await createClient();
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
   const branchId = profile?.branch_id ?? null;
   const userId = profile?.id ?? null;
 
@@ -2452,7 +2508,7 @@ export async function getPendingEvaluationWithDetails(): Promise<PendingEvaluati
     .eq("is_active", true);
 
   const scoped = applyStaffScope(
-    applyBranchScope(query, branchId, capabilities.isGeneralManager) as typeof query,
+    applyBranchScope(query, branchId, capabilities.isGeneralManager, isMuallim, "other") as typeof query,
     userId,
     capabilities.isManager,
   ) as typeof query;
