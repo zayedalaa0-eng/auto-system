@@ -702,7 +702,7 @@ export async function getDashboardContext() {
   };
 }
 
-async function getScopedProfile() {
+export async function getScopedProfile() {
   const { profile } = await getDashboardContext();
   const capabilities = getRoleCapabilities(profile?.role, profile?.full_name);
 

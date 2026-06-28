@@ -13,7 +13,10 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
   const { data: roleRow } = session
     ? await supabase.from("app_users").select("role").eq("auth_user_id", session.user.id).maybeSingle()
     : { data: null };
-  const isManager = getRoleCapabilities(roleRow?.role).isManager;
+  const baseCapabilities = getRoleCapabilities(roleRow?.role);
+  
+  const { isMuallim } = await import("@/lib/data").then((m) => m.getScopedProfile());
+  const isManager = baseCapabilities.isManager || isMuallim;
 
   const [customer, options] = await Promise.all([getCustomerById(id), getCustomerFormOptions()]);
 

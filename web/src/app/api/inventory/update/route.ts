@@ -24,8 +24,12 @@ export async function POST(req: NextRequest) {
   const caps = getRoleCapabilities(profile.role);
   const admin = createAdminClient();
 
-  // التحقق من الملكية
-  if (!caps.isGeneralManager) {
+  // السماح لمدير معرض لمعلم بتعديل كل السيارات التي تظهر له
+  const { data: userBranch } = await admin.from("branches").select("name").eq("id", profile.branch_id).maybeSingle();
+  const isMuallim = userBranch?.name?.includes("لمعلم") ?? false;
+
+  // التحقق من الصلاحيات
+  if (!caps.isGeneralManager && !isMuallim) {
     const { data: car } = await admin.from("inventory").select("branch_id").eq("id", id).maybeSingle();
     if (car?.branch_id && car.branch_id !== profile.branch_id) {
       return NextResponse.json({ error: "لا تملك صلاحية تعديل سيارة من معرض آخر" }, { status: 403 });
