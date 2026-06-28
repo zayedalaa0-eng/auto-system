@@ -2530,7 +2530,7 @@ export async function getPendingEvaluationWithDetails(): Promise<PendingEvaluati
     .eq("is_active", true);
 
   const scoped = applyStaffScope(
-    applyBranchScope(query, branchId, capabilities.isGeneralManager, isMuallim, "other") as typeof query,
+    applyBranchScope(query, branchId, capabilities.isGeneralManager, isMuallim, "customers") as typeof query,
     userId,
     capabilities.isManager,
   ) as typeof query;

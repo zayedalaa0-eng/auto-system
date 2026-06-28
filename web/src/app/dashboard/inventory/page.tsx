@@ -87,8 +87,10 @@ export default async function InventoryPage({
   // التبويب: showroom = مخزون المعرض، customers = مخزون العملاء
   const activeTab = tab === "customers" ? "customers" : "showroom";
   const ctx = await getInventoryFilterContext();
-  const isShowUsed = show_used === "1" || (ctx.isMuallimBranch && !ctx.isGeneralManager);
   const branchFilter = parseBranchFilter(branch);
+  
+  const isAlMuallimView = ctx.isMuallimBranch || (branchFilter.branchName && (branchFilter.branchName.includes("المعلم") || branchFilter.branchName.includes("معلم")));
+  const isShowUsed = show_used === "1" || isAlMuallimView;
   // معرض لمعلم: يجلب دائماً سيارات المعارض الأخرى (برسم البيع) — الفلتر يتحكم بما يُعرض
   const includeCross =
     ctx.isMuallimBranch && !ctx.isGeneralManager
