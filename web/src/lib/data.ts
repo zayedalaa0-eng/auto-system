@@ -709,6 +709,9 @@ async function getScopedProfile() {
     }
   }
 
+  const isMuallim = (profile?.branch_name ?? "").includes("لمعلم");
+  capabilities.isGlobalView = capabilities.isGeneralManager || (isMuallim && capabilities.isManager);
+
   return {
     profile,
     capabilities,
@@ -756,12 +759,12 @@ export async function getDashboardMetrics(): Promise<DashboardMetric[]> {
   const inventoryQuery = supabase.from("inventory").select("condition_label, owner_name, source_customer_id, deal_type, is_active, availability_status");
 
   const [customersResult, inventoryResult, remindersResult, branchesResult] = await Promise.all([
-    applyBranchScope(customersCountQuery, branchId, capabilities.isGeneralManager) as typeof customersCountQuery,
-    applyBranchScope(inventoryQuery, branchId, capabilities.isGeneralManager) as typeof inventoryQuery,
+    applyBranchScope(customersCountQuery, branchId, (capabilities.isGlobalView ?? capabilities.isGeneralManager)) as typeof customersCountQuery,
+    applyBranchScope(inventoryQuery, branchId, (capabilities.isGlobalView ?? capabilities.isGeneralManager)) as typeof inventoryQuery,
     applyBranchScope(
       remindersCountQuery,
       branchId,
-      capabilities.isGeneralManager,
+      (capabilities.isGlobalView ?? capabilities.isGeneralManager),
     ) as typeof remindersCountQuery,
     supabase.from("branches").select("name").eq("is_active", true)
   ]);
@@ -839,7 +842,7 @@ export async function getInventoryFilterContext(): Promise<InventoryFilterContex
   const branches = branchObjects.map((b) => b.name);
 
   return {
-    isGeneralManager: capabilities.isGeneralManager,
+    isGeneralManager: (capabilities.isGlobalView ?? capabilities.isGeneralManager),
     isManager: capabilities.isManager,
     branchId: profile?.branch_id ?? null,
     branchName,
@@ -864,7 +867,7 @@ export async function getRecentCustomers(limit = 8): Promise<CustomerItem[]> {
   const { data } = await (applyBranchScope(
     recentCustomersQuery,
     profile?.branch_id,
-    capabilities.isGeneralManager,
+    (capabilities.isGlobalView ?? capabilities.isGeneralManager),
   ) as typeof recentCustomersQuery)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -892,7 +895,7 @@ export async function getCustomersDirectory(
   const branchScoped = applyBranchScope(
     customersDirectoryQuery,
     profile?.branch_id,
-    capabilities.isGeneralManager,
+    (capabilities.isGlobalView ?? capabilities.isGeneralManager),
   ) as typeof customersDirectoryQuery;
   const fullyScoped =
     options?.onlyAssignedToCurrentUser && userId
@@ -923,7 +926,7 @@ export async function getCustomersSearchResults(query: string, limit = 120): Pro
   const scoped = applyBranchScope(
     customersSearchQuery,
     profile?.branch_id,
-    capabilities.isGeneralManager,
+    (capabilities.isGlobalView ?? capabilities.isGeneralManager),
   ) as typeof customersSearchQuery;
 
   // نحذف أحرف wildcards الخاصة بـ SQL لمنع تحريف نتائج البحث
@@ -958,7 +961,7 @@ export async function getRecentInventory(limit = 8): Promise<InventoryItem[]> {
   const { data } = await (applyBranchScope(
     recentInventoryQuery,
     profile?.branch_id,
-    capabilities.isGeneralManager,
+    (capabilities.isGlobalView ?? capabilities.isGeneralManager),
   ) as typeof recentInventoryQuery)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -1163,7 +1166,7 @@ export async function getInventoryDirectory(
   const { data } = await (applyBranchScope(
     inventoryDirectoryQuery,
     profile?.branch_id,
-    capabilities.isGeneralManager,
+    (capabilities.isGlobalView ?? capabilities.isGeneralManager),
   ) as typeof inventoryDirectoryQuery)
     .order("updated_at", { ascending: false })
     .limit(limit);
@@ -1226,7 +1229,7 @@ export async function getInventoryDirectory(
 
   // Special handling for Muallim when the viewer is a general manager:
   // items from other branches should be shown as "برسم البيع" in حالة/الصفقة.
-  if (capabilities.isGeneralManager) {
+  if ((capabilities.isGlobalView ?? capabilities.isGeneralManager)) {
     return enrichInventoryAssignees(
       scopedItems
         .filter((item) => isAvailableStatus(item.availability_status))
@@ -1380,17 +1383,17 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
   ] = await Promise.all([
     getDashboardMetrics(),
     (applyStaffScope(
-      applyBranchScope(dashboardFollowUpsQuery, branchId, capabilities.isGeneralManager) as typeof dashboardFollowUpsQuery,
+      applyBranchScope(dashboardFollowUpsQuery, branchId, (capabilities.isGlobalView ?? capabilities.isGeneralManager)) as typeof dashboardFollowUpsQuery,
       userId,
       capabilities.isManager,
     ) as typeof dashboardFollowUpsQuery).limit(6),
     (applyStaffScope(
-      applyBranchScope(dashboardUnavailableRequestsQuery, branchId, capabilities.isGeneralManager) as typeof dashboardUnavailableRequestsQuery,
+      applyBranchScope(dashboardUnavailableRequestsQuery, branchId, (capabilities.isGlobalView ?? capabilities.isGeneralManager)) as typeof dashboardUnavailableRequestsQuery,
       userId,
       capabilities.isManager,
     ) as typeof dashboardUnavailableRequestsQuery).limit(50),
     (applyStaffScope(
-      applyBranchScope(dashboardRemindersQuery, branchId, capabilities.isGeneralManager) as typeof dashboardRemindersQuery,
+      applyBranchScope(dashboardRemindersQuery, branchId, (capabilities.isGlobalView ?? capabilities.isGeneralManager)) as typeof dashboardRemindersQuery,
       userId,
       capabilities.isManager,
     ) as typeof dashboardRemindersQuery).limit(8),
@@ -1524,8 +1527,8 @@ export async function getStaffOverview(): Promise<StaffOverviewItem[]> {
   const customersQuery = supabase.from("customers").select("assigned_user_id, status, next_follow_up_at");
 
   const [{ data: staffRows }, { data: customerRows }] = await Promise.all([
-    applyBranchScope(staffQuery, profile?.branch_id, capabilities.isGeneralManager) as typeof staffQuery,
-    applyBranchScope(customersQuery, profile?.branch_id, capabilities.isGeneralManager) as typeof customersQuery,
+    applyBranchScope(staffQuery, profile?.branch_id, (capabilities.isGlobalView ?? capabilities.isGeneralManager)) as typeof staffQuery,
+    applyBranchScope(customersQuery, profile?.branch_id, (capabilities.isGlobalView ?? capabilities.isGeneralManager)) as typeof customersQuery,
   ]);
 
   const customerStats = new Map<string, { total: number; sold: number; followups: number }>();
@@ -1624,7 +1627,7 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
       applyBranchScope(
         agendaRemindersQuery,
         branchId,
-        capabilities.isGeneralManager,
+        (capabilities.isGlobalView ?? capabilities.isGeneralManager),
       ) as typeof agendaRemindersQuery,
       userId,
       capabilities.isManager,
@@ -1635,7 +1638,7 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
       applyBranchScope(
         agendaFollowupsQuery,
         branchId,
-        capabilities.isGeneralManager,
+        (capabilities.isGlobalView ?? capabilities.isGeneralManager),
       ) as typeof agendaFollowupsQuery,
       userId,
       capabilities.isManager,
@@ -1646,7 +1649,7 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
       applyBranchScope(
         agendaNotificationsQuery,
         branchId,
-        capabilities.isGeneralManager,
+        (capabilities.isGlobalView ?? capabilities.isGeneralManager),
         "recipient_branch_id",
       ) as typeof agendaNotificationsQuery,
       userId,
@@ -1659,7 +1662,7 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
       applyBranchScope(
         agendaIncompleteQuery,
         branchId,
-        capabilities.isGeneralManager,
+        (capabilities.isGlobalView ?? capabilities.isGeneralManager),
       ) as typeof agendaIncompleteQuery,
       userId,
       capabilities.isManager,
@@ -1785,13 +1788,13 @@ export async function getNotificationsCenter(limit = 120): Promise<{
   const scopedUnread = applyBranchScope(
     unreadCountQuery,
     branchId,
-    capabilities.isGeneralManager,
+    (capabilities.isGlobalView ?? capabilities.isGeneralManager),
     "recipient_branch_id",
   ) as typeof unreadCountQuery;
   const scopedCenter = applyBranchScope(
     centerQuery,
     branchId,
-    capabilities.isGeneralManager,
+    (capabilities.isGlobalView ?? capabilities.isGeneralManager),
     "recipient_branch_id",
   ) as typeof centerQuery;
 
@@ -1859,7 +1862,7 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
     (applyBranchScope(
       inventoryBaseQuery,
       profile?.branch_id,
-      capabilities.isGeneralManager,
+      (capabilities.isGlobalView ?? capabilities.isGeneralManager),
     ) as typeof inventoryBaseQuery),
   ]);
 
@@ -1905,7 +1908,7 @@ export async function getCustomerFormOptions(): Promise<CustomerFormOptions> {
     .filter((item) => isAvailable(item.availability_status))
     .map(toOption);
 
-  if (!capabilities.isGeneralManager && profile?.branch_id) {
+  if (!(capabilities.isGlobalView ?? capabilities.isGeneralManager) && profile?.branch_id) {
     // نستخدم قائمة الفروع المجلوبة مسبقاً بدل استعلام إضافي
     const currentBranch = (branches ?? []).find((b) => b.id === profile!.branch_id);
     const isMuallimBranch = (currentBranch?.name ?? "").includes(AR_MUALLIM);
@@ -1996,8 +1999,7 @@ export async function getCustomerById(customerId: string): Promise<CustomerDetai
     )
     .eq("id", customerId);
 
-  const isMuallim = (profile?.branch_name ?? "").includes("لمعلم");
-  const bypassScope = capabilities.isGeneralManager || (isMuallim && capabilities.isManager);
+  const bypassScope = (capabilities.isGlobalView ?? capabilities.isGeneralManager);
 
   const [{ data: customer }, { data: logs }, { data: reminders }, { data: attachments }, { data: tradeIns }] =
     await Promise.all([
@@ -2263,7 +2265,7 @@ export async function getDataQualityCounts(): Promise<{
 
   const createBase = () => supabase.from("customers").select("*", { count: "exact", head: true });
   const scoped = (q: ReturnType<typeof createBase>) =>
-    applyBranchScope(q, branchId, capabilities.isGeneralManager) as ReturnType<typeof createBase>;
+    applyBranchScope(q, branchId, (capabilities.isGlobalView ?? capabilities.isGeneralManager)) as ReturnType<typeof createBase>;
 
   const [
     { count: active },
@@ -2308,7 +2310,7 @@ export async function getOperationalAlerts(): Promise<{
     );
 
   const { data } = await (applyStaffScope(
-    applyBranchScope(customersQuery, branchId, capabilities.isGeneralManager) as typeof customersQuery,
+    applyBranchScope(customersQuery, branchId, (capabilities.isGlobalView ?? capabilities.isGeneralManager)) as typeof customersQuery,
     userId,
     capabilities.isManager,
   ) as typeof customersQuery).limit(250);
@@ -2494,7 +2496,7 @@ export async function getPendingEvaluationWithDetails(): Promise<PendingEvaluati
     .eq("is_active", true);
 
   const isMuallim = (profile?.branch_name ?? "").includes("لمعلم");
-  const bypassScope = capabilities.isGeneralManager || (isMuallim && capabilities.isManager);
+  const bypassScope = (capabilities.isGlobalView ?? capabilities.isGeneralManager) || (isMuallim && capabilities.isManager);
 
   const scoped = applyStaffScope(
     applyBranchScope(query, branchId, bypassScope) as typeof query,

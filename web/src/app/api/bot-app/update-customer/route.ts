@@ -4,6 +4,7 @@ import { getRoleCapabilities } from "@/lib/roles";
 import { isClosedStatus } from "@/lib/statuses";
 import { isValidPhone, normalizePhone, PHONE_ERROR_MESSAGE } from "@/lib/phone";
 import { pushCustomerUpdateToManagers, pushEvaluationRequestToManagers } from "@/lib/telegram/push";
+import { logAuditAction } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -220,6 +221,16 @@ export async function POST(req: NextRequest) {
       const timestamp = `${String(_now.getUTCDate()).padStart(2,"0")}/${String(_now.getUTCMonth()+1).padStart(2,"0")}/${_now.getUTCFullYear()} ${String(_now.getUTCHours()).padStart(2,"0")}:${String(_now.getUTCMinutes()).padStart(2,"0")}`;
       const prefix = `[${timestamp} - ${user.full_name}]: `;
       updates.notes = existing ? `${existing}\n${prefix}${noteText}` : `${prefix}${noteText}`;
+      
+      // تسجيل الملاحظة في السجل التاريخي (Audit Log)
+      void logAuditAction({
+        action: "إضافة ملاحظة",
+        entity_type: "customer",
+        entity_id: customer_id,
+        actorId: user.id,
+        details: { source: "telegram_miniapp", note: noteText, customer_name: String(updates.full_name ?? customer.full_name) },
+        supabase: admin,
+      });
     }
 
     // ── #14: زيادة عدد التفاعلات (فقط إذا count_as_interaction !== false) ────

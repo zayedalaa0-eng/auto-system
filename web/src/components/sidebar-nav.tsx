@@ -98,15 +98,13 @@ export function SidebarNav({
   }, [signOutAction]);
 
   const navItems: NavItem[] = [
-    { href: "/dashboard", label: "الرئيسية", icon: ChartBar },
     { href: "/dashboard/agenda", label: "الأجندة", icon: CalendarClock },
-    { href: "/dashboard/customers", label: "إدارة العملاء (CRM)", icon: UsersRound },
-    { href: "/dashboard/production", label: "الإنتاج", icon: Warehouse },
-    { href: "/dashboard/inventory", label: "المخزون والأصناف", icon: List },
-    { href: "/dashboard/maintenance", label: "إدارة الصيانة", icon: Wrench },
-    { href: "/dashboard/blacksmiths", label: "طلبيات الحدادين", icon: Hammer },
-    { href: "/dashboard/quality", label: "فحص الجودة", icon: CheckSquare },
+    { href: "/dashboard/customers/new", label: "إدخال عميل جديد", icon: UserPlus },
+    { href: "/dashboard/customers", label: "تقرير عملائي", icon: List },
+    { href: "/dashboard/search", label: "عملاء المعرض", icon: FileSearch },
+    { href: "/dashboard/inventory", label: "المخزون", icon: Warehouse },
     { href: "/dashboard/notifications", label: "التنبيهات", icon: Bell, badge: unreadCount },
+    { href: "/dashboard", label: "الإحصائيات", icon: ChartBar },
     { href: "/dashboard/management", label: "تقرير الإدارة", icon: ChartPie, managerOnly: true },
     { href: "/dashboard/staff", label: "الموظفين", icon: UsersRound, managerOnly: true },
     { href: "/dashboard/branches", label: "إدارة المعارض", icon: Building2, gmOnly: true },

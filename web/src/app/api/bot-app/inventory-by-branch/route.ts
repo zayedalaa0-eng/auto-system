@@ -1,4 +1,4 @@
-﻿import { type NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(req: NextRequest) {
@@ -23,17 +23,24 @@ export async function GET(req: NextRequest) {
 
     if (!user) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
 
-    const [{ data: inv }, { data: branchRows }] = await Promise.all([
-      admin
-        .from("inventory")
-        .select("id, model, chassis_no, price, color, production_year, availability_status, deal_type, owner_name, condition_label")
-        .eq("branch_id", branchId)
-        .not("availability_status", "in", '("مباعة","محجوزة","مسحوبة من المعرض")')
-        .eq("is_active", true)
-        .order("updated_at", { ascending: false })
-        .limit(50),
-      admin.from("branches").select("name").eq("is_active", true),
-    ]);
+    const { data: branchRows } = await admin.from("branches").select("id, name").eq("is_active", true);
+    const requestedBranch = branchRows?.find((b) => b.id === branchId);
+    const isMuallim = (requestedBranch?.name ?? "").includes("لمعلم");
+
+    let invQuery = admin
+      .from("inventory")
+      .select("id, model, chassis_no, price, color, production_year, availability_status, deal_type, owner_name, condition_label, branch_id")
+      .not("availability_status", "in", '("مباعة","محجوزة","مسحوبة من المعرض")')
+      .eq("is_active", true);
+
+    if (isMuallim) {
+      // جلب سيارات الفرع + السيارات المستعملة من الفروع الأخرى + سيارات برسم البيع
+      invQuery = invQuery.or(`branch_id.eq.${branchId},condition_label.eq.مستعملة,deal_type.ilike.%بيع بالوكالة%,deal_type.ilike.%برسم البيع%`);
+    } else {
+      invQuery = invQuery.eq("branch_id", branchId);
+    }
+
+    const { data: inv } = await invQuery.order("updated_at", { ascending: false }).limit(100);
 
     const branchNames = new Set((branchRows ?? []).map(b => (b.name ?? "").trim().toLowerCase()));
     // التصنيف حسب المالك: شخص → عميل، معرض/فارغ → معرض

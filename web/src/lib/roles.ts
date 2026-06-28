@@ -1,6 +1,7 @@
 export type RoleCapabilities = {
   isGeneralManager: boolean;
   isManager: boolean;
+  isGlobalView?: boolean;
 };
 
 /**
