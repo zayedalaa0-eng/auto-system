@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getRoleCapabilities } from "@/lib/roles";
 import { PHONE_ERROR_MESSAGE, isValidPhone, normalizePhone } from "@/lib/phone";
 import { isClosedStatus } from "@/lib/statuses";
-import { pushNewCustomerToManagers, pushEvaluationRequestToManagers } from "@/lib/telegram/push";
+import { pushNewCustomerToManagers, pushEvaluationRequestToMaalamManager } from "@/lib/telegram/push";
 import { logAuditAction } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
@@ -226,7 +226,7 @@ export async function POST(req: NextRequest) {
           const { data: branchRow } = await admin.from("branches").select("name").eq("id", resolvedBranchId).maybeSingle();
           branchNameStr = branchRow?.name ?? null;
         }
-        void pushEvaluationRequestToManagers({
+        void pushEvaluationRequestToMaalamManager({
           tradeInId: insertedTi?.id ?? inserted.id,
           customerId: inserted.id,
           customerName: full_name.trim(),
@@ -234,7 +234,7 @@ export async function POST(req: NextRequest) {
           submitterUserId: user.id,
           submitterName: user.full_name,
           submitterChatId: String(chat_id),
-          branchId: resolvedBranchId,
+
           branchName: branchNameStr,
           car: {
             model: ti.model.trim(),
@@ -342,3 +342,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "خطأ في الخادم" }, { status: 500 });
   }
 }
+
+

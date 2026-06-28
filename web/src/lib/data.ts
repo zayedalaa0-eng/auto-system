@@ -141,6 +141,7 @@ export type DashboardOverview = {
   followUps: CustomerItem[];
   recentCustomers: CustomerItem[];
   recentInventory: InventoryItem[];
+  unavailableRequests: CustomerItem[];
 };
 
 export type NotificationsCenterItem = {
@@ -1339,6 +1340,7 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
       followUps: [],
       recentCustomers: [],
       recentInventory: [],
+      unavailableRequests: [],
     };
   }
 
@@ -1437,6 +1439,7 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
     followUps,
     recentCustomers: [],
     recentInventory: [],
+    unavailableRequests: [],
   };
 }
 
