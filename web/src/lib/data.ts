@@ -707,12 +707,16 @@ async function getScopedProfile() {
   const capabilities = getRoleCapabilities(profile?.role, profile?.full_name);
 
   let isMuallim = false;
-  if (profile && profile.branch_id && !profile.branch_name) {
-    const supabase = await createClient();
-    const { data: b } = await supabase.from("branches").select("name").eq("id", profile.branch_id).maybeSingle();
-    if (b) {
-      profile.branch_name = b.name;
-      isMuallim = b.name.includes("لمعلم");
+  if (profile && profile.branch_id) {
+    if (!profile.branch_name) {
+      const supabase = await createClient();
+      const { data: b } = await supabase.from("branches").select("name").eq("id", profile.branch_id).maybeSingle();
+      if (b) {
+        profile.branch_name = b.name;
+        isMuallim = b.name.includes("لمعلم") || b.name.includes("المعلم");
+      }
+    } else {
+      isMuallim = profile.branch_name.includes("لمعلم") || profile.branch_name.includes("المعلم");
     }
   }
 
