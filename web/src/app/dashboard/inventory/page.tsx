@@ -145,21 +145,23 @@ export default async function InventoryPage({
       if (branchFilter.mode === "legacy-branch" && branchFilter.branchName && itemBranch !== branchFilter.branchName)
         return false;
     } else if (ctx.isMuallimBranch) {
-      if (branchFilter.mode === "all") {
-        // كل المعارض: سيارات لمعلم كلها + سيارات المعارض الأخرى برسم البيع فقط
+      if (branchFilter.mode === "all" || branchFilter.mode === "default") {
+        // كل المعارض أو الافتراضي: سيارات لمعلم كلها + سيارات المعارض الأخرى المستعملة/برسم البيع
         const isOtherBranch = itemBranch !== normalize(ctx.branchName);
-        if (isOtherBranch && normalize(item.deal_type) !== "برسم البيع") return false;
+        if (isOtherBranch) {
+          const isCust = Boolean(itemOwner) && !branchNamesSet.has(itemOwner);
+          const cond = normalize(item.condition_label);
+          if (!(itemDeal.includes("برسم البيع") || itemDeal.includes("استبدال") || itemDeal.includes("بيع بالوكالة") || cond === "مستعمل" || isCust)) return false;
+        }
       } else if (branchFilter.mode === "self") {
         if (itemBranch !== normalize(ctx.branchName)) return false;
       } else if (branchFilter.mode === "cross") {
         if (!branchFilter.branchName || itemBranch !== branchFilter.branchName) return false;
-        if (normalize(item.deal_type) !== "برسم البيع") return false;
+        const isCust = Boolean(itemOwner) && !branchNamesSet.has(itemOwner);
+        const cond = normalize(item.condition_label);
+        if (!(itemDeal.includes("برسم البيع") || itemDeal.includes("استبدال") || itemDeal.includes("بيع بالوكالة") || cond === "مستعمل" || isCust)) return false;
       } else if (branchFilter.mode === "legacy-branch") {
         if (branchFilter.branchName && itemBranch !== branchFilter.branchName) return false;
-      } else if (branchFilter.mode === "default") {
-        // معرض لمعلم: الافتراضي = كل المعارض (سياراتهم + برسم البيع من غيرهم)
-        const isOtherBranch = itemBranch !== normalize(ctx.branchName);
-        if (isOtherBranch && normalize(item.deal_type) !== "برسم البيع") return false;
       }
     } else {
       if (itemBranch !== normalize(ctx.branchName)) return false;
