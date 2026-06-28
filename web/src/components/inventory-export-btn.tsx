@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Download } from "lucide-react";
 
-type ExportFilter = { status?: string; deal?: string; branch?: string; tab?: string; q?: string };
+type ExportFilter = { status?: string; deal?: string; branch?: string; tab?: string; q?: string; owner?: string; gearbox?: string; fuel?: string; show_used?: string; };
 
 function fmtD(iso: string | null | undefined) {
   if (!iso) return "";
@@ -89,6 +89,11 @@ export function InventoryExportBtn({ filters }: { filters: ExportFilter }) {
       if (filters.deal)   p.set("deal",   filters.deal);
       if (filters.tab)    p.set("tab",    filters.tab);
       if (filters.q)      p.set("q",      filters.q);
+      if (filters.branch) p.set("branch", filters.branch);
+      if (filters.owner)  p.set("owner",  filters.owner);
+      if (filters.gearbox) p.set("gearbox", filters.gearbox);
+      if (filters.fuel)   p.set("fuel",   filters.fuel);
+      if (filters.show_used) p.set("show_used", filters.show_used);
 
       const res = await fetch(`/api/inventory/export?${p}`);
       if (!res.ok) { alert("فشل التصدير: " + (await res.text())); return; }

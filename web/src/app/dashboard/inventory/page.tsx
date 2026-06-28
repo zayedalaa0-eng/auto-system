@@ -329,7 +329,7 @@ export default async function InventoryPage({
           >
             + إضافة سيارة
           </Link>
-          <InventoryExportBtn filters={{ status: status ?? "", deal: deal ?? "", branch: branch ?? "", tab: activeTab, q: q ?? "" }} />
+          <InventoryExportBtn filters={{ status: status ?? "", deal: deal ?? "", branch: branch ?? "", tab: activeTab, q: q ?? "", owner: owner ?? "", gearbox: gearbox ?? "", fuel: fuel ?? "", show_used: show_used ?? "" }} />
           <InventoryImportBtn
             isGeneralManager={ctx.isGeneralManager}
             branchId={ctx.branchId}

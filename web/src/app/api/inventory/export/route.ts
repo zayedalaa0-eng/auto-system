@@ -58,59 +58,98 @@ export async function GET(req: NextRequest) {
       return Boolean(owner) && !branchNameSet.has(owner);
     };
 
-    // ── معرض المعلم: من المعارض الأخرى يأخذ فقط المسموح ──
-    if (isMuallim && !caps.isGeneralManager) {
-      const ownNorm = userBranchName;
-      items = items.filter(i => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const br = (i as any).branches;
-        const bName = normalize((Array.isArray(br) ? br[0]?.name : br?.name) as string ?? "");
-        if (bName === ownNorm) return true; // كل سيارات معرضه
-        // من المعارض الأخرى: المسموح فقط
-        const deal = normalize(i.deal_type as string);
-        const cond = normalize(i.condition_label as string);
-        const isCustomer = isCustomerCar(i);
-        return deal.includes("برسم البيع") || deal.includes("استبدال") || deal.includes("حيازة") || deal.includes("بيع بالوكالة") || cond === "مستعمل" || isCustomer;
-      });
+    // ── دالة تقسيم فلتر المعرض (نفس الموجودة في page.tsx) ───────────────────
+    function parseBranchFilter(value: string | undefined) {
+      const raw = (value ?? "").trim();
+      if (!raw) return { mode: "default" as const, branchName: null as string | null };
+      if (raw === "all") return { mode: "all" as const, branchName: null as string | null };
+      if (raw === "self") return { mode: "self" as const, branchName: null as string | null };
+      if (raw.startsWith("cross:")) return { mode: "cross" as const, branchName: raw.slice(6) || null };
+      if (raw.startsWith("branch:")) return { mode: "branch" as const, branchName: raw.slice(7) || null };
+      return { mode: "legacy-branch" as const, branchName: raw };
     }
 
-    // ── فلتر المعرض للمدير العام (إن اختار معرضاً محدداً) ──────────────────────
-    if (caps.isGeneralManager && branchFilter && branchFilter !== "all") {
-      const wanted = branchFilter.replace(/^branch:/, "").replace(/^cross:/, "").trim();
-      if (wanted && wanted !== "self") {
-        items = items.filter(i => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const br = (i as any).branches;
-          const bName = (Array.isArray(br) ? br[0]?.name : br?.name) as string ?? "";
-          return normalize(bName) === normalize(wanted);
-        });
+    const bFilter = parseBranchFilter(branchFilter);
+    const isShowUsed = showUsedFilter || isMuallim;
+
+    items = items.filter(i => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const br = (i as any).branches;
+      const itemBranch = normalize((Array.isArray(br) ? br[0]?.name : br?.name) as string ?? "");
+      const itemOwner = normalize(i.owner_name as string);
+      const itemDeal = normalize(i.deal_type as string);
+      const itemGearbox = normalize(i.gearbox as string);
+      const itemFuel = normalize(i.fuel_type as string);
+
+      // ── فلتر المعرض ──
+      if (caps.isGeneralManager) {
+        if (bFilter.mode === "branch" && bFilter.branchName && itemBranch !== normalize(bFilter.branchName)) return false;
+        if (bFilter.mode === "legacy-branch" && bFilter.branchName && itemBranch !== normalize(bFilter.branchName)) return false;
+      } else if (isMuallim) {
+        if (bFilter.mode === "all" || bFilter.mode === "default") {
+          const isOtherBranch = itemBranch !== userBranchName;
+          if (isOtherBranch) {
+            const isCust = Boolean(itemOwner) && !branchNameSet.has(itemOwner);
+            const cond = normalize(i.condition_label as string);
+            if (!(itemDeal.includes("برسم البيع") || itemDeal.includes("استبدال") || itemDeal.includes("بيع بالوكالة") || cond === "مستعمل" || isCust)) return false;
+          }
+        } else if (bFilter.mode === "self") {
+          if (itemBranch !== userBranchName) return false;
+        } else if (bFilter.mode === "cross") {
+          if (!bFilter.branchName || itemBranch !== normalize(bFilter.branchName)) return false;
+          const isCust = Boolean(itemOwner) && !branchNameSet.has(itemOwner);
+          const cond = normalize(i.condition_label as string);
+          if (!(itemDeal.includes("برسم البيع") || itemDeal.includes("استبدال") || itemDeal.includes("بيع بالوكالة") || cond === "مستعمل" || isCust)) return false;
+        } else if (bFilter.mode === "legacy-branch") {
+          if (bFilter.branchName && itemBranch !== normalize(bFilter.branchName)) return false;
+        }
+      } else {
+        if (itemBranch !== userBranchName) return false;
       }
-    }
 
-    // ── فلتر التبويب (حسب المالك) ──────────────────────────────────────────────
-    if (tabFilter === "customers") {
-      items = items.filter(isCustomerCar);
-    } else if (tabFilter === "showroom") {
-      items = items.filter(i => !isCustomerCar(i));
-    }
+      // ── الفلاتر الأخرى ──
+      if (ownerFilter && ownerFilter !== "all" && itemOwner !== normalize(ownerFilter)) return false;
+      if (dealFilter && dealFilter !== "all" && itemDeal !== normalize(dealFilter)) return false;
+      if (gearboxFilter && gearboxFilter !== "all" && itemGearbox !== normalize(gearboxFilter)) return false;
+      if (fuelFilter && fuelFilter !== "all" && itemFuel !== normalize(fuelFilter)) return false;
 
-    if (statusFilter === "incomplete") {
-      items = items.filter(isIncomplete);
-    } else if (statusFilter) {
-      items = items.filter(i => normalize(i.availability_status as string) === normalize(statusFilter));
-    }
-
-    if (dealFilter && dealFilter !== "all") {
-      items = items.filter(i => normalize(i.deal_type as string).includes(normalize(dealFilter)));
-    }
-
-    if (qFilter) {
-      items = items.filter(i =>
-        [i.model, i.chassis_no, i.owner_name, i.color].some(v =>
+      // ── فلتر البحث ──
+      if (qFilter) {
+        const matches = [i.model, i.chassis_no, i.owner_name, i.color, itemBranch, i.gearbox, i.fuel_type].some(v =>
           normalize(v as string).includes(qFilter)
-        )
-      );
-    }
+        );
+        if (!matches) return false;
+      }
+
+      // ── تبويبات وفلاتر الحالة (نفس المنطق من page.tsx) ──
+      if (tabFilter === "customers") {
+        if (!isCustomerCar(i)) return false;
+      } else if (tabFilter === "showroom") {
+        if (isCustomerCar(i)) return false;
+        // إظهار المستعمل
+        if (!isMuallim && !isShowUsed) {
+          if (!normalize(i.condition_label as string).includes("جديد")) return false;
+        }
+      }
+
+      if (statusFilter === "incomplete") {
+        if (!isIncomplete(i)) return false;
+      } else if (statusFilter && statusFilter !== "all") {
+        // "active" status means not sold and not withdrawn
+        if (statusFilter === "active") {
+          const s = normalize(i.availability_status as string);
+          if (s === "مباعة" || s === "مسحوبة من المعرض") return false;
+        } else {
+          if (normalize(i.availability_status as string) !== normalize(statusFilter)) return false;
+        }
+      } else if (!statusFilter) {
+        // default "active"
+        const s = normalize(i.availability_status as string);
+        if (s === "مباعة" || s === "مسحوبة من المعرض") return false;
+      }
+
+      return true;
+    });
 
     const data = items.map((i, idx) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
