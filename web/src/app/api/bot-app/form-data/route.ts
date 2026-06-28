@@ -1,4 +1,4 @@
-﻿import { type NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRoleCapabilities } from "@/lib/roles";
 import { STATUS_BY_TYPE } from "@/lib/statuses";
@@ -25,6 +25,8 @@ export async function GET(req: NextRequest) {
 
   const caps = getRoleCapabilities(user.role, user.full_name);
 
+  const isGlobal = caps.isGeneralManager && !user.branch_id;
+
   // Inventory scoped to branch
   let inventoryQuery = admin
     .from("inventory")
@@ -32,7 +34,7 @@ export async function GET(req: NextRequest) {
     .eq("is_active", true)
     .order("model");
 
-  if (!caps.isGeneralManager && user.branch_id) {
+  if (!isGlobal && user.branch_id) {
     inventoryQuery = inventoryQuery.eq("branch_id", user.branch_id) as typeof inventoryQuery;
   }
 
@@ -43,7 +45,7 @@ export async function GET(req: NextRequest) {
     .eq("is_active", true)
     .order("full_name");
 
-  if (!caps.isGeneralManager && user.branch_id) {
+  if (!isGlobal && user.branch_id) {
     staffQuery = staffQuery.eq("branch_id", user.branch_id) as typeof staffQuery;
   }
 

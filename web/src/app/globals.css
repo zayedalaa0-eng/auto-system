@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --primary: #0f172a;
   --primary-light: #1e293b;
@@ -17,6 +19,19 @@
   --radius-input: 12px;
   --border-1: 1px;
   --border-2: 2px;
+}
+
+.dark {
+  --primary: #020617;
+  --primary-light: #0f172a;
+  --bg: #0f172a;
+  --card-bg: #1e293b;
+  --text: #f8fafc;
+  --border: #334155;
+  --shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+  --row-even-bg: #0f172a;
+  --row-hover-blue-bg: #1e3a5f;
+  --row-hover-amber-bg: #45290b;
 }
 
 @theme inline {
@@ -250,25 +265,58 @@ select {
 
 /* تمييز الصفوف (zebra) — فردي أبيض، زوجي أزرق فاتح جداً */
 .premium-table tbody tr:nth-child(odd) {
-  background-color: #ffffff;
+  background-color: var(--card-bg);
 }
 .premium-table tbody tr:nth-child(even) {
-  background-color: #f4f8fd;
+  background-color: var(--row-even-bg, #f4f8fd);
 }
 
 /* عند المرور — خلفية أوضح + خط جانبي بلون التبويب النشط */
 .premium-table--blue tbody tr:hover {
-  background-color: #e6f1fb !important;
+  background-color: var(--row-hover-blue-bg, #e6f1fb) !important;
   box-shadow: inset 3px 0 0 0 #2563eb;
 }
 .premium-table--amber tbody tr:hover {
-  background-color: #fef6e7 !important;
+  background-color: var(--row-hover-amber-bg, #fef6e7) !important;
   box-shadow: inset 3px 0 0 0 #f59e0b;
 }
 /* الافتراضي (تقارير بلا تبويبات) — أزرق ثابت */
 .premium-table tbody tr:hover {
-  background-color: #e6f1fb;
+  background-color: var(--row-hover-blue-bg, #e6f1fb);
   box-shadow: inset 3px 0 0 0 #2563eb;
+}
+
+/* Mobile Card Table overrides */
+@media (max-width: 768px) {
+  .mobile-card-table thead {
+    display: none;
+  }
+  .mobile-card-table tbody tr {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    background: var(--card-bg) !important;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  }
+  .mobile-card-table td {
+    display: flex;
+    flex-direction: column;
+    padding: 0 !important;
+    border: none !important;
+    min-height: auto !important;
+  }
+  .mobile-card-table td::before {
+    content: attr(data-label);
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text);
+    opacity: 0.7;
+    margin-bottom: 4px;
+  }
 }
 
 .status-badge {
@@ -2651,7 +2699,7 @@ select {
 
 @media (min-width: 1200px) {
   .legacy-grid-stats {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
   }
 
   .legacy-grid-2 {
@@ -3888,5 +3936,88 @@ select {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+
+/* --- Dark Mode Table Overrides --- */
+.dark .premium-table .text-slate-900,
+.dark .premium-table .text-slate-800,
+.dark .premium-table .text-slate-700 {
+  color: #f8fafc !important; 
+}
+
+.dark .premium-table .text-slate-600,
+.dark .premium-table .text-slate-500 {
+  color: #cbd5e1 !important; 
+}
+
+.dark .premium-table .text-slate-400 {
+  color: #94a3b8 !important; 
+}
+
+.dark .premium-table .bg-slate-100,
+.dark .premium-table .bg-slate-50,
+.dark .premium-table .bg-white {
+  background-color: #1e293b !important; 
+  border-color: #334155 !important; 
+}
+
+.dark .premium-table .border-slate-200,
+.dark .premium-table .border-slate-300 {
+  border-color: #334155 !important; 
+}
+
+.dark .premium-table button.bg-white,
+.dark .premium-table a.bg-white {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+}
+
+.dark .premium-table .hover\:bg-slate-50:hover,
+.dark .premium-table .hover\:bg-blue-50:hover,
+.dark .premium-table .hover\:bg-emerald-50:hover,
+.dark .premium-table .hover\:bg-amber-50:hover,
+.dark .premium-table .hover\:bg-rose-50:hover {
+  background-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+.dark .premium-table .bg-sky-50 {
+  background-color: rgba(14, 165, 233, 0.2) !important;
+  color: #38bdf8 !important;
+}
+.dark .premium-table .text-sky-600 {
+  color: #38bdf8 !important;
+}
+
+.dark .premium-table .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.2) !important;
+  color: #34d399 !important;
+}
+.dark .premium-table .text-emerald-600 {
+  color: #34d399 !important;
+}
+
+.dark .premium-table .bg-amber-50 {
+  background-color: rgba(245, 158, 11, 0.2) !important;
+  color: #fbbf24 !important;
+}
+.dark .premium-table .text-amber-600 {
+  color: #fbbf24 !important;
+}
+
+.dark .premium-table .bg-rose-50 {
+  background-color: rgba(244, 63, 94, 0.2) !important;
+  color: #fb7185 !important;
+}
+.dark .premium-table .text-rose-600 {
+  color: #fb7185 !important;
+}
+
+.dark .premium-table .bg-slate-200 {
+  background-color: #334155 !important; 
+  border-color: #475569 !important; 
+  color: #f8fafc !important;
 }
 

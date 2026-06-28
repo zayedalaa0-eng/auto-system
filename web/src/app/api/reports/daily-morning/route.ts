@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRoleCapabilities } from "@/lib/roles";
-import { sendMessage, sendMessageWithInlineKeyboard } from "@/lib/telegram/api";
+import { sendMessage, sendMessageWithInlineKeyboard, sendPhoto } from "@/lib/telegram/api";
 
 /**
  * GET  /api/reports/daily-morning  ← Vercel Cron يُرسل GET
@@ -42,6 +42,84 @@ async function handler(req: NextRequest) {
 
     const nowLocal = new Date(now.getTime() + 3 * 60 * 60 * 1000);
     const dateLabel = `${String(nowLocal.getUTCDate()).padStart(2,"0")}/${String(nowLocal.getUTCMonth()+1).padStart(2,"0")}/${nowLocal.getUTCFullYear()}`;
+
+    // ── يوم الجمعة (عطلة رسمية): لا تقرير — رسالة تهنئة للموظفين والمدراء بدلاً منه ───────
+    // getUTCDay على توقيت الرياض: 5 = الجمعة
+    const isFriday = riyadhNow.getUTCDay() === 5;
+    if (isFriday) {
+      const [{ data: holidayUsers }, { data: holidayBranches }] = await Promise.all([
+        admin
+          .from("app_users")
+          .select("id, full_name, role, branch_id, telegram_chat_id, is_active")
+          .eq("is_active", true),
+        admin.from("branches").select("id, name").eq("is_active", true),
+      ]);
+
+      const branchNames = new Map<string, string>(
+        (holidayBranches ?? []).map((b) => [b.id, b.name]),
+      );
+
+      const validUsers = (holidayUsers ?? []).filter((u) => u.telegram_chat_id);
+      let sentHoliday = 0;
+      const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
+
+      for (const u of validUsers) {
+        const caps = getRoleCapabilities(u.role, u.full_name);
+        const branchName = u.branch_id ? (branchNames.get(u.branch_id) ?? "المعرض") : "المعرض";
+        
+        let managerName = "إدارة المعرض";
+        let logoFile = "lemalem.jpg";
+
+        if (branchName.includes("لمعلم")) {
+          managerName = "ناجي الأشهب \"أبو قصي\"";
+          logoFile = "lemalem.jpg";
+        } else if (branchName.includes("فورثنج")) {
+          managerName = "راجي الأشهب \"أبو رامي\"";
+          logoFile = "forthing.jpg";
+        } else if (branchName.includes("شيري")) {
+          managerName = "رجائي الأشهب \"أبو رضا\"";
+          logoFile = "chery.jpg";
+        }
+
+        const isManagerOrGeneralManager = caps.isManager || caps.isGeneralManager;
+
+        let title = "أهلاً";
+        if (isManagerOrGeneralManager) {
+           if (u.full_name?.includes("علاء")) title = "أهلاً بالسيد";
+           else if (u.full_name?.includes("فخرية")) title = "أهلاً بالسيدة";
+           else if (u.full_name?.includes("منال")) title = "أهلاً بالسيدة";
+           else title = "أهلاً";
+        }
+
+        let msg = "";
+        msg += `🌙 <b>جمعة مباركة</b>\n`;
+        msg += `📅 ${dateLabel}\n\n`;
+        msg += `${title} <b>${u.full_name}</b>،\n`;
+        msg += `اللهم صل وسلم وبارك على سيدنا محمد وعلى آله وصحبه أجمعين. 🌸\n`;
+        msg += `نتمنى لكم يوم جمعة مبارك وعطلة سعيدة وممتعة مع عائلتكم وأحبتكم.\n\n`;
+
+        if (isManagerOrGeneralManager) {
+          msg += `— <b>مجلس الإدارة</b>\n`;
+        } else {
+          msg += `— <b>${managerName}</b>\n`;
+          msg += `🏢 ${branchName}\n`;
+        }
+
+        const photoUrl = appUrl ? `${appUrl}/logos/${logoFile}` : null;
+        try {
+          if (photoUrl) {
+            await sendPhoto(u.telegram_chat_id as string, photoUrl, msg);
+          } else {
+            await sendMessage(u.telegram_chat_id as string, msg);
+          }
+          sentHoliday++;
+        } catch (err) {
+          console.error("Failed to send Friday message to", u.full_name, err);
+        }
+      }
+
+      return NextResponse.json({ sent: sentHoliday, date: dateLabel, holiday: "friday" });
+    }
 
     // ── جلب المدراء ───────────────────────────────────────────────────────
     const { data: managers } = await admin
@@ -156,6 +234,7 @@ async function handler(req: NextRequest) {
       let msg = "";
       msg += `☀️ <b>التقرير الصباحي اليومي</b>\n`;
       msg += `${greeting}\n`;
+      msg += `نتمنى لك يوماً موفقاً ومليئاً بالإنجازات والنجاح! 🌟\n`;
       msg += `📅 ${dateLabel}\n`;
       msg += `🏢 النطاق: ${branchLabel}\n\n`;
 
@@ -286,7 +365,7 @@ async function handler(req: NextRequest) {
         (r) => r.assigned_user_id === emp.id,
       );
 
-      // لا نرسل للموظف إذا ليس لديه أي شيء
+      // لا نرسل التقرير إذا ليس لديه أي شيء ولكن نرسل تحية الصباح
       const hasAnything =
         myFollowupsToday.length > 0 ||
         myOverdue.length > 0 ||
@@ -294,11 +373,12 @@ async function handler(req: NextRequest) {
         myReminders.length > 0 ||
         myCustomers.length > 0;
 
-      if (!hasAnything) continue;
-
       let msg = "";
       msg += `☀️ <b>صباح الخير، ${emp.full_name}!</b>\n`;
+      msg += `نتمنى لك يوماً موفقاً ومليئاً بالإنجازات والنجاح! 🌟\n`;
       msg += `📅 ${dateLabel}\n\n`;
+
+      if (hasAnything) {
 
       // ── ملخص سريع ────────────────────────────────────────────────────────
       msg += `📊 <b>نظرة عامة على عملائك</b>\n`;
@@ -365,6 +445,7 @@ async function handler(req: NextRequest) {
           msg += `   ... و${myReservations.length - 5} آخرين\n`;
         msg += "</blockquote>\n\n";
       }
+      } // end if (hasAnything)
 
       msg += `🤖 <i>نظام المعرض الذكي — تقريرك الصباحي الشخصي</i>`;
 

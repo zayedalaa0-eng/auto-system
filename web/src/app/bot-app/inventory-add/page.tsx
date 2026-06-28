@@ -143,12 +143,8 @@ export default function InventoryAddPage() {
         <div style={{ fontSize: 56, marginBottom: 10 }}>✅</div>
         <div style={{ fontSize: 18, fontWeight: 700, color: text, marginBottom: 6 }}>تمت إضافة السيارة!</div>
         <div style={{ fontSize: 13, color: hint, marginBottom: 24 }}>تم حفظ السيارة في المخزون بنجاح</div>
-        <button onClick={handleAddAnother}
-          style={{ width: "100%", padding: "13px", borderRadius: 12, border: "none", background: btnBg, color: btnTxt, fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}>
-          ➕ إضافة سيارة أخرى
-        </button>
         <button onClick={() => { try { (twaRef.current as any).close(); } catch { window.close(); } }}
-          style={{ width: "100%", padding: "10px", borderRadius: 12, border: "none", background: "transparent", color: hint, fontSize: 13, cursor: "pointer" }}>
+          style={{ width: "100%", padding: "13px", borderRadius: 12, border: "none", background: btnBg, color: btnTxt, fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}>
           ✕ إغلاق
         </button>
       </div>

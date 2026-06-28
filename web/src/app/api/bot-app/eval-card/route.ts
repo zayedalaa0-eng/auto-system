@@ -112,6 +112,11 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // تحديث حالة العميل ليختفي من طلبات التقييم المعلقة
+  await admin.from("customers")
+    .update({ status: "قيد المتابعة — تمت عملية التقييم" })
+    .eq("id", customer_id);
+
   // جلب بيانات العميل للإشعار
   const { data: custRow } = await admin
     .from("customers")

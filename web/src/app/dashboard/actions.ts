@@ -9,6 +9,7 @@ import { PHONE_LENGTH, PHONE_ERROR_MESSAGE, normalizePhone } from "@/lib/phone";
 import { createAdminClient, hasSupabaseServiceRoleEnv } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { pushTelegramToManagers, pushTelegramPhotosToManagers, pushTelegramToEmployee, pushNewCustomerToManagers, pushTelegramOpportunity } from "@/lib/telegram/push";
+import { logAuditAction } from "@/lib/audit";
 
 async function getCurrentProfile() {
   if (!hasSupabaseEnv()) return null;
@@ -639,7 +640,7 @@ async function notifyOpportunityForModelAvailability({
     `🕐 <i>${arabicDateTime()}</i>`;
 
   const writer = hasSupabaseServiceRoleEnv() ? createAdminClient() : supabase;
-  const { data: maalamBranches } = await writer.from("branches").select("id").ilike("name", "%المعلم%");
+  const { data: maalamBranches } = await writer.from("branches").select("id").ilike("name", "%لمعلم%");
   const maalamBranchIds = (maalamBranches ?? []).map(b => b.id);
 
   const { data: users } = await writer
@@ -653,7 +654,7 @@ async function notifyOpportunityForModelAvailability({
     const caps = getRoleCapabilities(user.role, user.full_name);
     // المدراء العامون
     if (caps.isGeneralManager) return true;
-    // موظفي أو مدراء معرض المعلم تصلهم كافة الفرص
+    // موظفي أو مدراء معرض لمعلم تصلهم كافة الفرص
     if (user.branch_id && maalamBranchIds.includes(user.branch_id)) return true;
     // الموظفين والمدراء في نفس المعرض
     if (branchId && user.branch_id === branchId) return true;
@@ -703,7 +704,7 @@ export async function clearNotificationsCenterAction() {
   const branchId = profile?.branch_id ?? null;
   const userId = profile?.id ?? null;
   if (capabilities.isGeneralManager) {
-    await writer.from("notifications").delete().neq("id", "");
+    await writer.from("notifications").delete().not("id", "is", null);
   } else {
     const scopedQuery = writer
       .from("notifications")
@@ -1206,10 +1207,15 @@ export async function sendEvaluationReplyAction(formData: FormData): Promise<{ e
     .update({ price, status: "تم التقييم" })
     .eq("id", tradeRow.id);
 
+  // تحديث حالة العميل ليختفي من طلبات التقييم المعلقة
+  await admin.from("customers")
+    .update({ status: "قيد المتابعة — تمت عملية التقييم" })
+    .eq("id", customerId);
+
   // 2. جلب بيانات العميل والموظف المُدخِل
   const { data: custRow } = await admin
     .from("customers")
-    .select("full_name, assigned_user_id, app_users(id, full_name, telegram_chat_id)")
+    .select("full_name, assigned_user_id, branch_id, app_users(id, full_name, telegram_chat_id)")
     .eq("id", customerId)
     .maybeSingle();
 
@@ -1259,6 +1265,60 @@ export async function sendEvaluationReplyAction(formData: FormData): Promise<{ e
         reply_markup: { inline_keyboard: inlineButtons },
       }),
     });
+  }
+
+  // إشعار مدراء المعرض (غير الموظف المدخل وغير المقيّم نفسه)
+  if (custRow?.branch_id) {
+    const { data: managers } = await admin
+      .from("app_users")
+      .select("id, role, telegram_chat_id")
+      .eq("branch_id", custRow.branch_id)
+      .eq("is_active", true);
+    
+    if (managers) {
+      const managerRecipients = managers.filter(m => {
+        const c = getRoleCapabilities(m.role, "");
+        return c.isManager && m.id !== recipientUserId && m.id !== profile.id;
+      });
+
+      for (const m of managerRecipients) {
+        // إشعار ويب
+        await admin.from("notifications").insert({
+          recipient_user_id: m.id,
+          notification_type: "evaluation",
+          title: "💰 تم تقييم السيارة",
+          message: `سيارة العميل ${customerName} قُيِّمت بـ ${priceFormatted} ₪ بواسطة ${profile.full_name}`,
+          status: "unread",
+          created_by_user_id: profile.id,
+          payload: { source: "evaluation_reply", customer_id: customerId, trade_id: tradeRow.id, price },
+        });
+
+        // إشعار تيليغرام
+        if (m.telegram_chat_id) {
+          const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
+          const inlineButtons: Array<Array<Record<string, unknown>>> = appUrl
+            ? [[{ text: "📋 فتح بطاقة العميل", web_app: { url: `${appUrl}/bot-app/customer?id=${customerId}&chat_id=${m.telegram_chat_id}` } }]]
+            : [];
+          inlineButtons.push([{ text: "🏠 القائمة الرئيسية", callback_data: "main_menu" }]);
+
+          void fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: m.telegram_chat_id,
+              text:
+                `💰 <b>تم تقييم سيارة بنجاح (إشعار إداري)</b>\n\n` +
+                `<blockquote>👤 <b>العميل:</b> ${customerName}\n` +
+                `🚗 <b>السيارة:</b> ${tradeRow.model}\n` +
+                `✅ <b>قيمة التقييم:</b> ${priceFormatted} ₪\n` +
+                `👨‍💼 <b>المُقيِّم:</b> ${profile.full_name}</blockquote>`,
+              parse_mode: "HTML",
+              reply_markup: { inline_keyboard: inlineButtons },
+            }),
+          });
+        }
+      }
+    }
   }
 
   // 5. تحديث log العميل
@@ -1549,6 +1609,7 @@ export async function dispatchStaffInstructionAction(formData: FormData) {
   const targetRole = getNullableText(formData, "target_role");
   const targetBranchId = getNullableText(formData, "target_branch_id");
   const targetBranchName = getNullableText(formData, "target_branch_name");
+  const targetUserId = getNullableText(formData, "target_user_id");
   const isRoleChange = instructionType === "changeRole";
   const isBranchTransfer = instructionType === "transfer";
   const isCombinedAccess = instructionType === "access";
@@ -1563,19 +1624,27 @@ export async function dispatchStaffInstructionAction(formData: FormData) {
     if (!allowedForBranchManager) return;
   }
 
-  const rawMessage = getText(formData, "message");
-  const message =
-    (instructionType === "changeRole" || instructionType === "access") && targetRole
-      ? `${rawMessage}\n\n[الصلاحية المطلوبة]: ${targetRole}`
-      : (instructionType === "transfer" || instructionType === "access") && targetBranchName
-        ? `${rawMessage}\n\n[المعرض المستهدف]: ${targetBranchName}`
-        : rawMessage;
-  if (!message) return;
+  const rawMessage = getText(formData, "message") || "";
+  let message = rawMessage;
+
+  if (instructionType === "changeRole" && targetRole) {
+    message = rawMessage ? `${rawMessage}\n\n[الصلاحية الجديدة]: ${targetRole}` : `تم تعديل صلاحيتك إلى: ${targetRole}`;
+  } else if (instructionType === "transfer" && targetBranchName) {
+    message = rawMessage ? `${rawMessage}\n\n[المعرض الجديد]: ${targetBranchName}` : `تم نقلك إلى معرض: ${targetBranchName}`;
+  } else if (instructionType === "access") {
+    message = rawMessage ? `${rawMessage}\n\n[تحديث صلاحيات]` : `تم تحديث صلاحياتك ومعرضك في النظام.`;
+  } else if (instructionType === "suspend") {
+    message = rawMessage ? `${rawMessage}\n\n[إيقاف حساب]` : `تم إيقاف حسابك في النظام. يرجى مراجعة الإدارة.`;
+  } else if (instructionType === "transfer_customers") {
+    message = "نقل عملاء موظف"; // Placeholder, handled separately
+  }
+
+  if (!message && instructionType === "message") return;
 
   let recipients: Array<{ id: string; full_name: string; branch_id: string | null; role?: string | null }> = [];
 
   if (recipientMode === "all" || recipientUserId === "all") {
-    let query = supabase.from("app_users").select("id, full_name, branch_id, role").eq("status", "active");
+    let query = supabase.from("app_users").select("id, full_name, branch_id, role, telegram_chat_id").eq("status", "active");
     if (!capabilities.isGeneralManager && profile?.branch_id) {
       query = query.eq("branch_id", profile.branch_id);
     }
@@ -1584,7 +1653,7 @@ export async function dispatchStaffInstructionAction(formData: FormData) {
   } else if (recipientUserId) {
     const { data } = await supabase
       .from("app_users")
-      .select("id, full_name, branch_id, role")
+      .select("id, full_name, branch_id, role, telegram_chat_id")
       .eq("id", recipientUserId)
       .maybeSingle();
     if (data) recipients = [data];
@@ -1625,6 +1694,50 @@ export async function dispatchStaffInstructionAction(formData: FormData) {
       .in("id", recipientIds);
   }
 
+  // ── نقل العملاء ───────────────────────────────────────────────────────────
+  if (instructionType === "transfer_customers" && targetUserId && recipientIds.length > 0) {
+    const sourceUserId = recipientIds[0];
+    const sourceUser = recipients[0];
+    
+    // نقل العملاء للموظف الجديد
+    await supabase.from("customers").update({ assigned_user_id: targetUserId }).eq("assigned_user_id", sourceUserId);
+
+    // إرسال إشعار للموظف الجديد فقط
+    const { data: targetUser } = await supabase.from("app_users").select("full_name, branch_id, telegram_chat_id").eq("id", targetUserId).maybeSingle();
+    if (targetUser) {
+      await supabase.from("notifications").insert([{
+        recipient_user_id: targetUserId,
+        recipient_branch_id: targetUser.branch_id,
+        recipient_label: targetUser.full_name,
+        notification_type: "manual_reminder",
+        title: "نقل عملاء",
+        message: `تم نقل جميع عملاء الموظف ${sourceUser.full_name} ليكونوا تحت إدارتك.`,
+        status: "unread",
+        created_by_user_id: profile?.id ?? null,
+        payload: {
+          source: "staff_admin_panel",
+          instruction_type: instructionType,
+          sender_name: profile?.full_name ?? "النظام",
+          sender_role: profile?.role ?? null,
+        }
+      }]);
+
+      if (targetUser.telegram_chat_id) {
+        const { sendMessage } = await import("@/lib/telegram/api");
+        try {
+          await sendMessage(targetUser.telegram_chat_id, `مرحباً ${targetUser.full_name}،\n\nتم نقل عملاء الموظف ${sourceUser.full_name} ليكونوا تحت إدارتك.\n\nنشكر لك جهودك ونتمنى لك كل التوفيق والسداد. 🌟`);
+        } catch(e) {}
+      }
+    }
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/agenda");
+    revalidatePath("/dashboard/notifications");
+    revalidatePath("/dashboard/staff");
+    redirect("/dashboard/staff?staff_notice=" + encodeURIComponent(`تم نقل عملاء ${sourceUser.full_name} إلى ${targetUser?.full_name ?? "الموظف الجديد"} بنجاح.`));
+    return;
+  }
+
   const titleMap: Record<string, string> = {
     message: "توجيه إداري",
     access: "تحديث صلاحيات ومعرض",
@@ -1653,6 +1766,22 @@ export async function dispatchStaffInstructionAction(formData: FormData) {
 
   await supabase.from("notifications").insert(rows);
 
+  const { sendMessage } = await import("@/lib/telegram/api");
+  for (const recipient of recipients as any[]) {
+    if (!recipient.telegram_chat_id) continue;
+    let tgMsg = "";
+    if (instructionType === "changeRole" && targetRole) {
+      tgMsg = `مرحباً ${recipient.full_name}،\n\nتم تعديل صلاحيتك إلى "${targetRole}".\n\nنشكر لك جهودك ونتمنى لك كل التوفيق والسداد. 🌟`;
+    } else if (instructionType === "transfer" && targetBranchName) {
+      tgMsg = `مرحباً ${recipient.full_name}،\n\nتم نقلك إلى معرض "${targetBranchName}".\n\nنشكر لك جهودك ونتمنى لك كل التوفيق والسداد. 🌟`;
+    } else if (instructionType === "access") {
+      tgMsg = `مرحباً ${recipient.full_name}،\n\nتم تحديث صلاحياتك ومعرضك في النظام.\n\nنشكر لك جهودك ونتمنى لك كل التوفيق والسداد. 🌟`;
+    }
+    if (tgMsg) {
+      try { await sendMessage(recipient.telegram_chat_id, tgMsg); } catch(e) {}
+    }
+  }
+
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/agenda");
   revalidatePath("/dashboard/notifications");
@@ -1670,6 +1799,7 @@ export async function dispatchStaffInstructionAction(formData: FormData) {
       : "تم نقل الموظف بنجاح.",
     access: "تم تحديث الصلاحية والمعرض بنجاح.",
     suspend: `تم إيقاف ${count} حساب بنجاح.`,
+    transfer_customers: "تم نقل العملاء بنجاح.",
   };
   const notice = noticeMap[instructionType] ?? "تم تنفيذ الإجراء بنجاح.";
   redirect("/dashboard/staff?staff_notice=" + encodeURIComponent(notice));
@@ -2288,13 +2418,13 @@ export async function upsertCustomerAction(formData: FormData) {
         details: `تم حفظ سيارة العميل ضمن مسار الشراء/الاستبدال: ${tradeModel}.`,
       });
 
-      // ── تنبيه مدراء معرض المعلم بطلب التقييم ────────────────────────────
+      // ── تنبيه مدراء معرض لمعلم بطلب التقييم ────────────────────────────
       {
         const adminWriter = hasSupabaseServiceRoleEnv() ? createAdminClient() : supabase;
         const { data: maalamBranches } = await adminWriter
           .from("branches")
           .select("id")
-          .ilike("name", "%المعلم%")
+          .ilike("name", "%لمعلم%")
           .eq("is_active", true);
 
         if (maalamBranches && maalamBranches.length > 0) {
@@ -2566,6 +2696,15 @@ export async function upsertCustomerAction(formData: FormData) {
       nextFollowUpAt: resolvedNextFollowup,
       status,
       fullName,
+    });
+
+    await logAuditAction({
+      action: customerId ? "تعديل بيانات عميل" : "إضافة عميل جديد",
+      entity_type: "customer",
+      entity_id: savedId,
+      details: { name: fullName, phone },
+      supabase,
+      actorId: profile?.id
     });
   }
 
@@ -3078,8 +3217,16 @@ export async function saveCustomerProfileAction(formData: FormData) {
 
   const existingNotes = (existingCustomer?.notes as string | null) ?? null;
   const closureAutoNote = !isActive ? `تم إغلاق الملف تلقائيًا بسبب الحالة الحالية: ${status}.` : "";
-  const mergedNotes = note
-    ? `${existingNotes ? `${existingNotes}\n\n` : ""}[تحديث ${new Date().toLocaleString("en-US")}]\n${note}${closureAutoNote ? `\n${closureAutoNote}` : ""}`
+
+  const contactPhone = formData.get("contact_phone_whatsapp") === "on";
+  const contactVisit = formData.get("contact_showroom_visit") === "on";
+  let contactMethods = [];
+  if (contactPhone) contactMethods.push("اتصال هاتفي / واتس اب");
+  if (contactVisit) contactMethods.push("زيارة المعرض");
+  const contactNote = contactMethods.length > 0 ? `[طريقة التواصل: ${contactMethods.join(" + ")}]\n` : "";
+
+  const mergedNotes = note || contactNote
+    ? `${existingNotes ? `${existingNotes}\n\n` : ""}[تحديث ${new Date().toLocaleString("en-US")}]\n${contactNote}${note || ""}${closureAutoNote ? `\n${closureAutoNote}` : ""}`
     : closureAutoNote
       ? `${existingNotes ? `${existingNotes}\n\n` : ""}[تحديث ${new Date().toLocaleString("en-US")}]\n${closureAutoNote}`
       : existingNotes;
@@ -3896,4 +4043,72 @@ export async function toggleBranchStatusAction(formData: FormData) {
   revalidateBranchPaths();
   const msg = newStatus ? "تم فتح المعرض وتفعيله. ✅" : "تم إغلاق المعرض. المعرض لم يُحذف ويمكن فتحه مجدداً.";
   redirect("/dashboard/branches?branch_notice=" + encodeURIComponent(msg));
+}
+
+
+// ── تعديل الموظفين ──────────────────────────────────────────────
+export async function updateStaffProfileAction(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) redirect('/login');
+
+  const { data: profile } = await supabase
+    .from('app_users')
+    .select('role')
+    .eq('auth_user_id', session.user.id)
+    .maybeSingle();
+
+  if (!getRoleCapabilities(profile?.role).isGeneralManager) {
+    return { error: 'ليس لديك صلاحية المدير العام لتعديل الموظفين.' };
+  }
+
+  const staff_id = formData.get('staff_id')?.toString();
+  const role = formData.get('role')?.toString();
+  const branch_id = formData.get('branch_id')?.toString() || null;
+  const is_active = formData.get('is_active') === 'on';
+
+  if (!staff_id || !role) {
+    return { error: 'بيانات الموظف غير مكتملة.' };
+  }
+
+  const admin = createAdminClient();
+  const { data: oldStaff } = await admin.from('app_users').select('role, branch_id, full_name, telegram_chat_id').eq('id', staff_id).maybeSingle();
+
+  const { error } = await admin
+    .from('app_users')
+    .update({
+      role,
+      branch_id,
+      is_active,
+      status: is_active ? 'active' : 'inactive',
+    })
+    .eq('id', staff_id);
+
+  if (error) {
+    return { error: 'حدث خطأ أثناء حفظ بيانات الموظف: ' + error.message };
+  }
+
+  if (oldStaff?.telegram_chat_id) {
+    const { sendMessage } = await import("@/lib/telegram/api");
+    const roleChanged = oldStaff.role !== role;
+    const branchChanged = oldStaff.branch_id !== branch_id;
+    
+    let msg = "";
+    if (roleChanged && branchChanged) {
+      const { data: branch } = await admin.from('branches').select('name').eq('id', branch_id).maybeSingle();
+      msg = `مرحباً ${oldStaff.full_name}،\n\nتم تحديث صلاحياتك إلى "${role}" ونقلك إلى معرض "${branch?.name ?? "الجديد"}".\n\nنشكر لك جهودك ونتمنى لك كل التوفيق والسداد. 🌟`;
+    } else if (roleChanged) {
+      msg = `مرحباً ${oldStaff.full_name}،\n\nتم تعديل صلاحيتك إلى "${role}".\n\nنشكر لك جهودك ونتمنى لك كل التوفيق والسداد. 🌟`;
+    } else if (branchChanged) {
+      const { data: branch } = await admin.from('branches').select('name').eq('id', branch_id).maybeSingle();
+      msg = `مرحباً ${oldStaff.full_name}،\n\nتم نقلك إلى معرض "${branch?.name ?? "الجديد"}".\n\nنشكر لك جهودك ونتمنى لك كل التوفيق والسداد. 🌟`;
+    }
+
+    if (msg) {
+      try { await sendMessage(oldStaff.telegram_chat_id, msg); } catch(e) {}
+    }
+  }
+
+  revalidatePath('/dashboard/staff');
+  return { success: true };
 }

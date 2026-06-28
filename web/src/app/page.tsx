@@ -11,7 +11,7 @@ export default async function HomePage() {
   const { session } = await getDashboardContext();
 
   if (session) {
-    redirect("/dashboard");
+    redirect("/dashboard/agenda");
   }
 
   redirect("/login");

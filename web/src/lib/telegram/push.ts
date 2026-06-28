@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRoleCapabilities } from "@/lib/roles";
-import { sendMediaGroup, sendPhoto, sendVoice, escapeHtml, getAppUrl } from "./api";
+import { sendMediaGroup, sendPhoto, sendVoice, escapeHtml, getAppUrl, sendMediaWithKeyboard, sendMessage } from "./api";
 
 const token = () => process.env.TELEGRAM_BOT_TOKEN ?? "";
 
@@ -63,9 +63,21 @@ async function getManagerRecipients(
 
   return (users ?? [])
     .filter((u) => {
-      const caps = getRoleCapabilities(u.role, u.full_name);
-      if (caps.isGeneralManager) return true;
-      if (caps.isManager && !caps.isGeneralManager && branchId && u.branch_id === branchId) return true;
+      let isGeneralManager = false;
+      let isManager = false;
+
+      // استثناء خاص لـ "رجائي الاشهب"
+      if (u.full_name.includes("رجائي الاشهب") || u.full_name.includes("رجائي الأشهب")) {
+        isGeneralManager = false;
+        isManager = true;
+      } else {
+        const caps = getRoleCapabilities(u.role, u.full_name);
+        isGeneralManager = caps.isGeneralManager;
+        isManager = caps.isManager;
+      }
+
+      if (isGeneralManager) return true;
+      if (isManager && !isGeneralManager && branchId && u.branch_id === branchId) return true;
       return false;
     })
     .map((u) => ({
@@ -290,10 +302,10 @@ export async function pushNewCustomerToManagers(params: {
       branchNameResolved = data?.name ?? null;
     }
 
-    const isMaalamBranch = branchNameResolved ? branchNameResolved.includes("المعلم") : false;
+    const isMaalamBranch = branchNameResolved ? branchNameResolved.includes("لمعلم") : false;
     let managers = await getManagerRecipients(params.branchId);
 
-    // لتفادي التكرار لمدراء المعلم: إذا كان العميل استبدال فسيصلهم طلب تقييم، لذا لا نرسل لهم الإشعار العام
+    // لتفادي التكرار لمدراء لمعلم: إذا كان العميل استبدال فسيصلهم طلب تقييم، لذا لا نرسل لهم الإشعار العام
     if (isMaalamBranch && params.opCode === "buyer_tradein_pending") {
       managers = managers.filter(m => m.role === "general_manager");
     }
@@ -421,7 +433,7 @@ export async function pushTelegramToManagers({
 }
 
 /**
- * إشعار "فرصة بيع" لجميع موظفي المعرض الخاص بالسيارة، بالإضافة إلى موظفي ومدراء معرض "المعلم" لجميع الفرص.
+ * إشعار "فرصة بيع" لجميع موظفي المعرض الخاص بالسيارة، بالإضافة إلى موظفي ومدراء معرض "لمعلم" لجميع الفرص.
  */
 export async function pushTelegramOpportunity({
   branchId,
@@ -435,7 +447,7 @@ export async function pushTelegramOpportunity({
   try {
     const admin = createAdminClient();
     
-    const { data: maalamBranches } = await admin.from("branches").select("id").ilike("name", "%المعلم%");
+    const { data: maalamBranches } = await admin.from("branches").select("id").ilike("name", "%لمعلم%");
     const maalamBranchIds = (maalamBranches ?? []).map(b => b.id);
 
     const { data: users } = await admin
@@ -557,14 +569,14 @@ export async function pushTelegramPhotosToManagers({
   } catch { /* best-effort */ }
 }
 
-// ─── إشعار طلب التقييم لمدير معرض المعلم ───────────────────────────────────
+// ─── إشعار طلب التقييم لمدير معرض لمعلم ───────────────────────────────────
 
 async function getMaalamManagerChatIds(): Promise<Array<{ chat_id: string; user_id: string; full_name: string }>> {
   const admin = createAdminClient();
   const { data: branches } = await admin
     .from("branches")
     .select("id, name")
-    .ilike("name", "%المعلم%")
+    .ilike("name", "%لمعلم%")
     .eq("is_active", true);
 
   if (!branches || branches.length === 0) return [];
@@ -590,14 +602,15 @@ async function getMaalamManagerChatIds(): Promise<Array<{ chat_id: string; user_
 }
 
 /**
- * إرسال طلب تقييم سيارة لمدير معرض المعلم مع الصور والأزرار
+ * إرسال طلب تقييم سيارة للمدراء (مدير الفرع المعني + مدير معرض لمعلم) مع الصور والأزرار
  */
-export async function pushEvaluationRequestToMaalamManager({
+export async function pushEvaluationRequestToManagers({
   tradeInId,
   customerId,
   customerName,
   customerPhone,
   submitterName,
+  branchId,
   branchName,
   car,
   photoUrls = [],
@@ -610,6 +623,7 @@ export async function pushEvaluationRequestToMaalamManager({
   submitterUserId: string;
   submitterName: string;
   submitterChatId: string | null;
+  branchId: string | null;
   branchName: string | null;
   car: {
     model: string;
@@ -625,7 +639,18 @@ export async function pushEvaluationRequestToMaalamManager({
   opCode?: string | null;
 }) {
   try {
-    const managers = await getMaalamManagerChatIds();
+    const maalamManagers = await getMaalamManagerChatIds();
+    const branchManagers = branchId ? await getManagerRecipients(branchId) : [];
+
+    const managersMap = new Map();
+    for (const m of maalamManagers) managersMap.set(m.chat_id, m);
+    for (const m of branchManagers) {
+      if (m.chat_id) {
+        managersMap.set(m.chat_id, { chat_id: m.chat_id, user_id: m.user_id, full_name: m.full_name });
+      }
+    }
+    const managers = Array.from(managersMap.values());
+
     if (managers.length === 0) return;
 
     const appUrl = getAppUrl();
@@ -656,17 +681,6 @@ export async function pushEvaluationRequestToMaalamManager({
         : `<i>يُرجى الضغط على الزر أدناه لإرسال قيمة التقييم للموظف 👇</i>\n\n`) +
       `👨‍💼 <b>المُدخِل:</b> ${escapeHtml(submitterName)}`;
 
-    // ── caption مختصر للصور ───────────────────────────────────────────────────
-    let photoCaption = isConsignment
-      ? `🏷️ <b>برسم البيع — ${escapeHtml(car.model)}</b>\n👤 ${escapeHtml(customerName)}`
-      : `🔁 <b>استبدال — ${escapeHtml(car.model)}</b>\n👤 ${escapeHtml(customerName)}`;
-    if (customerPhone)       photoCaption += ` | 📱 ${escapeHtml(customerPhone)}`;
-    if (car.color)           photoCaption += `\n🎨 ${escapeHtml(car.color)}`;
-    if (car.production_year) photoCaption += ` | 📅 ${car.production_year}`;
-    if (car.mileage)         photoCaption += ` | 🛣 ${car.mileage.toLocaleString("en-US")} كم`;
-    if (car.chassis_no)      photoCaption += `\n🔢 ${escapeHtml(car.chassis_no)}`;
-    if (submitterName)       photoCaption += `\n👨‍💼 ${escapeHtml(submitterName)}`;
-
     const callbackData = `er:${tradeInId}`;
 
     await Promise.allSettled(
@@ -688,41 +702,17 @@ export async function pushEvaluationRequestToMaalamManager({
           ],
         };
 
-        // إرسال الصور أولاً إن وُجدت
-        if (photoUrls.length === 1) {
-          const r = await fetch(`https://api.telegram.org/bot${token()}/sendPhoto`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: m.chat_id, photo: photoUrls[0], caption: photoCaption, parse_mode: "HTML" }),
-          });
-          const rj = await r.json() as { ok: boolean };
-          if (!rj.ok) {
-            // فشل إرسال الصورة → نرسل النص فقط
-            await fetch(`https://api.telegram.org/bot${token()}/sendMessage`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ chat_id: m.chat_id, text: fullText, parse_mode: "HTML", reply_markup: markup }),
-            });
-            return;
-          }
-        } else if (photoUrls.length > 1) {
-          const media = photoUrls.slice(0, 10).map((url, idx) => ({
-            type: "photo", media: url,
-            ...(idx === 0 ? { caption: photoCaption + `\n📷 ${photoUrls.length} صور`, parse_mode: "HTML" } : {}),
-          }));
-          await fetch(`https://api.telegram.org/bot${token()}/sendMediaGroup`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: m.chat_id, media }),
-          });
+        let finalCaption = fullText;
+        if (photoUrls.length > 1) {
+          finalCaption += `\n\n📸 <i>(هذه البطاقة تحتوي على ${photoUrls.length} صور)</i>`;
         }
 
-        // رسالة التفاصيل الكاملة + الأزرار (دائماً)
-        await fetch(`https://api.telegram.org/bot${token()}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: m.chat_id, text: fullText, parse_mode: "HTML", reply_markup: markup }),
-        });
+        try {
+          await sendMediaWithKeyboard(m.chat_id, photoUrls, finalCaption, markup.inline_keyboard);
+        } catch (e) {
+          console.error("Failed to push eval card to manager", e);
+          await sendMessage(m.chat_id, finalCaption, { replyMarkup: markup });
+        }
       }),
     );
   } catch { /* best-effort */ }

@@ -6,6 +6,8 @@ import {
   updateTelegramChatIdAction,
 } from "@/app/dashboard/actions";
 import { StaffActionsForm } from "@/components/staff-actions-form";
+import { StaffEditModal } from "@/components/staff-edit-modal";
+import { BranchLogo } from "@/components/branch-logo";
 import { getCustomerFormOptions, getStaffOverview } from "@/lib/data";
 import { getRoleCapabilities } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/server";
@@ -55,11 +57,15 @@ export default async function StaffPage({ searchParams }: StaffPageProps) {
               <div key={emp.id} className="legacy-card p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <h5 className="m-0 text-lg font-bold text-slate-900">{emp.full_name}</h5>
-                  <span className="rounded-full border px-3 py-2 text-sm font-bold text-slate-700 shadow-sm">{emp.role}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full border px-3 py-2 text-sm font-bold text-slate-700 shadow-sm">{emp.role}</span>
+                    <StaffEditModal staff={emp} branches={options.branches} />
+                  </div>
                 </div>
-
-                <div className="mb-3 text-sm font-bold text-slate-500">{emp.branch_name ?? "بدون فرع"}</div>
-
+                <div className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-500">
+                  <BranchLogo branchName={emp.branch_name} className="w-5 h-5 rounded-sm" />
+                  <span>{emp.branch_name ?? "بدون فرع"}</span>
+                </div>
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="rounded bg-slate-50 p-2">
                     <div className="text-2xl font-bold text-sky-700">{emp.total_customers}</div>

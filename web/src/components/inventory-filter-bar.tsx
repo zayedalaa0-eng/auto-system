@@ -41,6 +41,7 @@ export function InventoryFilterBar({
   const currentStatus = searchParams.get("status") ?? "active";
   const currentGearbox = searchParams.get("gearbox") ?? "all";
   const currentFuel = searchParams.get("fuel") ?? "all";
+  const currentShowUsed = searchParams.get("show_used") === "1";
 
   const [searchValue, setSearchValue] = useState(currentQ);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,6 +91,7 @@ export function InventoryFilterBar({
     currentStatus !== "active" ? currentStatus : "",
     currentGearbox !== "all" ? currentGearbox : "",
     currentFuel !== "all" ? currentFuel : "",
+    currentShowUsed ? "1" : "",
   ].filter(Boolean).length;
 
   // دالة مساعدة لتوليد تنسيقات حقول التصفية بشكل احترافي وراقي
@@ -98,7 +100,7 @@ export function InventoryFilterBar({
     if (isActive) {
       return `${baseClasses} ${activeThemeClasses} shadow-sm`;
     }
-    return `${baseClasses} !border-slate-200 !bg-white !text-slate-600 hover:!border-slate-300 focus:!ring-slate-100 focus:!border-slate-400`;
+    return `${baseClasses} !border-slate-200 dark:!border-slate-700 !bg-white dark:!bg-slate-800 !text-slate-600 dark:!text-slate-300 hover:!border-slate-300 dark:hover:!border-slate-600 focus:!ring-slate-100 dark:focus:!ring-slate-800 focus:!border-slate-400 dark:focus:!border-slate-500`;
   }
 
   // عدد أصحاب برسم البيع لعرضه في optgroup
@@ -128,8 +130,20 @@ export function InventoryFilterBar({
           ) : null}
         </div>
 
-        {/* مسح الفلاتر */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        {/* خيارات إضافية ومسح الفلاتر */}
+        <div className="flex items-center gap-4 flex-shrink-0">
+          {!isMuallimBranch && activeTab === "showroom" && (
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={currentShowUsed}
+                onChange={(e) => navigate("show_used", e.target.checked ? "1" : null)}
+                className="w-4 h-4 text-blue-600 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 rounded focus:ring-blue-500 cursor-pointer"
+              />
+              إظهار المستعمل
+            </label>
+          )}
+
           {activeFilterCount > 0 ? (
             <button
               type="button"
@@ -166,7 +180,7 @@ export function InventoryFilterBar({
           ) : isMuallimBranch ? (
             <>
               <option value="all">كل المعارض</option>
-              <option value="self">معرض المعلم فقط</option>
+              <option value="self">معرض لمعلم فقط</option>
               {branches
                 .filter((b) => b !== (branchName ?? ""))
                 .map((b) => (

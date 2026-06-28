@@ -1,50 +1,39 @@
 import Link from "next/link";
-import { ArrowLeft, Database, LockKeyhole, ShieldCheck } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 import { LoginForm } from "@/app/login/login-form";
 
-const benefits = [
-  {
-    icon: Database,
-    title: "PostgreSQL بدل Sheets",
-    body: "القراءة والفلترة والتقارير ستصبح أسرع وأكثر ثباتًا من البنية القديمة.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "صلاحيات حقيقية",
-    body: "RLS تربط الفرع والدور بالمستخدم الحالي بدل الاعتماد على localStorage أو منطق الواجهة فقط.",
-  },
-  {
-    icon: LockKeyhole,
-    title: "إرسال ومرفقات لاحقًا في الخلفية",
-    body: "ننقل المسارات الثقيلة إلى backend jobs بدل أن تعلق شاشة المستخدم.",
-  },
-];
-
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen bg-slate-100" dir="rtl">
       <div className="mx-auto grid min-h-screen max-w-[1400px] gap-6 px-4 py-4 lg:grid-cols-[1.1fr_0.9fr] lg:px-6">
-        <section className="rounded-3xl bg-slate-950 p-8 text-white shadow-sm lg:p-10">
-          <div className="max-w-2xl">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Auto System Web</p>
-            <h1 className="mt-4 text-4xl font-semibold leading-tight">
-              نبدأ هنا النسخة الأسرع والأهدأ من النظام
-            </h1>
-            <p className="mt-5 text-sm leading-8 text-slate-300">
-              ما بنيناه حتى الآن ليس مجرد قالب. الجداول، الصلاحيات، التخزين، وهيكل الواجهة صار
-              جاهزًا لنبدأ فوقه النسخة الجديدة بعيدًا عن اختناقات Apps Script.
-            </p>
+        <section className="flex flex-col items-center justify-center rounded-3xl bg-white p-8 shadow-sm lg:p-10 border border-slate-200">
+          <div className="mb-16 text-center">
+            <h1 className="text-4xl font-bold text-slate-900 tracking-tight">Auto System Web</h1>
+            <p className="mt-4 text-lg text-slate-500">نظام إدارة معارض السيارات الذكي والمتكامل</p>
           </div>
 
-          <div className="mt-10 grid gap-4">
-            {benefits.map((benefit) => (
-              <div key={benefit.title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                <benefit.icon className="h-5 w-5 text-slate-200" />
-                <h2 className="mt-4 text-lg font-semibold">{benefit.title}</h2>
-                <p className="mt-2 text-sm leading-7 text-slate-300">{benefit.body}</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-3xl justify-items-center">
+            <div className="flex flex-col items-center gap-4 group">
+              <div className="w-40 h-40 flex items-center justify-center rounded-2xl border border-slate-100 bg-white shadow-sm p-4 transition-transform group-hover:scale-105 group-hover:shadow-md">
+                <img src="/logos/chery.jpg" alt="معرض شيري" className="w-full h-full object-contain" />
               </div>
-            ))}
+              <span className="text-lg font-bold text-slate-700">معرض شيري</span>
+            </div>
+            
+            <div className="flex flex-col items-center gap-4 group">
+              <div className="w-40 h-40 flex items-center justify-center rounded-2xl border border-slate-100 bg-white shadow-sm p-4 transition-transform group-hover:scale-105 group-hover:shadow-md">
+                <img src="/logos/forthing.jpg" alt="معرض فورثنج" className="w-full h-full object-contain" />
+              </div>
+              <span className="text-lg font-bold text-slate-700">معرض فورثنج</span>
+            </div>
+            
+            <div className="flex flex-col items-center gap-4 group">
+              <div className="w-40 h-40 flex items-center justify-center rounded-2xl border border-slate-100 bg-white shadow-sm p-4 transition-transform group-hover:scale-105 group-hover:shadow-md">
+                <img src="/logos/lemalem.jpg" alt="معرض المعلم" className="w-full h-full object-contain" />
+              </div>
+              <span className="text-lg font-bold text-slate-700">معرض المعلم</span>
+            </div>
           </div>
         </section>
 

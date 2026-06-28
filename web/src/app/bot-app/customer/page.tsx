@@ -188,6 +188,7 @@ export default function CustomerPage() {
   // حقول التعديل (مطابق للويب)
   const [rcUseInventory,    setRcUseInventory]    = useState(false);
   const [rcUseCustom,       setRcUseCustom]       = useState(false);
+  const [rcInvCategory,     setRcInvCategory]     = useState<"showroom" | "customer">("showroom");
   const [rcInventoryToAdd,  setRcInventoryToAdd]  = useState("");
   const [rcSelectedCars,    setRcSelectedCars]    = useState<InventoryOption[]>([]);
   const [rcNegotiations,    setRcNegotiations]    = useState<Record<string,string>>({});
@@ -560,12 +561,8 @@ export default function CustomerPage() {
         <div style={{fontSize:56,marginBottom:10}}>✅</div>
         <div style={{fontSize:18,fontWeight:700,color:text,marginBottom:6}}>تم الحفظ بنجاح!</div>
         <div style={{fontSize:13,color:hint,marginBottom:24}}>تم تحديث بيانات العميل</div>
-        <button onClick={()=>{ setSaved(false); window.location.reload(); }}
-          style={{width:"100%",padding:"13px",borderRadius:12,border:"none",background:btnBg,color:btnTxt,fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10}}>
-          🔄 رؤية التحديثات
-        </button>
         <button onClick={()=>{ window.Telegram?.WebApp?.close?.(); }}
-          style={{width:"100%",padding:"10px",borderRadius:12,border:"none",background:"transparent",color:hint,fontSize:13,cursor:"pointer"}}>
+          style={{width:"100%",padding:"13px",borderRadius:12,border:"none",background:btnBg,color:btnTxt,fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10}}>
           ✕ إغلاق
         </button>
       </div>
@@ -1402,10 +1399,26 @@ export default function CustomerPage() {
                           <div style={{fontSize:13,color:amber,fontStyle:"italic"}}>اختر المعرض أولاً لعرض السيارات المتاحة</div>
                         ):(
                           <>
+                            <div style={{display:"flex",gap:6}}>
+                              <button type="button" onClick={()=>{setRcInvCategory("showroom");setRcInventoryToAdd("");}}
+                                style={{flex:1,padding:"7px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",
+                                  border:`1.5px solid ${rcInvCategory==="showroom"?btnBg:border}`,
+                                  background:rcInvCategory==="showroom"?(isDark?"rgba(37,99,235,0.15)":"#eff6ff"):"transparent",
+                                  color:rcInvCategory==="showroom"?btnBg:hint}}>
+                                🏢 المعرض ({activeInv.filter(o=>o.category!=="customer").length})
+                              </button>
+                              <button type="button" onClick={()=>{setRcInvCategory("customer");setRcInventoryToAdd("");}}
+                                style={{flex:1,padding:"7px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",
+                                  border:`1.5px solid ${rcInvCategory==="customer"?"#f59e0b":border}`,
+                                  background:rcInvCategory==="customer"?(isDark?"rgba(245,158,11,0.15)":"#fffbeb"):"transparent",
+                                  color:rcInvCategory==="customer"?"#b45309":hint}}>
+                                👤 العملاء ({activeInv.filter(o=>o.category==="customer").length})
+                              </button>
+                            </div>
                             <div style={{display:"flex",gap:8}}>
                               <select value={rcInventoryToAdd} onChange={e=>setRcInventoryToAdd(e.target.value)} style={{...css.input,flex:1}}>
-                                <option value="">اختر من المخزون</option>
-                                {activeInv.map(o=>(
+                                <option value="">اختر من {rcInvCategory==="customer"?"سيارات العملاء":"سيارات المعرض"}</option>
+                                {activeInv.filter(o=>rcInvCategory==="customer"?o.category==="customer":o.category!=="customer").map(o=>(
                                   <option key={o.id} value={o.id}>{o.label}</option>
                                 ))}
                               </select>

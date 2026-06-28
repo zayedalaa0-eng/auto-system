@@ -100,7 +100,7 @@ export function InventoryImportBtn({ isGeneralManager, branchId, branchName, bra
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-bold text-emerald-700 shadow-sm transition-all hover:bg-emerald-50 hover:border-emerald-300"
+        className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-bold text-emerald-700 dark:text-emerald-400 shadow-sm transition-all hover:bg-emerald-50 dark:hover:bg-emerald-900/30 hover:border-emerald-300 dark:hover:border-emerald-600"
         title="استيراد من Excel"
       >
         <FileSpreadsheet className="h-4 w-4" />
@@ -109,7 +109,7 @@ export function InventoryImportBtn({ isGeneralManager, branchId, branchName, bra
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl" dir="rtl">
+          <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-800 shadow-2xl" dir="rtl">
 
             {/* Header */}
             <div className="flex items-center justify-between border-b px-5 py-4">
@@ -146,7 +146,7 @@ export function InventoryImportBtn({ isGeneralManager, branchId, branchName, bra
                       ))}
                     </select>
                   ) : (
-                    <div className="flex items-center gap-2 rounded-lg bg-white border border-emerald-200 px-4 py-2.5">
+                    <div className="flex items-center gap-2 rounded-lg bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 px-4 py-2.5">
                       <Building2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
                       <span className="font-bold text-emerald-900 text-sm">{selectedBranch?.name ?? "—"}</span>
                       <span className="text-xs text-emerald-600 mr-auto">سيُسجَّل تلقائياً كمالك السيارات</span>

@@ -115,7 +115,7 @@ export function InventoryExportBtn({ filters }: { filters: ExportFilter }) {
   return (
     <div className="relative">
       <button onClick={() => setOpen(o => !o)} disabled={loading}
-        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:border-slate-300 disabled:opacity-60">
+        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-bold text-slate-700 dark:text-slate-300 shadow-sm transition-all hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-300 dark:hover:border-slate-600 disabled:opacity-60">
         {loading ? "⏳" : <Download className="h-4 w-4" />}
         تصدير
       </button>
@@ -123,18 +123,18 @@ export function InventoryExportBtn({ filters }: { filters: ExportFilter }) {
       {open && (
         <>
           <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full mt-1 z-30 w-72 rounded-xl border border-slate-200 bg-white shadow-xl p-3">
+          <div className="absolute left-0 top-full mt-1 z-30 w-72 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl p-3">
             <div className="text-xs font-bold text-slate-500 mb-2 px-1">اختر ما تريد تصديره</div>
             {OPTIONS.map(opt => (
               <div key={opt.status} className="flex gap-1.5 mb-1">
-                <span className="flex-1 rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">{opt.label}</span>
+                <span className="flex-1 rounded-lg bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300">{opt.label}</span>
                 <button onClick={() => doExport("xlsx", opt.status || undefined)}
-                  className="rounded-lg border border-emerald-200 bg-white px-2 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50">XLS</button>
+                  className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-900 px-2 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30">XLS</button>
                 <button onClick={() => doExport("pdf", opt.status || undefined)}
-                  className="rounded-lg border border-rose-200 bg-white px-2 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50">PDF</button>
+                  className="rounded-lg border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-900 px-2 py-2 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30">PDF</button>
               </div>
             ))}
-            <div className="mt-2 pt-2 border-t border-slate-100 text-xs text-slate-400 text-center">يأخذ الفلاتر الحالية بالحسبان</div>
+            <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700 text-xs text-slate-400 text-center">يأخذ الفلاتر الحالية بالحسبان</div>
           </div>
         </>
       )}

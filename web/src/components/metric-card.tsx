@@ -18,23 +18,22 @@ const toneClasses: Record<NonNullable<MetricCardProps["tone"]>, string> = {
 
 export function MetricCard({ label, value, hint, icon, tone = "sky" }: MetricCardProps) {
   return (
-    <div className="relative overflow-hidden rounded-[22px] border border-slate-200 bg-white p-5 shadow-[0_14px_35px_rgba(15,23,42,0.06)]">
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[var(--accent)] via-sky-400 to-emerald-400" />
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-slate-500">{label}</p>
-          <p className="mt-3 text-3xl font-semibold text-slate-950">{value}</p>
+    <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300 transition-colors" title={hint}>
+      <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-[var(--accent)] via-sky-400 to-emerald-400 opacity-50" />
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-slate-500 truncate">{label}</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900">{value}</p>
         </div>
         <div
           className={clsx(
-            "rounded-2xl bg-gradient-to-br p-3 ring-1 ring-inset",
+            "rounded-lg bg-gradient-to-br p-2 ring-1 ring-inset shrink-0",
             toneClasses[tone],
           )}
         >
           {icon}
         </div>
       </div>
-      <p className="mt-4 text-sm leading-6 text-slate-600">{hint}</p>
     </div>
   );
 }

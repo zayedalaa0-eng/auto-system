@@ -34,13 +34,22 @@ export async function getBotUser(chatId: string): Promise<BotUser | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const branchName = unwrap((data as any).branches as RelationOrArray<{ name: string }>)?.name ?? null;
 
+  let role = data.role;
+  let caps = getRoleCapabilities(data.role, data.full_name);
+
+  // استثناء خاص لـ "رجائي الاشهب": في الويب مدير عام، ولكن في البوت مدير معرض فقط (فرع شيري)
+  if (data.full_name.includes("رجائي الاشهب") || data.full_name.includes("رجائي الأشهب")) {
+    role = "branch_manager";
+    caps = { isGeneralManager: false, isManager: true };
+  }
+
   return {
     id: data.id,
     full_name: data.full_name,
-    role: data.role,
+    role: role,
     branch_id: data.branch_id ?? null,
     branch_name: branchName,
-    capabilities: getRoleCapabilities(data.role, data.full_name),
+    capabilities: caps,
   };
 }
 
@@ -405,7 +414,7 @@ export async function getAllPendingEvaluations(): Promise<PendingEvalItem[]> {
   return results;
 }
 
-/** هل المستخدم مدير معرض المعلم؟ */
+/** هل المستخدم مدير معرض لمعلم؟ */
 export async function isMaalamManager(userId: string): Promise<boolean> {
   const admin = createAdminClient();
   const { data: user } = await admin
@@ -418,7 +427,7 @@ export async function isMaalamManager(userId: string): Promise<boolean> {
   const caps = getRoleCapabilities(user.role, user.full_name);
   if (!caps.isManager || caps.isGeneralManager) return false;
   const branchName = unwrap(user.branches as RelationOrArray<{ name: string }>)?.name ?? "";
-  return branchName.includes("المعلم");
+  return branchName.includes("لمعلم");
 }
 
 // Keep old getTodayTasks for backward compat (used internally)
@@ -648,28 +657,45 @@ export async function createCustomer(
 export async function getInventory(user: BotUser) {
   const admin = createAdminClient();
 
-  let query = admin
-    .from("inventory")
-    .select("id, model, production_year, color, price, availability_status, branches(name)")
-    .eq("is_active", true)
-    .order("availability_status", { ascending: true })
-    .order("model", { ascending: true })
-    .limit(25);
+  const [invResult, branchesResult] = await Promise.all([
+    (() => {
+      let query = admin
+        .from("inventory")
+        .select("id, model, production_year, color, price, availability_status, deal_type, condition_label, owner_name, source_customer_id, branches(name)")
+        .eq("is_active", true)
+        .order("availability_status", { ascending: true })
+        .order("model", { ascending: true })
+        .limit(100);
 
-  if (!user.capabilities.isGeneralManager && user.branch_id) {
-    query = query.eq("branch_id", user.branch_id) as typeof query;
-  }
+      if (!user.capabilities.isGeneralManager && user.branch_id) {
+        query = query.eq("branch_id", user.branch_id) as typeof query;
+      }
+      return query;
+    })(),
+    admin.from("branches").select("name").eq("is_active", true)
+  ]);
 
-  const { data } = await query;
-  return (data ?? []).map((c) => ({
+  const branchNamesSet = new Set(
+    (branchesResult.data ?? [])
+      .map(b => (b.name ?? "").trim().toLowerCase())
+      .filter(Boolean)
+  );
+
+  const items = (invResult.data ?? []).map((c) => ({
     id: c.id,
     model: c.model,
     production_year: c.production_year,
     color: c.color,
     price: c.price,
     availability_status: c.availability_status,
+    deal_type: c.deal_type,
+    condition_label: c.condition_label,
+    owner_name: c.owner_name,
+    source_customer_id: c.source_customer_id,
     branch_name: unwrap(c.branches as RelationOrArray<{ name: string }>)?.name ?? null,
   }));
+
+  return { items, branchNamesSet };
 }
 
 // ─── Notifications ──────────────────────────────────────────────────────────
