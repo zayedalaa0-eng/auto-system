@@ -60,6 +60,8 @@ export type CustomerItem = {
   inventory_availability_by_car?: Record<string, string>;
   /** حالة سيارة العميل (trade_in) — للعرض في عمود الحالة */
   trade_in_status?: string | null;
+  /** سعر التقييم (trade_in) — يظهر بانتظار التقييم إذا كان فارغاً */
+  trade_in_price?: number | null;
   /** موديل سيارة الاستبدال (buyer_tradein) أو سيارة العميل (sell_on_behalf) */
   trade_in_model?: string | null;
   /** طريقة الدفع من metadata.payment_method */
@@ -183,6 +185,9 @@ export type AgendaTaskItem = {
   recipient_user_id: string | null;
   recipient_branch_id: string | null;
   recipient_label: string | null;
+  requested_car?: string | null;
+  notes?: string | null;
+  logs?: Array<{ actor_name: string | null; action: string | null; details: string | null; created_at: string }>;
 };
 
 export type IncompleteCustomerItem = {
@@ -446,12 +451,12 @@ async function enrichCustomersWithSaleOfferInReport(
   // ── جلب آخر trade_in لكل عميل (بدون فلتر is_active لمنع اختفاء السيارة) ──
   const { data: tradeRows } = await supabase
     .from("trade_ins")
-    .select("customer_id, model, status, is_active, updated_at")
+    .select("customer_id, model, status, is_active, updated_at, price")
     .in("customer_id", ids)
     .order("updated_at", { ascending: false });
 
-  // build map: customerId → { model, isOffer, status }
-  const latestTradeByCustomer = new Map<string, { model: string; isOffer: boolean; status: string | null }>();
+  // build map: customerId → { model, isOffer, status, price }
+  const latestTradeByCustomer = new Map<string, { model: string; isOffer: boolean; status: string | null; price: number | null }>();
   for (const row of tradeRows ?? []) {
     const cid = String(row.customer_id ?? "");
     const opType = opTypeMap.get(cid);
@@ -467,11 +472,12 @@ async function enrichCustomersWithSaleOfferInReport(
         // نُعيِّن "برسم البيع" عندما السيارة نشطة — بغض النظر عن قيمة العمود في جدول trade_ins
         // (قد يكون "استبدال (بانتظار التقييم)" للسجلات القادمة من البوت/المني آب)
         status: isActiveOffer ? "برسم البيع" : (row.status ?? null),
+        price: row.price ?? null,
       });
     } else {
       // مشتري / استبدال: نُظهر فقط إذا كانت سيارة نشطة ومعروضة
       if (Boolean(row.is_active) && isTradeOfferForReport(row.status)) {
-        latestTradeByCustomer.set(cid, { model, isOffer: true, status: row.status ?? null });
+        latestTradeByCustomer.set(cid, { model, isOffer: true, status: row.status ?? null, price: row.price ?? null });
       }
     }
   }
@@ -1610,7 +1616,7 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
   const agendaFollowupsQuery = supabase
     .from("customers")
     .select(
-      "id, full_name, status, requested_car, next_follow_up_at, assigned_user_id, branch_id, branches(name), app_users(full_name)",
+      "id, full_name, status, requested_car, notes, next_follow_up_at, assigned_user_id, branch_id, branches(name), app_users(full_name), customer_logs(actor_name, action, details, created_at)",
     )
     .not("next_follow_up_at", "is", null)
     .lte("next_follow_up_at", todayEndIso)  // فلتر في DB — ليس في JS
@@ -1727,6 +1733,16 @@ export async function getAgendaOverview(): Promise<AgendaOverview> {
       recipient_user_id: item.assigned_user_id ?? null,
       recipient_branch_id: item.branch_id ?? null,
       recipient_label: getRelationshipFullName(item.app_users) ?? getRelationshipName(item.branches),
+      requested_car: item.requested_car ?? null,
+      notes: item.notes ?? null,
+      logs: Array.isArray(item.customer_logs)
+        ? (item.customer_logs as any[]).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((l) => ({
+            actor_name: l.actor_name,
+            action: l.action,
+            details: l.details,
+            created_at: l.created_at,
+          }))
+        : [],
     }));
 
   const notifications: AgendaTaskItem[] = (notificationRows ?? []).map((item) => ({

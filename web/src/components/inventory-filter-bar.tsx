@@ -132,7 +132,7 @@ export function InventoryFilterBar({
 
         {/* خيارات إضافية ومسح الفلاتر */}
         <div className="flex items-center gap-4 flex-shrink-0">
-          {!isMuallimBranch && activeTab === "showroom" && (
+          {!(isMuallimBranch || currentBranch.includes("لمعلم") || currentBranch.includes("المعلم")) && activeTab === "showroom" && (
             <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer select-none">
               <input
                 type="checkbox"

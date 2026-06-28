@@ -145,23 +145,21 @@ export default async function InventoryPage({
       if (branchFilter.mode === "legacy-branch" && branchFilter.branchName && itemBranch !== branchFilter.branchName)
         return false;
     } else if (ctx.isMuallimBranch) {
-      if (branchFilter.mode === "all" || branchFilter.mode === "default") {
-        // كل المعارض أو الافتراضي: سيارات لمعلم كلها + سيارات المعارض الأخرى المستعملة/برسم البيع
+      if (branchFilter.mode === "all") {
+        // كل المعارض: سيارات لمعلم كلها + سيارات المعارض الأخرى برسم البيع فقط
         const isOtherBranch = itemBranch !== normalize(ctx.branchName);
-        if (isOtherBranch) {
-          const isCust = Boolean(itemOwner) && !branchNamesSet.has(itemOwner);
-          const cond = normalize(item.condition_label);
-          if (!(itemDeal.includes("برسم البيع") || itemDeal.includes("استبدال") || itemDeal.includes("بيع بالوكالة") || cond === "مستعمل" || isCust)) return false;
-        }
+        if (isOtherBranch && normalize(item.deal_type) !== "برسم البيع") return false;
       } else if (branchFilter.mode === "self") {
         if (itemBranch !== normalize(ctx.branchName)) return false;
       } else if (branchFilter.mode === "cross") {
         if (!branchFilter.branchName || itemBranch !== branchFilter.branchName) return false;
-        const isCust = Boolean(itemOwner) && !branchNamesSet.has(itemOwner);
-        const cond = normalize(item.condition_label);
-        if (!(itemDeal.includes("برسم البيع") || itemDeal.includes("استبدال") || itemDeal.includes("بيع بالوكالة") || cond === "مستعمل" || isCust)) return false;
+        if (normalize(item.deal_type) !== "برسم البيع") return false;
       } else if (branchFilter.mode === "legacy-branch") {
         if (branchFilter.branchName && itemBranch !== branchFilter.branchName) return false;
+      } else if (branchFilter.mode === "default") {
+        // معرض لمعلم: الافتراضي = كل المعارض (سياراتهم + برسم البيع من غيرهم)
+        const isOtherBranch = itemBranch !== normalize(ctx.branchName);
+        if (isOtherBranch && normalize(item.deal_type) !== "برسم البيع") return false;
       }
     } else {
       if (itemBranch !== normalize(ctx.branchName)) return false;
@@ -232,6 +230,7 @@ export default async function InventoryPage({
     // المعارض الأخرى (أو المدير العام لكل المعارض):
     // إظهار المستعمل إذا كان الفلتر مفعلاً، وإلا فقط السيارات الجديدة
     if (isShowUsed) return true;
+    if (normalize(item.branch_name).includes("لمعلم") || normalize(item.owner_name).includes("لمعلم")) return true;
     return normalize(item.condition_label).includes("جديد");
   });
 

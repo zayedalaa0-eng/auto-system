@@ -794,13 +794,14 @@ export function AgendaCenterClient({
                       ) : null}
                     </div>
 
-                    {/* 3. تفاصيل السيارة المطلوبة والملاحظات */}
-                    {item.requested_car || item.notes ? (
+                    {/* 3. تفاصيل السيارة المطلوبة والملاحظات والسجل */}
+                    {(item.requested_car || item.notes || (item.logs && item.logs.length > 0)) ? (
                       <div className="mt-3 rounded-lg bg-indigo-50 border border-indigo-100 p-3 text-sm space-y-2 shadow-inner">
                         <div className="font-semibold text-indigo-800 border-b border-indigo-100 pb-1 mb-1 flex items-center gap-1">
-                          <ClipboardList className="h-4 w-4" /> السيارة المطلوبة أو ملاحظات
+                          <ClipboardList className="h-4 w-4" /> الملاحظات والسجل
                         </div>
                         {item.requested_car ? <div><span className="text-slate-500 font-medium">السيارة المطلوبة:</span> <span className="font-bold text-slate-800">{item.requested_car}</span></div> : null}
+                        
                         {item.notes ? (
                           <div>
                             <span className="text-slate-500 font-medium block mb-1">ملاحظات:</span> 
@@ -809,11 +810,29 @@ export function AgendaCenterClient({
                                 const txt = notePart.trim();
                                 if (!txt) return null;
                                 return (
-                                  <div key={idx} className="bg-white p-2 rounded-md border border-indigo-100 text-slate-700 shadow-sm leading-relaxed whitespace-pre-wrap text-xs sm:text-sm">
+                                  <div key={`note-${idx}`} className="bg-white p-2 rounded-md border border-indigo-100 text-slate-700 shadow-sm leading-relaxed whitespace-pre-wrap text-xs sm:text-sm">
                                     {txt}
                                   </div>
                                 );
                               })}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {item.logs && item.logs.length > 0 ? (
+                          <div className="mt-3 pt-3 border-t border-indigo-100">
+                            <span className="text-slate-500 font-medium block mb-2">سجل العمليات الأخير:</span>
+                            <div className="space-y-2">
+                              {item.logs.slice(0, 5).map((log, idx) => (
+                                <div key={`log-${idx}`} className="bg-white p-2 rounded-md border border-indigo-100 text-slate-700 shadow-sm text-xs flex flex-col gap-1">
+                                  <div className="flex justify-between items-center">
+                                    <span className="font-bold text-indigo-700">{log.action || "إجراء"}</span>
+                                    <span className="text-slate-400" dir="ltr">{new Date(log.created_at).toLocaleString('en-GB', { hour12: false, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                  </div>
+                                  {log.details && <div className="text-slate-600 whitespace-pre-wrap">{log.details}</div>}
+                                  <div className="text-slate-400 mt-1">بواسطة: {log.actor_name || "النظام"}</div>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         ) : null}

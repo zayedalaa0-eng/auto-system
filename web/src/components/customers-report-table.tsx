@@ -223,10 +223,21 @@ export function CustomersReportTable({
 
                           {/* سيارة الاستبدال */}
                           {isBuyerTradeIn(customer.operation_type) && customer.trade_in_model ? (
-                            <div className="flex items-center gap-1.5 whitespace-nowrap">
-                              <Car className="h-3 w-3 flex-shrink-0 text-violet-500" />
-                              <span className="text-sm font-semibold text-violet-700 leading-tight">{customer.trade_in_model}</span>
-                              <span className="inline-flex items-center rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-semibold text-violet-600 flex-shrink-0">استبدال</span>
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                <Car className="h-3 w-3 flex-shrink-0 text-violet-500" />
+                                <span className="text-sm font-semibold text-violet-700 leading-tight">{customer.trade_in_model}</span>
+                                <span className="inline-flex items-center rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-semibold text-violet-600 flex-shrink-0">استبدال</span>
+                              </div>
+                              {customer.trade_in_price ? (
+                                <span className="inline-flex w-fit items-center rounded-sm bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-inset ring-emerald-200 mt-0.5">
+                                  التقييم: {customer.trade_in_price.toLocaleString("en-US")} ₪
+                                </span>
+                              ) : (
+                                <span className="inline-flex w-fit items-center rounded-sm bg-orange-50 px-1.5 py-0.5 text-[10px] font-bold text-orange-600 ring-1 ring-inset ring-orange-200 mt-0.5">
+                                  بانتظار التقييم
+                                </span>
+                              )}
                             </div>
                           ) : null}
                         </>
