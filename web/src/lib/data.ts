@@ -738,12 +738,16 @@ function applyBranchScope(
   isMuallim = false,
   tableName: "customers" | "inventory" | "other" = "other",
   column = "branch_id",
+  isPendingEvaluation = false
 ): unknown {
   if (isGeneralManager) {
     return query;
   }
 
   if (isMuallim) {
+    if (isPendingEvaluation) {
+      return query;
+    }
     if (tableName === "customers") {
       if (branchId) {
         return query.or(column + ".eq." + branchId + ",operation_type.in.(buyer,buyer_tradein,buyer_tradein_pending,buyer_tradein_evaluated,sell_on_behalf,buying)");
@@ -2538,7 +2542,7 @@ export async function getPendingEvaluationWithDetails(): Promise<PendingEvaluati
     .eq("is_active", true);
 
   const scoped = applyStaffScope(
-    applyBranchScope(query, branchId, capabilities.isGeneralManager, isMuallim, "customers") as typeof query,
+    applyBranchScope(query, branchId, capabilities.isGeneralManager, isMuallim, "customers", "branch_id", true) as typeof query,
     userId,
     capabilities.isManager,
   ) as typeof query;
