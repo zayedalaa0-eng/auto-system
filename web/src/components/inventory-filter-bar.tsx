@@ -35,7 +35,7 @@ export function InventoryFilterBar({
   const searchParams = useSearchParams();
 
   const currentQ = searchParams.get("q") ?? "";
-  const currentBranch = searchParams.get("branch") ?? (isGeneralManager ? "all" : "self");
+  const currentBranch = searchParams.get("branch") ?? (isGeneralManager || isMuallimBranch ? "all" : "self");
   const currentOwner = searchParams.get("owner") ?? "all";
   const currentDeal = searchParams.get("deal") ?? "all";
   const currentStatus = searchParams.get("status") ?? "active";
@@ -85,7 +85,7 @@ export function InventoryFilterBar({
 
   const activeFilterCount = [
     currentQ,
-    currentBranch !== (isGeneralManager ? "all" : "self") ? currentBranch : "",
+    currentBranch !== (isGeneralManager || isMuallimBranch ? "all" : "self") ? currentBranch : "",
     currentOwner !== "all" && activeTab === "customers" ? currentOwner : "",
     currentDeal !== "all" ? currentDeal : "",
     currentStatus !== "active" ? currentStatus : "",
@@ -162,7 +162,7 @@ export function InventoryFilterBar({
         {/* المعرض */}
         <select
           className={getSelectClasses(
-            currentBranch !== (isGeneralManager ? "all" : "self"),
+            currentBranch !== (isGeneralManager || isMuallimBranch ? "all" : "self"),
             "!border-blue-300 !bg-blue-50/60 !text-blue-800 font-semibold focus:!ring-blue-100 focus:!border-blue-500"
           )}
           value={currentBranch}
@@ -180,7 +180,7 @@ export function InventoryFilterBar({
           ) : isMuallimBranch ? (
             <>
               <option value="all">كل المعارض</option>
-              <option value="self">معرض لمعلم فقط</option>
+              <option value="self">معرض لمعلم</option>
               {branches
                 .filter((b) => b !== (branchName ?? ""))
                 .map((b) => {
