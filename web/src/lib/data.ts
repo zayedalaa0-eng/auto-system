@@ -715,9 +715,13 @@ async function getScopedProfile() {
         profile.branch_name = b.name;
         isMuallim = b.name.includes("لمعلم") || b.name.includes("المعلم");
       }
+      console.log("DEBUG getScopedProfile (fetched b):", { b_name: b?.name, isMuallim });
     } else {
       isMuallim = profile.branch_name.includes("لمعلم") || profile.branch_name.includes("المعلم");
+      console.log("DEBUG getScopedProfile (had branch_name):", { branch_name: profile.branch_name, isMuallim });
     }
+  } else {
+    console.log("DEBUG getScopedProfile (no branch_id):", { profile });
   }
 
   return {
@@ -854,7 +858,7 @@ export async function getInventoryFilterContext(): Promise<InventoryFilterContex
     isManager: capabilities.isManager,
     branchId: profile?.branch_id ?? null,
     branchName,
-    isMuallimBranch: (branchName ?? "").includes("المعلم"),
+    isMuallimBranch: isMuallim,
     branches,
     branchObjects,
   };
