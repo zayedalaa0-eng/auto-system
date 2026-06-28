@@ -979,7 +979,7 @@ export async function getRecentInventory(limit = 8): Promise<InventoryItem[]> {
   const { profile, capabilities, isMuallim } = await getScopedProfile();
   const recentInventoryQuery = supabase
     .from("inventory")
-    .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, gearbox, fuel_type, mileage, specs, inspection, photo_urls, source_customer_id, branches(name)");
+    .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, gearbox, fuel_type, mileage, specs, inspection, photo_urls, source_customer_id, branch_id, branches(name)");
   const { data } = await (applyBranchScope(
     recentInventoryQuery,
     profile?.branch_id,
@@ -990,12 +990,19 @@ export async function getRecentInventory(limit = 8): Promise<InventoryItem[]> {
     .order("created_at", { ascending: false })
     .limit(limit);
 
-  return (data ?? []).map((item) => ({
-    id: item.id,
-    model: item.model,
-    owner_name: item.owner_name,
-    deal_type: item.deal_type ?? null,
-    chassis_no: item.chassis_no ?? null,
+  return (data ?? []).map((item) => {
+    // Al-Muallim Branch special rule: cars from other branches appear as "برسم البيع"
+    let displayDealType = item.deal_type ?? null;
+    if (isMuallim && item.branch_id !== profile?.branch_id && displayDealType !== "جديد") {
+      displayDealType = "برسم البيع";
+    }
+
+    return {
+      id: item.id,
+      model: item.model,
+      owner_name: item.owner_name,
+      deal_type: displayDealType,
+      chassis_no: item.chassis_no ?? null,
     condition_label: item.condition_label ?? null,
     availability_status: item.availability_status,
     price: item.price,
@@ -1197,12 +1204,19 @@ export async function getInventoryDirectory(
     .order("updated_at", { ascending: false })
     .limit(limit);
 
-  const scopedItems: InventoryItem[] = (data ?? []).map((item) => ({
-    id: item.id,
-    model: item.model,
-    owner_name: item.owner_name,
-    deal_type: item.deal_type ?? null,
-    chassis_no: item.chassis_no ?? null,
+  const scopedItems: InventoryItem[] = (data ?? []).map((item) => {
+    // Al-Muallim Branch special rule: cars from other branches appear as "برسم البيع"
+    let displayDealType = item.deal_type ?? null;
+    if (isMuallim && item.branch_id !== profile?.branch_id && displayDealType !== "جديد") {
+      displayDealType = "برسم البيع";
+    }
+
+    return {
+      id: item.id,
+      model: item.model,
+      owner_name: item.owner_name,
+      deal_type: displayDealType,
+      chassis_no: item.chassis_no ?? null,
     condition_label: item.condition_label ?? null,
     availability_status: item.availability_status,
     price: item.price,

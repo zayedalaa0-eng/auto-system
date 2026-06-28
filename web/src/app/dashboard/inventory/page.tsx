@@ -96,9 +96,7 @@ export default async function InventoryPage({
     ctx.isMuallimBranch && !ctx.isGeneralManager
       ? true
       : normalize(cross) === "1";
-  const inventory = await getInventoryDirectory(120, { includeCrossBranchForMuallim: includeCross });
-
-  // أسماء المعارض لاستبعادها من قائمة الملاك
+    const inventory = await getInventoryDirectory(120, { includeCrossBranchForMuallim: includeCross });
   const branchNamesSet = new Set(ctx.branches.map((b) => normalize(b)));
 
   // أصحاب السيارات برسم البيع — عملاء فقط (بدون المعارض)
