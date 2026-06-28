@@ -196,11 +196,16 @@ export default async function InventoryPage({
 
   // ── تقسيم المخزون: معرض vs عملاء ───────────────────────────────────────────
   const isCustomerCar = (item: InventoryItem) => {
+    const ownerNorm = normalize(item.owner_name);
+    // إذا تحولت السيارة باسم المعرض، تظهر في مخزون المعرض وليس مخزون العملاء
+    if (branchNamesSet.has(ownerNorm)) {
+      return false;
+    }
+
     const deal = normalize(item.deal_type);
     // سيارة برسم البيع: المالك شخص وليس معرضاً (ينطبق على كل المعارض)
     if (deal.includes("برسم البيع")) {
-      const ownerNorm = normalize(item.owner_name);
-      return !branchNamesSet.has(ownerNorm);
+      return true;
     }
     // استبدال: فقط إذا جاءت من عميل (source_customer_id)
     if (deal.includes("استبدال")) {
