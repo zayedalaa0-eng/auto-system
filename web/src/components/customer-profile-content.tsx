@@ -22,6 +22,8 @@ import {
   Share2,
   X,
   Loader2,
+  Check,
+  CheckCheck,
 } from "lucide-react";
 
 import { convertToSellOnBehalfAction, convertToTradeInAction, deleteCustomerAction, saveCustomerProfileAction, sendQuickReminderAction, updateCustomerBasicInfoAction } from "@/app/dashboard/actions";
@@ -1322,16 +1324,37 @@ export function CustomerProfileContent({
 
                   return filteredHistoryLogs.map((log) => {
                     const relatedVoice = voiceByLogId.get(log.id) ?? [];
+                    
+                    const isNote = log.action === "general" || log.action === "note_added" || log.action === "manual_reminder_created";
+                    const isMessage = log.action.includes("message");
+                    // If no explicit read status is tracked in DB, we default to standard Check, unless details contain specific keywords if applicable in future
+                    const isReadMessage = isMessage && log.details?.includes("مقروء");
 
                     return (
                       <div key={log.id} className="profile-timeline__entry">
-                        <div className="profile-timeline__icon">{ACTION_ICONS[log.action] ?? "📌"}</div>
-                        <div className="profile-timeline__content">
+                        <div className={`profile-timeline__icon ${isNote ? 'bg-amber-100 border-amber-200' : ''}`}>
+                          {ACTION_ICONS[log.action] ?? (isNote ? "📝" : "📌")}
+                        </div>
+                        <div className={`profile-timeline__content ${isNote ? 'border border-amber-200 bg-amber-50 rounded-lg p-3' : ''}`}>
                           <div className="profile-timeline__head">
-                            <span className="profile-timeline__action">{translateLogAction(log.action)}</span>
-                            <span className="profile-timeline__date">{formatDate(log.created_at)}</span>
+                            <span className={`profile-timeline__action ${isNote ? 'text-amber-800 font-bold' : ''}`}>
+                              {isNote ? "ملاحظة جديدة" : translateLogAction(log.action)}
+                              {log.actor_name && <span className="mr-1 opacity-80 text-xs">بواسطة {log.actor_name}</span>}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <span className="profile-timeline__date">{formatDate(log.created_at)}</span>
+                              {isMessage && (
+                                isReadMessage 
+                                  ? <CheckCheck className="h-4 w-4 text-sky-500" /> 
+                                  : <Check className="h-4 w-4 text-slate-400" />
+                              )}
+                            </div>
                           </div>
-                          {log.details && <div className="profile-timeline__body">{log.details}</div>}
+                          {log.details && (
+                            <div className={`profile-timeline__body whitespace-pre-wrap ${isNote ? 'text-amber-900 font-medium text-sm mt-1' : ''}`}>
+                              {log.details}
+                            </div>
+                          )}
 
                           {/* ── التسجيلات الصوتية المرتبطة ── */}
                           {relatedVoice.length > 0 && (
