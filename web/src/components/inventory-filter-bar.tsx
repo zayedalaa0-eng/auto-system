@@ -183,11 +183,14 @@ export function InventoryFilterBar({
               <option value="self">معرض لمعلم فقط</option>
               {branches
                 .filter((b) => b !== (branchName ?? ""))
-                .map((b) => (
-                  <option key={b} value={`cross:${b}`}>
-                    {b}
-                  </option>
-                ))}
+                .map((b) => {
+                  const label = b.includes("معرض") ? b : `معرض ${b}`;
+                  return (
+                    <option key={b} value={`cross:${b}`}>
+                      {label}
+                    </option>
+                  );
+                })}
             </>
           ) : (
             <option value="self">{branchName ?? "معرضي فقط"}</option>

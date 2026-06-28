@@ -83,11 +83,11 @@ export default async function InventoryPage({
 }) {
   const params = await searchParams;
   const { q, branch, owner, deal, status, gearbox, fuel, minPrice, maxPrice, car, cross, tab, show_used, page } = params;
-  const isShowUsed = show_used === "1";
 
   // التبويب: showroom = مخزون المعرض، customers = مخزون العملاء
   const activeTab = tab === "customers" ? "customers" : "showroom";
   const ctx = await getInventoryFilterContext();
+  const isShowUsed = show_used === "1" || (ctx.isMuallimBranch && !ctx.isGeneralManager);
   const branchFilter = parseBranchFilter(branch);
   // معرض لمعلم: يجلب دائماً سيارات المعارض الأخرى (برسم البيع) — الفلتر يتحكم بما يُعرض
   const includeCross =
