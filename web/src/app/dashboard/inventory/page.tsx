@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { Building2, Calendar, Car, Fuel, GaugeCircle, Palette, Send, Settings2, Store, Tag, User } from "lucide-react";
+import { Building2, Calendar, Car, Fuel, GaugeCircle, Palette, Send, Settings2, Store, Tag, User, Warehouse } from "lucide-react";
+import { BranchLogo } from "@/components/branch-logo";
 
 import { CarGalleryViewer } from "@/components/car-gallery-viewer";
 import { CustomerModalShell } from "@/components/customer-modal-shell";
+import { Pagination } from "@/components/pagination";
 import { InventoryExportBtn } from "@/components/inventory-export-btn";
 import { InventoryFilterBar } from "@/components/inventory-filter-bar";
 import { InventoryImportBtn } from "@/components/inventory-import-btn";
@@ -10,6 +12,7 @@ import { EditableCell, InventoryPriceCellNew, GEARBOX_OPTIONS, FUEL_OPTIONS } fr
 import { sendQuickReminderAction } from "@/app/dashboard/actions";
 import { getInventoryCarAttachments, getInventoryDirectory, getInventoryFilterContext } from "@/lib/data";
 import { formatCurrency } from "@/lib/format";
+import { getColorSwatch } from "@/lib/colors";
 
 type InventoryFilters = {
   q?: string;
@@ -24,6 +27,8 @@ type InventoryFilters = {
   tab?: string;
   minPrice?: string;
   maxPrice?: string;
+  show_used?: string;
+  page?: string;
 };
 
 function normalize(value: string | null | undefined) {
@@ -53,43 +58,7 @@ function normalizeArabic(text: string): string {
     .trim();
 }
 
-/** خريطة الألوان */
-const COLOR_MAP: Array<[string[], string, string]> = [
-  [["ابيض", "بيضاء", "white"],              "#ffffff", "#d1d5db"],
-  [["اسود", "سوداء", "black"],              "#1c1917", "#1c1917"],
-  [["رمادي", "رصاصي", "grey", "gray"],      "#9ca3af", "#9ca3af"],
-  [["فضي", "سيلفر", "silver"],              "#cbd5e1", "#94a3b8"],
-  [["احمر", "حمراء", "red"],                "#ef4444", "#ef4444"],
-  [["فيراني"],                               "#7a8a7a", "#6b7a6b"],
-  [["كحلي", "نيلي", "navy"],               "#1e3a8a", "#1e3a8a"],
-  [["ازرق", "زرقاء", "blue"],              "#3b82f6", "#3b82f6"],
-  [["سماوي", "تركواز", "تيفاني", "tiffany", "turquoise"], "#2dd4bf", "#2dd4bf"],
-  [["اخضر", "خضراء", "green"],             "#22c55e", "#22c55e"],
-  [["زيتي", "olive"],                       "#84cc16", "#84cc16"],
-  [["اصفر", "صفراء", "yellow"],            "#eab308", "#eab308"],
-  [["ذهبي", "ذهبيه", "gold"],              "#f59e0b", "#d97706"],
-  [["شمبانيا", "شامبين", "شمباني", "champagne"], "#f3e0b5", "#d4b896"],
-  [["بيج", "كريمي", "beige", "cream"],     "#e8dcc8", "#c9b99a"],
-  [["نهدي", "لبني", "عاجي", "ivory"],      "#f5f0e8", "#d6c9b0"],
-  [["باطوني", "اسمنتي", "سيمنتي", "concrete", "cement"], "#b0b8c1", "#8a9099"],
-  [["تيتانيوم", "titanium"],               "#8d9299", "#6b7280"],
-  [["برتقالي", "برتقاليه", "orange"],      "#f97316", "#f97316"],
-  [["بني", "بنيه", "كافيه", "brown"],      "#92400e", "#92400e"],
-  [["خمري", "بورجندي", "burgundy", "wine"],"#881337", "#881337"],
-  [["بنفسجي", "بنفسجيه", "purple"],        "#a855f7", "#a855f7"],
-  [["وردي", "ورديه", "pink"],              "#ec4899", "#ec4899"],
-  [["عسلي", "قهوائي", "mocha", "hazel"],   "#c8956c", "#a07040"],
-  [["رصاصي غامق", "انثراسيت", "anthracite"], "#4b5563", "#374151"],
-];
 
-function getColorSwatch(value: string | null | undefined): { bg: string; border: string } | null {
-  if (!value) return null;
-  const norm = normalizeArabic(value);
-  for (const [keywords, bg, border] of COLOR_MAP) {
-    if (keywords.some((kw) => norm.includes(kw))) return { bg, border };
-  }
-  return null;
-}
 
 function getDealBadgeClass(value: string | null | undefined) {
   const label = normalize(value);
@@ -113,13 +82,14 @@ export default async function InventoryPage({
   searchParams: Promise<InventoryFilters>;
 }) {
   const params = await searchParams;
-  const { q, branch, owner, deal, status, gearbox, fuel, minPrice, maxPrice, car, cross, tab } = params;
+  const { q, branch, owner, deal, status, gearbox, fuel, minPrice, maxPrice, car, cross, tab, show_used, page } = params;
+  const isShowUsed = show_used === "1";
 
   // التبويب: showroom = مخزون المعرض، customers = مخزون العملاء
   const activeTab = tab === "customers" ? "customers" : "showroom";
   const ctx = await getInventoryFilterContext();
   const branchFilter = parseBranchFilter(branch);
-  // معرض المعلم: يجلب دائماً سيارات المعارض الأخرى (برسم البيع) — الفلتر يتحكم بما يُعرض
+  // معرض لمعلم: يجلب دائماً سيارات المعارض الأخرى (برسم البيع) — الفلتر يتحكم بما يُعرض
   const includeCross =
     ctx.isMuallimBranch && !ctx.isGeneralManager
       ? true
@@ -176,38 +146,20 @@ export default async function InventoryPage({
         return false;
     } else if (ctx.isMuallimBranch) {
       if (branchFilter.mode === "all") {
-        // كل المعارض: سيارات المعلم كلها + سيارات المعارض المسموحة
+        // كل المعارض: سيارات لمعلم كلها + سيارات المعارض الأخرى برسم البيع فقط
         const isOtherBranch = itemBranch !== normalize(ctx.branchName);
-        const isMuallimAllowedCrossBranch = (it: typeof item) => {
-          const deal = normalize(it.deal_type);
-          const cond = normalize(it.condition_label);
-          const isCustomer = Boolean(normalize(it.owner_name) && normalize(it.owner_name) !== normalize(it.branch_name));
-          return deal === "برسم البيع" || deal === "بيع بالوكالة" || cond === "مستعمل" || isCustomer;
-        };
-        if (isOtherBranch && !isMuallimAllowedCrossBranch(item)) return false;
+        if (isOtherBranch && normalize(item.deal_type) !== "برسم البيع") return false;
       } else if (branchFilter.mode === "self") {
         if (itemBranch !== normalize(ctx.branchName)) return false;
       } else if (branchFilter.mode === "cross") {
         if (!branchFilter.branchName || itemBranch !== branchFilter.branchName) return false;
-        const isMuallimAllowedCrossBranch = (it: typeof item) => {
-          const deal = normalize(it.deal_type);
-          const cond = normalize(it.condition_label);
-          const isCustomer = Boolean(normalize(it.owner_name) && normalize(it.owner_name) !== normalize(it.branch_name));
-          return deal === "برسم البيع" || deal === "بيع بالوكالة" || cond === "مستعمل" || isCustomer;
-        };
-        if (!isMuallimAllowedCrossBranch(item)) return false;
+        if (normalize(item.deal_type) !== "برسم البيع") return false;
       } else if (branchFilter.mode === "legacy-branch") {
         if (branchFilter.branchName && itemBranch !== branchFilter.branchName) return false;
       } else if (branchFilter.mode === "default") {
-        // معرض المعلم: الافتراضي = كل المعارض (سياراتهم + المسموح من غيرهم)
+        // معرض لمعلم: الافتراضي = كل المعارض (سياراتهم + برسم البيع من غيرهم)
         const isOtherBranch = itemBranch !== normalize(ctx.branchName);
-        const isMuallimAllowedCrossBranch = (it: typeof item) => {
-          const deal = normalize(it.deal_type);
-          const cond = normalize(it.condition_label);
-          const isCustomer = Boolean(normalize(it.owner_name) && normalize(it.owner_name) !== normalize(it.branch_name));
-          return deal === "برسم البيع" || deal === "بيع بالوكالة" || cond === "مستعمل" || isCustomer;
-        };
-        if (isOtherBranch && !isMuallimAllowedCrossBranch(item)) return false;
+        if (isOtherBranch && normalize(item.deal_type) !== "برسم البيع") return false;
       }
     } else {
       if (itemBranch !== normalize(ctx.branchName)) return false;
@@ -262,9 +214,19 @@ export default async function InventoryPage({
   const customersCount = baseFiltered.filter((i) => isCustomerCar(i)).length;
 
   // سيارات التبويب النشط (قبل فلتر الحالة) — أساس الإحصاءات والعدد
-  const baseTabFiltered = baseFiltered.filter((item) =>
-    activeTab === "customers" ? isCustomerCar(item) : !isCustomerCar(item),
-  );
+  const baseTabFiltered = baseFiltered.filter((item) => {
+    if (activeTab === "customers") return isCustomerCar(item);
+    
+    // مخزون المعرض
+    if (isCustomerCar(item)) return false;
+    // معرض لمعلم يعرض كل شيء
+    if (ctx.isMuallimBranch && !ctx.isGeneralManager) return true;
+    
+    // المعارض الأخرى (أو المدير العام لكل المعارض):
+    // إظهار المستعمل إذا كان الفلتر مفعلاً، وإلا فقط السيارات الجديدة
+    if (isShowUsed) return true;
+    return normalize(item.condition_label).includes("جديد");
+  });
 
   // ── إحصاءات الحبوب — تعكس التبويب النشط فقط ─────────────────────────────────
   const statsAll = baseTabFiltered.length;
@@ -283,7 +245,18 @@ export default async function InventoryPage({
     if (activeStatus === "all") return true;
     if (activeStatus === "incomplete") return isIncomplete(item);
     return normalize(item.availability_status) === activeStatus;
+  }).sort((a, b) => {
+    const aIsNew = normalize(a.condition_label).includes("جديد");
+    const bIsNew = normalize(b.condition_label).includes("جديد");
+    if (aIsNew && !bIsNew) return -1;
+    if (!aIsNew && bIsNew) return 1;
+    return 0;
   });
+
+  const currentPage = parseInt(page ?? "1", 10) || 1;
+  const pageSize = 15;
+  const totalPages = Math.ceil(tabInventory.length / pageSize);
+  const paginatedInventory = tabInventory.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const selectedCar = selectedCarId
     ? (baseFiltered.find((item) => item.id === selectedCarId) ?? null)
@@ -381,7 +354,7 @@ export default async function InventoryPage({
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
               activeStatus === "active"
                 ? "bg-blue-700 text-white shadow"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700"
             }`}
           >
             <span className="h-2 w-2 rounded-full bg-blue-500 flex-shrink-0" />
@@ -394,7 +367,7 @@ export default async function InventoryPage({
             className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
               activeStatus === "all"
                 ? "bg-slate-800 text-white shadow"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700"
             }`}
           >
             الكل <span className="opacity-70">{statsAll}</span>
@@ -406,7 +379,7 @@ export default async function InventoryPage({
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
               activeStatus === "متوفرة"
                 ? "bg-emerald-700 text-white shadow"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700"
             }`}
           >
             <span className="h-2 w-2 rounded-full bg-emerald-500 flex-shrink-0" />
@@ -419,7 +392,7 @@ export default async function InventoryPage({
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
               activeStatus === "محجوزة"
                 ? "bg-amber-600 text-white shadow"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700"
             }`}
           >
             <span className="h-2 w-2 rounded-full bg-amber-400 flex-shrink-0" />
@@ -432,7 +405,7 @@ export default async function InventoryPage({
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
               activeStatus === "مباعة"
                 ? "bg-slate-700 text-white shadow"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700"
             }`}
           >
             <span className="h-2 w-2 rounded-full bg-slate-400 flex-shrink-0" />
@@ -445,7 +418,7 @@ export default async function InventoryPage({
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
               activeStatus === "incomplete"
                 ? "bg-orange-600 text-white shadow"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700"
             }`}
           >
             <span className="h-2 w-2 rounded-full bg-orange-400 flex-shrink-0" />
@@ -462,7 +435,7 @@ export default async function InventoryPage({
           className={`inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold rounded-xl border transition-all ${
             activeTab === "showroom"
               ? "bg-blue-600 border-blue-600 text-white shadow-sm"
-              : "bg-blue-50 border-blue-100 text-blue-600 hover:bg-blue-100"
+              : "bg-blue-50 dark:bg-slate-800 border-blue-100 dark:border-slate-700 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-slate-700"
           }`}
         >
           🏢 مخزون المعرض
@@ -475,7 +448,7 @@ export default async function InventoryPage({
           className={`inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold rounded-xl border transition-all ${
             activeTab === "customers"
               ? "bg-amber-500 border-amber-500 text-white shadow-sm"
-              : "bg-blue-50 border-blue-100 text-blue-600 hover:bg-blue-100"
+              : "bg-blue-50 dark:bg-slate-800 border-blue-100 dark:border-slate-700 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-slate-700"
           }`}
         >
           👤 مخزون العملاء
@@ -487,7 +460,7 @@ export default async function InventoryPage({
 
       {/* ── جدول المخزون ── */}
       <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
-        <table className={`premium-table ${activeTab === "customers" ? "premium-table--amber" : "premium-table--blue"}`}>
+        <table className={`mobile-card-table premium-table ${activeTab === "customers" ? "premium-table--amber" : "premium-table--blue"}`}>
           <thead className="legacy-standard-head">
             <tr>
               <th style={{ width: "180px" }}>المالك / الشاصي</th>
@@ -499,8 +472,8 @@ export default async function InventoryPage({
             </tr>
           </thead>
           <tbody>
-            {tabInventory.length > 0 ? (
-              tabInventory.map((item) => {
+            {paginatedInventory.length > 0 ? (
+              paginatedInventory.map((item) => {
                 // المالك شخص (وليس معرضاً) → نُظهر اسم المعرض الذي أُدخل العميل من خلاله
                 const ownerIsPerson =
                   Boolean(item.owner_name) && !branchNamesSet.has(normalize(item.owner_name));
@@ -508,14 +481,19 @@ export default async function InventoryPage({
                 return (
                   <tr key={item.id}>
                     {/* المالك / الشاصي */}
-                    <td>
+                    <td data-label="المالك / الشاصي">
                       <div className="flex flex-col gap-1.5">
                         {/* اسم المالك — معرض أو شخص */}
                         <div className="flex items-center gap-1.5">
                           {ownerIsPerson ? (
                             <User className="h-4 w-4 flex-shrink-0 text-slate-400" />
                           ) : (
-                            <Store className="h-4 w-4 flex-shrink-0 text-amber-500" />
+                            <div className="flex-shrink-0">
+                              <BranchLogo branchName={item.owner_name} className="w-5 h-5 rounded-sm" />
+                              {!item.owner_name?.includes("لمعلم") && !item.owner_name?.includes("المعلم") && !item.owner_name?.includes("شيري") && !item.owner_name?.includes("الشيري") && !item.owner_name?.includes("فورثنج") && !item.owner_name?.includes("فورثينج") && !item.owner_name?.includes("الفورثنك") && (
+                                <Store className="h-4 w-4 text-amber-500" />
+                              )}
+                            </div>
                           )}
                           <span className="font-bold text-slate-900 text-sm leading-tight truncate">{item.owner_name ?? "—"}</span>
                         </div>
@@ -538,7 +516,7 @@ export default async function InventoryPage({
                     </td>
 
                     {/* السيارة */}
-                    <td>
+                    <td data-label="السيارة">
                       <div className="flex flex-col gap-1.5">
                         {/* اسم السيارة */}
                         <div className="flex items-center gap-1.5">
@@ -596,7 +574,7 @@ export default async function InventoryPage({
                     </td>
 
                     {/* اللون والعداد */}
-                    <td>
+                    <td data-label="اللون والعداد">
                       <div className="flex flex-col gap-1.5">
                         <EditableCell itemId={item.id} field="color"
                           value={item.color ?? null} placeholder="اللون"
@@ -612,7 +590,7 @@ export default async function InventoryPage({
                     </td>
 
                     {/* القير والوقود */}
-                    <td>
+                    <td data-label="القير والوقود">
                       <div className="flex flex-col gap-1.5">
                         <EditableCell itemId={item.id} field="gearbox"
                           value={item.gearbox ?? null} type="select" options={GEARBOX_OPTIONS}
@@ -627,7 +605,7 @@ export default async function InventoryPage({
                     </td>
 
                     {/* الإجراءات */}
-                    <td>
+                    <td data-label="الإجراءات">
                       <div className="flex items-center gap-1.5">
                         {/* زر تذكير تيليجرام */}
                         <form action={sendQuickReminderAction} className="flex-shrink-0">
@@ -695,6 +673,10 @@ export default async function InventoryPage({
           </tbody>
         </table>
       </div>
+
+      {totalPages > 1 && (
+        <Pagination totalPages={totalPages} currentPage={currentPage} />
+      )}
 
       {/* ── درج تفاصيل السيارة ── */}
       {selectedCar ? (

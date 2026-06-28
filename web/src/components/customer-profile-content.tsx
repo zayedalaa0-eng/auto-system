@@ -1852,16 +1852,27 @@ export function CustomerProfileContent({
                 }}
               />
 
-              <label className="legacy-inline-toggle">
-                <input
-                  type="checkbox"
-                  name="count_as_interaction"
-                  checked={countAsInteraction}
-                  onChange={(e) => setCountAsInteraction(e.target.checked)}
-                />
-                <span>{countAsInteraction ? "✓ احتساب كتواصل جديد" : "✗ لا تحتسب كتواصل"}</span>
-                <span className="legacy-inline-toggle__dot" />
-              </label>
+              <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+                <p className="text-sm font-bold text-emerald-800">طريقة التواصل (اختياري، تُضاف للملاحظات):</p>
+                <label className="flex items-center gap-2 text-sm text-emerald-700 font-medium">
+                  <input
+                    type="checkbox"
+                    name="contact_phone_whatsapp"
+                    className="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
+                    onChange={() => markDirty()}
+                  />
+                  التواصل من خلال اتصال هاتفي او تواصل واتس اب
+                </label>
+                <label className="flex items-center gap-2 text-sm text-emerald-700 font-medium">
+                  <input
+                    type="checkbox"
+                    name="contact_showroom_visit"
+                    className="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
+                    onChange={() => markDirty()}
+                  />
+                  من خلال زيارة المعرض
+                </label>
+              </div>
 
               <div className="profile-status-block">
                 <label className="legacy-label">تحديث الحالة النهائية</label>

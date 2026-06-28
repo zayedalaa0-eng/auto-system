@@ -2032,7 +2032,7 @@ export async function getCustomerById(customerId: string): Promise<CustomerDetai
       supabase
         .from("reminders")
         .select(
-          "id, title, message, due_at, status, assigned_user_id, branch_id, branches(name), customers(full_name), app_users(full_name)",
+          "id, title, message, due_at, status, assigned_user_id, branch_id, customer_id, branches(name), customers(full_name), app_users(full_name)",
         )
         .eq("customer_id", customerId)
         .order("created_at", { ascending: false })
@@ -2190,6 +2190,7 @@ export async function getCustomerById(customerId: string): Promise<CustomerDetai
       assigned_user_name: getRelationshipFullName(item.app_users),
       assigned_user_id: item.assigned_user_id ?? null,
       branch_id: item.branch_id ?? null,
+      customer_id: item.customer_id ?? null,
     })),
     attachments: attachmentsWithUrls,
     tradeIns: (tradeIns ?? []).map((item) => ({
@@ -2280,9 +2281,9 @@ export async function getDataQualityCounts(): Promise<{
   const { profile, capabilities, isMuallim } = await getScopedProfile();
   const branchId = profile?.branch_id ?? null;
 
-  const base = supabase.from("customers").select("*", { count: "exact", head: true });
-  const scoped = (q: typeof base) =>
-    applyBranchScope(q, branchId, capabilities.isGeneralManager, isMuallim, "customers") as typeof base;
+  const createBase = () => supabase.from("customers").select("*", { count: "exact", head: true });
+  const scoped = (q: ReturnType<typeof createBase>) =>
+    applyBranchScope(q, branchId, capabilities.isGeneralManager, isMuallim, "customers") as ReturnType<typeof createBase>;
 
   const [
     { count: active },
@@ -2290,10 +2291,10 @@ export async function getDataQualityCounts(): Promise<{
     { count: missingFollowup },
     { count: missingRequestedCar },
   ] = await Promise.all([
-    scoped(base.eq("is_active", true)),
-    scoped(base.eq("is_active", false)),
-    scoped(base.eq("is_active", true).is("next_follow_up_at", null)),
-    scoped(base.eq("is_active", true).or("requested_car.is.null,requested_car.eq.")),
+    scoped(createBase().eq("is_active", true)),
+    scoped(createBase().eq("is_active", false)),
+    scoped(createBase().eq("is_active", true).is("next_follow_up_at", null)),
+    scoped(createBase().eq("is_active", true).or("requested_car.is.null,requested_car.eq.")),
   ]);
 
   return {
@@ -2492,6 +2493,8 @@ export type PendingEvaluationItem = {
   photos: Array<{ id: string; public_url: string; file_name: string }>;
   // موظفو الفرع (لزر التذكير) — يشمل مدير الفرع والموظفين والمدير العام
   branch_staff: EvaluationStaffMember[];
+  // السجل التاريخي للعميل
+  logs: Array<{ actor_name: string | null; action: string | null; details: string | null; created_at: string }>;
 };
 
 export async function getPendingEvaluationWithDetails(): Promise<PendingEvaluationItem[]> {
@@ -2505,7 +2508,7 @@ export async function getPendingEvaluationWithDetails(): Promise<PendingEvaluati
   const query = supabase
     .from("customers")
     .select(
-      "id, full_name, phone, status, operation_type, requested_car, notes, branch_id, assigned_user_id, branches(name), app_users(full_name), trade_ins(id, model, color, production_year, mileage, price, chassis_no, inspection, status, is_active)",
+      "id, full_name, phone, status, operation_type, requested_car, notes, branch_id, assigned_user_id, branches(name), app_users(full_name), trade_ins(id, model, color, production_year, mileage, price, chassis_no, inspection, status, is_active), customer_logs(actor_name, action, details, created_at)",
     )
     .or("status.ilike.%التقييم%")
     .eq("is_active", true);
@@ -2597,6 +2600,14 @@ export async function getPendingEvaluationWithDetails(): Promise<PendingEvaluati
       trade_in_status: (t?.status as string | null) ?? null,
       photos: photosByCustomer.get(customer.id) ?? [],
       branch_staff: uniqueStaff,
+      logs: Array.isArray(customer.customer_logs)
+        ? (customer.customer_logs as any[]).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((l) => ({
+            actor_name: l.actor_name,
+            action: l.action,
+            details: l.details,
+            created_at: l.created_at,
+          }))
+        : [],
     };
   });
 
