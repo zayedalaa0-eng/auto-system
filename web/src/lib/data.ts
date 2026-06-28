@@ -1016,7 +1016,8 @@ export async function getRecentInventory(limit = 8): Promise<InventoryItem[]> {
     photo_urls: Array.isArray(item.photo_urls) ? (item.photo_urls as string[]) : [],
     source_customer_id: (item as { source_customer_id?: string | null }).source_customer_id ?? null,
     branch_name: getRelationshipName(item.branches),
-  }));
+  };
+});
 }
 
 /**
@@ -1231,7 +1232,8 @@ export async function getInventoryDirectory(
     source_customer_id: (item as { source_customer_id?: string | null }).source_customer_id ?? null,
     branch_id: (item as { branch_id?: string | null }).branch_id ?? null,
     branch_name: getRelationshipName(item.branches),
-  }));
+  };
+});
 
   const normalizeStatus = (value: string | null | undefined) => (value ?? "").trim().toLowerCase();
   const isAvailableStatus = (value: string | null | undefined) => {
