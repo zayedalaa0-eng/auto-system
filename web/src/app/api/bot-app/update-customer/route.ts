@@ -4,6 +4,7 @@ import { getRoleCapabilities } from "@/lib/roles";
 import { isClosedStatus } from "@/lib/statuses";
 import { isValidPhone, normalizePhone, PHONE_ERROR_MESSAGE } from "@/lib/phone";
 import { pushCustomerUpdateToManagers, pushEvaluationRequestToMaalamManager } from "@/lib/telegram/push";
+import { logAuditAction } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -89,9 +90,9 @@ export async function POST(req: NextRequest) {
     // • المدير العام   : يعدّل كل العملاء في جميع المعارض
     // • مدير + موظف   : يعدّلون أي عميل في نفس المعرض
     // • موظف معيَّن    : يعدّل عملاءه حتى لو من معرض آخر (حالة استثنائية)
-    const isGeneralManager = caps.isGeneralManager;
+    const isGlobal = caps.isGeneralManager && !user.branch_id;
     const canEditCustomer =
-      isGeneralManager ||
+      isGlobal ||
       customer.branch_id === user.branch_id ||
       customer.assigned_user_id === user.id;
 
@@ -197,7 +198,7 @@ export async function POST(req: NextRequest) {
       updates.metadata = {
         ...currentMeta2,
         ...(payment_method !== undefined ? { payment_method: payment_method || null } : {}),
-        ...(deal_value !== undefined ? { deal_value: deal_value ? Number(deal_value) : null } : {}),
+        ...(deal_value !== undefined ? { deal_value: deal_value !== null && deal_value !== "" ? Number(deal_value) : null } : {}),
       };
     }
 
@@ -220,6 +221,16 @@ export async function POST(req: NextRequest) {
       const timestamp = `${String(_now.getUTCDate()).padStart(2,"0")}/${String(_now.getUTCMonth()+1).padStart(2,"0")}/${_now.getUTCFullYear()} ${String(_now.getUTCHours()).padStart(2,"0")}:${String(_now.getUTCMinutes()).padStart(2,"0")}`;
       const prefix = `[${timestamp} - ${user.full_name}]: `;
       updates.notes = existing ? `${existing}\n${prefix}${noteText}` : `${prefix}${noteText}`;
+      
+      // تسجيل الملاحظة في السجل التاريخي (Audit Log)
+      void logAuditAction({
+        action: "إضافة ملاحظة",
+        entity_type: "customer",
+        entity_id: customer_id,
+        actorId: user.id,
+        details: { source: "telegram_miniapp", note: noteText, customer_name: String(updates.full_name ?? customer.full_name) },
+        supabase: admin,
+      });
     }
 
     // ── #14: زيادة عدد التفاعلات (فقط إذا count_as_interaction !== false) ────
@@ -354,7 +365,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // ── إرسال طلب التقييم لمدير معرض المعلم (استبدال جديد فقط) ─────────────
+      // ── إرسال طلب التقييم لمدير معرض لمعلم (استبدال جديد فقط) ─────────────
       if (opCode === "buyer_tradein_pending" && ti.model?.trim() && !existingTradeInId) {
         let branchNameStr: string | null = null;
         if (customer.branch_id) {
@@ -369,6 +380,7 @@ export async function POST(req: NextRequest) {
           submitterUserId: user.id,
           submitterName: user.full_name,
           submitterChatId: String(chat_id),
+
           branchName: branchNameStr,
           car: {
             model: ti.model.trim(),
@@ -567,7 +579,7 @@ export async function POST(req: NextRequest) {
     }
 
     // إدراج سجل التعديل العام (إذا كان هناك تعديلات أخرى)
-    const otherParts = changedParts.filter(p => !p.startsWith("الحالة:") && p !== "بيانات السيارة" && !p.startsWith("ملاحظة:"));
+    const otherParts = changedParts.filter(p => !p.startsWith("الحالة:") && p !== "بيانات السيارة");
     if (otherParts.length > 0) {
       await admin.from("customer_logs").insert({
         customer_id,
@@ -575,17 +587,6 @@ export async function POST(req: NextRequest) {
         actor_name: user.full_name,
         action: "customer_updated",
         details: `تم التعديل عبر Mini App — ${otherParts.join(" | ")} — بواسطة ${user.full_name}`,
-      });
-    }
-
-    // إدراج الملاحظة كسجل منفصل (action: general) لتظهر بالكامل في السجل التاريخي للويب
-    if (noteText) {
-      await admin.from("customer_logs").insert({
-        customer_id,
-        actor_user_id: user.id,
-        actor_name: user.full_name,
-        action: "general",
-        details: noteText,
       });
     }
 

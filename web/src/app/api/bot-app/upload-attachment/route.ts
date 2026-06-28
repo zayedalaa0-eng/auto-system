@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRoleCapabilities } from "@/lib/roles";
+import { logAuditAction } from "@/lib/audit";
 
 // مطابق للويب: صور في customer-attachments (خاص)، صوت في voice-notes (عام)
 const PHOTO_BUCKET = "customer-attachments";
@@ -62,9 +63,9 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (customer) {
-      const isGeneralManager = getRoleCapabilities(user.role, user.full_name).isGeneralManager;
+      const isGlobal = getRoleCapabilities(user.role, user.full_name).isGeneralManager && !user.branch_id;
       const canUpload =
-        isGeneralManager ||
+        isGlobal ||
         customer.branch_id === user.branch_id ||
         customer.assigned_user_id === user.id;
 
@@ -158,6 +159,15 @@ export async function POST(req: NextRequest) {
         actor_name: user.full_name,
         action: isVoice ? "voice_note_added" : "photo_added",
         details: logDetails,
+      });
+
+      void logAuditAction({
+        action: isVoice ? "إضافة تسجيل صوتي" : "إضافة صورة",
+        entity_type: "customer",
+        entity_id: customerId,
+        actorId: user.id,
+        details: { source: "telegram_miniapp", description: logDetails },
+        supabase: admin,
       });
     }
 
