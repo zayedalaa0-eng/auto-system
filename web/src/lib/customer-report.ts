@@ -64,6 +64,7 @@ export type CustomerReportFilters = {
   period?: string;
   overdue?: boolean;
   user?: string;
+  branch?: string;
   scope?: string;
 };
 
@@ -117,6 +118,11 @@ function applyFilters(customers: CustomerItem[], filters: CustomerReportFilters)
     // الموظف (تقرير الإدارة)
     if (filters.user && filters.user !== "all") {
       if (normalize(customer.assigned_user_name) !== normalize(filters.user)) return false;
+    }
+
+    // الفرع (تقرير الإدارة)
+    if (filters.branch && filters.branch !== "all") {
+      if (normalize(customer.branch_name) !== normalize(filters.branch)) return false;
     }
 
     return true;
@@ -179,6 +185,13 @@ export function buildUserOptions(customers: CustomerItem[]): string[] {
 /** Unique customer names sorted alphabetically */
 export function buildCustomerNameOptions(customers: CustomerItem[]): string[] {
   return [...new Set(customers.map((c) => c.full_name ?? "").filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, "ar"),
+  );
+}
+
+/** Unique branch names sorted alphabetically */
+export function buildBranchOptions(customers: CustomerItem[]): string[] {
+  return [...new Set(customers.map((c) => c.branch_name ?? "").filter(Boolean))].sort((a, b) =>
     a.localeCompare(b, "ar"),
   );
 }

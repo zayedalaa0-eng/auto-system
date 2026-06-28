@@ -10,6 +10,7 @@ type Props = {
   statuses: StatusChipOption[];
   users?: string[];
   customerNames?: string[];
+  branches?: string[];
   queryPlaceholder?: string;
 };
 
@@ -31,6 +32,7 @@ export function ReportSmartFilters({ statuses, users, customerNames, queryPlaceh
   const activeLifecycle = searchParams.get("lifecycle") ?? "all";
   const activePeriod = searchParams.get("period") ?? "all";
   const activeUser = searchParams.get("user") ?? "all";
+  const activeBranch = searchParams.get("branch") ?? "all";
   const activeCustomerName = searchParams.get("customer_name") ?? "all";
   const [queryText, setQueryText] = useState(activeQuery);
 
@@ -71,7 +73,18 @@ export function ReportSmartFilters({ statuses, users, customerNames, queryPlaceh
         </label>
       </div>
 
-      <div className={`grid gap-2 ${users && users.length > 0 ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
+      <div className={`grid gap-2 ${(users && users.length > 0) || (branches && branches.length > 0) ? "md:grid-cols-6" : "md:grid-cols-4"}`}>
+        {branches && branches.length > 0 ? (
+          <select className="legacy-select" value={activeBranch} onChange={(e) => navigate({ branch: e.target.value })}>
+            <option value="all">كل المعارض</option>
+            {branches.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
+        ) : null}
+
         <select
           className="legacy-select"
           value={activeCustomerName}

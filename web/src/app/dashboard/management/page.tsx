@@ -10,6 +10,7 @@ import {
   buildCustomerNameOptions,
   buildStatusOptions,
   buildUserOptions,
+  buildBranchOptions,
   filterCustomersForReport,
 } from "@/lib/customer-report";
 import { getCustomerById, getCustomerFormOptions, getCustomersDirectory, getCustomersSearchResults } from "@/lib/data";
@@ -30,6 +31,7 @@ export default async function ManagementPage({
     period?: string;
     overdue?: string;
     user?: string;
+    branch?: string;
   }>;
 }) {
   // ── حماية الصفحة: المديرون فقط ────────────────────────────────────────────
@@ -44,7 +46,7 @@ export default async function ManagementPage({
   const caps = getRoleCapabilities(profile?.role);
   if (!caps.isManager) redirect("/dashboard/unauthorized");
 
-  const { customer: customerId, mode, q, customer_name, focus, lifecycle, status, period, overdue, user } = await searchParams;
+  const { customer: customerId, mode, q, customer_name, focus, lifecycle, status, period, overdue, user, branch } = await searchParams;
 
   const query = (q ?? "").trim();
   const isOverdue = overdue === "1";
@@ -64,10 +66,12 @@ export default async function ManagementPage({
     period,
     overdue: isOverdue,
     user,
+    branch,
   });
   const statusOptions = buildStatusOptions(baseList);
   const userOptions = buildUserOptions(customers);
   const customerNameOptions = buildCustomerNameOptions(customers);
+  const branchOptions = buildBranchOptions(customers);
 
   const filteredCustomers = filterCustomersForReport(customers, {
     q: query,
@@ -77,6 +81,7 @@ export default async function ManagementPage({
     period,
     overdue: isOverdue,
     user,
+    branch,
   });
 
   return (
@@ -91,6 +96,7 @@ export default async function ManagementPage({
           statuses={statusOptions}
           users={userOptions}
           customerNames={customerNameOptions}
+          branches={branchOptions}
           queryPlaceholder="بحث ذكي: الاسم، الهاتف، السيارة، المعرض، الموظف..."
         />
       </div>
