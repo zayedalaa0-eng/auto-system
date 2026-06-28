@@ -440,63 +440,6 @@ function ClosedFileBanner({
   );
 }
 
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {imageAttachments.length === 0 ? (
-          <p className="text-sm text-slate-500 mb-4 text-center">لا توجد صور في المرفقات.</p>
-        ) : (
-          <p className="text-sm text-slate-600 mb-4">
-            سيتم تجهيز رسالة تحتوي على روابط لـ <strong className="text-green-600 font-bold">{imageAttachments.length}</strong> صورة.
-          </p>
-        )}
-
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-semibold text-slate-700">رقم الواتساب (اختياري)</label>
-            <input
-              type="tel"
-              placeholder="مثال: 966501234567"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 transition-all"
-              dir="ltr"
-            />
-            <p className="mt-1 text-xs text-slate-500">اتركه فارغاً لاختيار جهة الاتصال يدوياً</p>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-semibold text-slate-700">التعليق (اختياري)</label>
-            <textarea
-              rows={3}
-              placeholder="أدخل رسالة مرافقة للصور..."
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 transition-all"
-            />
-          </div>
-          <div className="flex gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-1/3 rounded-xl bg-slate-100 px-3 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-200 active:bg-slate-300 transition-colors"
-            >
-              إلغاء
-            </button>
-            <button
-              type="button"
-              onClick={handleSend}
-              className="flex-1 rounded-xl bg-green-500 px-3 py-2.5 text-sm font-bold text-white hover:bg-green-600 active:bg-green-700 flex items-center justify-center gap-2 shadow-sm transition-all hover:shadow"
-            >
-              <Share2 className="h-4 w-4" />
-              فتح واتساب
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ─── Attachments Panel ──────────────────────────────────────── */
 function AttachmentsPanel({
