@@ -746,9 +746,9 @@ function applyBranchScope(
   if (isMuallim) {
     if (tableName === "customers") {
       if (branchId) {
-        return query.or(column + ".eq." + branchId + ",operation_type.in.(buyer_tradein,sell_on_behalf)");
+        return query.or(column + ".eq." + branchId + ",operation_type.in.(buyer,buyer_tradein,buyer_tradein_pending,buyer_tradein_evaluated,sell_on_behalf,buying)");
       } else {
-        return query.in("operation_type", ["buyer_tradein", "sell_on_behalf"]);
+        return query.in("operation_type", ["buyer", "buyer_tradein", "buyer_tradein_pending", "buyer_tradein_evaluated", "sell_on_behalf", "buying"]);
       }
     } else if (tableName === "inventory") {
       if (branchId) {
