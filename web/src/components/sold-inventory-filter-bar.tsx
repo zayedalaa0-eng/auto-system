@@ -67,9 +67,9 @@ export function SoldInventoryFilterBar({ branches }: Props) {
 
         <select className="legacy-select" value={activeDeal} onChange={(e) => navigate({ deal: e.target.value })}>
           <option value="all">كل الأنواع</option>
-          <option value="جديد">مخزون الشركة (جديد)</option>
+          <option value="مشتري">مشتري</option>
+          <option value="استبدال">مشتري + استبدال</option>
           <option value="وكالة">بيع بالوكالة</option>
-          <option value="استبدال">استبدال / حيازة</option>
         </select>
       </div>
     </div>

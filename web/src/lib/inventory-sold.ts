@@ -139,11 +139,18 @@ export function filterSoldInventory(items: SoldInventoryItem[], filters: SoldInv
     }
     
     if (filters.deal && filters.deal !== "all") {
-      const dealNorm = (item.deal_type ?? "").trim().toLowerCase();
-      if (filters.deal === "جديد") {
-        if (dealNorm.includes("استبدال") || dealNorm.includes("وكالة") || dealNorm.includes("مستعمل")) return false;
-      } else {
-        if (!dealNorm.includes(filters.deal)) return false;
+      const d = (item.deal_type ?? "").toLowerCase();
+      const opType = (item.buyer_operation_type ?? "").toLowerCase();
+      
+      let badge = "مشتري";
+      if (d.includes("وكالة") || d.includes("برسم البيع")) {
+        badge = "وكالة";
+      } else if (opType.includes("trade") || opType.includes("استبدال") || d.includes("استبدال") || d.includes("حيازة")) {
+        badge = "استبدال";
+      }
+
+      if (filters.deal !== badge) {
+        return false;
       }
     }
 
