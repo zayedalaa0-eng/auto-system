@@ -51,29 +51,29 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
   // 2. Fetch associated buyers
   const buyersMap = new Map<string, { id: string; name: string; branch: string | null; op_type: string | null; trade_in_model: string | null; creator_name: string | null }>();
   if (inventoryIds.length > 0) {
-    // Chunk queries to avoid URI too long errors
-    const chunkSize = 50;
-    const customerRows: any[] = [];
-    
-    for (let i = 0; i < inventoryIds.length; i += chunkSize) {
-      const chunk = inventoryIds.slice(i, i + chunkSize);
-      const orQuery = chunk.map(id => `selected_inventory_id.eq.${id},metadata->>selected_inventory_id.eq.${id}`).join(",");
-      
-      const { data: chunkRows, error: custError } = await supabase
-        .from("customers")
-        .select("id, full_name, operation_type, metadata, selected_inventory_id, branch_id, created_by_user_id, branches(name)")
-        .or(orQuery);
-        
-      if (!custError && chunkRows) {
-        customerRows.push(...chunkRows);
-      } else if (custError) {
-        console.error("Error fetching customers chunk:", custError);
-      }
-    }
+    // Fetch customers that are buyers (or sell_on_behalf) to filter in memory
+    // because metadata might be a stringified JSON in the DB making PostgREST queries fail.
+    const { data: customerRows, error: custError } = await supabase
+      .from("customers")
+      .select("id, full_name, operation_type, metadata, branch_id, created_by_user_id, branches(name)")
+      .in("operation_type", ["buyer", "buyer_tradein", "buyer_tradein_pending", "buyer_tradein_evaluated", "sell_on_behalf", "مشتري", "مشتري + استبدال", "استبدال", "بيع بالوكالة"]);
 
-    if (customerRows.length > 0) {
+    if (custError) {
+      console.error("Error fetching customers:", custError);
+    } else if (customerRows && customerRows.length > 0) {
+      // Filter in memory to find matching customers for the inventory items
+      const validCustomers = customerRows.filter(c => {
+        let meta = c.metadata as Record<string, unknown> | null;
+        if (typeof c.metadata === 'string') {
+          try { meta = JSON.parse(c.metadata); } catch (e) {}
+        }
+        const selId = meta?.selected_inventory_id as string | undefined;
+        return selId && inventoryIds.includes(selId);
+      });
+
+      if (validCustomers.length > 0) {
       // Fetch latest trade-ins for these buyers
-      const buyerIds = customerRows.map(c => c.id);
+      const buyerIds = validCustomers.map(c => c.id);
       const { data: tradeRows } = await supabase
         .from("trade_ins")
         .select("customer_id, model, updated_at")
@@ -89,7 +89,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
         }
       }
 
-      const creatorIds = Array.from(new Set(customerRows.map(c => c.created_by_user_id).filter(Boolean))) as string[];
+      const creatorIds = Array.from(new Set(validCustomers.map(c => c.created_by_user_id).filter(Boolean))) as string[];
       const creatorsMap = new Map<string, string>();
       if (creatorIds.length > 0) {
         const { data: usersData } = await supabase
@@ -104,7 +104,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
         }
       }
 
-      for (const c of customerRows) {
+      for (const c of validCustomers) {
         let meta = c.metadata as Record<string, unknown> | null;
         if (typeof c.metadata === 'string') {
           try { meta = JSON.parse(c.metadata); } catch (e) {}
