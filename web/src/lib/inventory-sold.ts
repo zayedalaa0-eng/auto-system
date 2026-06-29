@@ -120,9 +120,10 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
             trade_in_model: latestTradeByCustomer.get(c.id) ?? null,
             creator_name: c.created_by_user_id ? (creatorsMap.get(c.created_by_user_id) ?? null) : null,
           });
-        }
+      }
       }
     }
+  }
   }
 
   // 3. Merge data
