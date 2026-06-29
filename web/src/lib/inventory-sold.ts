@@ -8,6 +8,7 @@ export type SoldInventoryItem = InventoryItem & {
   buyer_branch_name?: string | null;
   buyer_operation_type?: string | null;
   buyer_trade_in_model?: string | null;
+  buyer_creator_name?: string | null;
 };
 
 export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]> {
@@ -48,11 +49,11 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
   const inventoryIds = items.map(i => i.id as string);
 
   // 2. Fetch associated buyers
-  const buyersMap = new Map<string, { id: string; name: string; branch: string | null; op_type: string | null; trade_in_model: string | null }>();
+  const buyersMap = new Map<string, { id: string; name: string; branch: string | null; op_type: string | null; trade_in_model: string | null; creator_name: string | null }>();
   if (inventoryIds.length > 0) {
     const { data: customerRows, error: custError } = await supabase
       .from("customers")
-      .select("id, full_name, operation_type, metadata, branch_id, branches(name)")
+      .select("id, full_name, operation_type, metadata, branch_id, created_by, branches(name)")
       .in("metadata->>selected_inventory_id", inventoryIds);
 
     if (!custError && customerRows && customerRows.length > 0) {
@@ -73,6 +74,21 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
         }
       }
 
+      const creatorIds = Array.from(new Set(customerRows.map(c => c.created_by).filter(Boolean))) as string[];
+      const creatorsMap = new Map<string, string>();
+      if (creatorIds.length > 0) {
+        const { data: usersData } = await supabase
+          .from("app_users")
+          .select("auth_user_id, full_name")
+          .in("auth_user_id", creatorIds);
+        
+        for (const u of usersData ?? []) {
+          if (u.auth_user_id && u.full_name) {
+            creatorsMap.set(u.auth_user_id, u.full_name);
+          }
+        }
+      }
+
       for (const c of customerRows) {
         const meta = c.metadata as Record<string, unknown> | null;
         const selId = meta?.selected_inventory_id as string | undefined;
@@ -84,6 +100,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
             branch: Array.isArray(c.branches) ? c.branches[0]?.name : (c.branches as any)?.name ?? null,
             op_type: opType,
             trade_in_model: latestTradeByCustomer.get(c.id) ?? null,
+            creator_name: c.created_by ? (creatorsMap.get(c.created_by) ?? null) : null,
           });
         }
       }
@@ -118,6 +135,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
       buyer_branch_name: buyer?.branch ?? null,
       buyer_operation_type: buyer?.op_type ?? null,
       buyer_trade_in_model: buyer?.trade_in_model ?? null,
+      buyer_creator_name: buyer?.creator_name ?? null,
     };
   });
 

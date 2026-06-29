@@ -153,10 +153,18 @@ export function SoldInventoryList({ items }: Props) {
                       غير مرتبط
                     </span>
                   )}
-                  <span className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
-                    <Store className="h-3 w-3 text-emerald-500/70" />
-                    {item.buyer_branch_name || item.branch_name || "غير محدد"}
-                  </span>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span className="flex items-center gap-1">
+                      <Store className="h-3 w-3 text-emerald-500/70" />
+                      {item.buyer_branch_name || item.branch_name || "غير محدد"}
+                    </span>
+                    {item.buyer_creator_name && (
+                      <>
+                        <span className="h-1 w-1 rounded-full bg-slate-300" />
+                        <span>البائع: {item.buyer_creator_name}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
