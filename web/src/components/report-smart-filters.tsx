@@ -22,7 +22,7 @@ const PERIOD_OPTIONS = [
   { value: "month", label: "آخر شهر" },
 ];
 
-export function ReportSmartFilters({ statuses, users, customerNames, queryPlaceholder }: Props) {
+export function ReportSmartFilters({ statuses, users, customerNames, branches, queryPlaceholder }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();

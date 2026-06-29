@@ -23,7 +23,11 @@ export async function GET(req: NextRequest) {
     const statusFilter = sp.get("status") ?? "";
     const dealFilter   = sp.get("deal")   ?? "";
     const tabFilter    = sp.get("tab")    ?? "";
-    const branchFilter = sp.get("branch") ?? "";  // فلتر المعرض (للمدير العام)
+    const branchFilter = sp.get("branch") ?? "";
+    const ownerFilter  = sp.get("owner")  ?? "";
+    const gearboxFilter = sp.get("gearbox") ?? "";
+    const fuelFilter    = sp.get("fuel") ?? "";
+    const showUsedFilter = sp.get("show_used") === "1";
     const qFilter      = normalize(sp.get("q") ?? "");
 
     // ── أسماء المعارض + اسم معرض المستخدم (للتصنيف حسب المالك وكشف المعلم) ──
