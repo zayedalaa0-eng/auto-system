@@ -6,6 +6,8 @@ export type SoldInventoryItem = InventoryItem & {
   buyer_id?: string | null;
   buyer_name?: string | null;
   buyer_branch_name?: string | null;
+  buyer_operation_type?: string | null;
+  buyer_trade_in_model?: string | null;
 };
 
 export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]> {
@@ -46,22 +48,42 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
   const inventoryIds = items.map(i => i.id as string);
 
   // 2. Fetch associated buyers
-  const buyersMap = new Map<string, { id: string; name: string; branch: string | null }>();
+  const buyersMap = new Map<string, { id: string; name: string; branch: string | null; op_type: string | null; trade_in_model: string | null }>();
   if (inventoryIds.length > 0) {
     const { data: customerRows, error: custError } = await supabase
       .from("customers")
-      .select("id, full_name, metadata, branch_id, branches(name)")
+      .select("id, full_name, operation_type, metadata, branch_id, branches(name)")
       .in("metadata->>selected_inventory_id", inventoryIds);
 
-    if (!custError && customerRows) {
+    if (!custError && customerRows && customerRows.length > 0) {
+      // Fetch latest trade-ins for these buyers
+      const buyerIds = customerRows.map(c => c.id);
+      const { data: tradeRows } = await supabase
+        .from("trade_ins")
+        .select("customer_id, model, updated_at")
+        .in("customer_id", buyerIds)
+        .order("updated_at", { ascending: false });
+
+      const latestTradeByCustomer = new Map<string, string>();
+      for (const row of tradeRows ?? []) {
+        const cid = String(row.customer_id ?? "");
+        const model = String(row.model ?? "").trim();
+        if (model && !latestTradeByCustomer.has(cid)) {
+          latestTradeByCustomer.set(cid, model);
+        }
+      }
+
       for (const c of customerRows) {
         const meta = c.metadata as Record<string, unknown> | null;
         const selId = meta?.selected_inventory_id as string | undefined;
         if (selId) {
+          const opType = (c.operation_type as string | null) ?? (meta?.operation_type_code as string | null) ?? (meta?.operation_type as string | null) ?? null;
           buyersMap.set(selId, {
             id: c.id,
             name: c.full_name,
             branch: Array.isArray(c.branches) ? c.branches[0]?.name : (c.branches as any)?.name ?? null,
+            op_type: opType,
+            trade_in_model: latestTradeByCustomer.get(c.id) ?? null,
           });
         }
       }
@@ -94,6 +116,8 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
       buyer_id: buyer?.id ?? null,
       buyer_name: buyer?.name ?? null,
       buyer_branch_name: buyer?.branch ?? null,
+      buyer_operation_type: buyer?.op_type ?? null,
+      buyer_trade_in_model: buyer?.trade_in_model ?? null,
     };
   });
 
@@ -116,10 +140,10 @@ export function filterSoldInventory(items: SoldInventoryItem[], filters: SoldInv
     
     if (filters.deal && filters.deal !== "all") {
       const dealNorm = (item.deal_type ?? "").trim().toLowerCase();
-      const filterDealNorm = filters.deal.toLowerCase();
-      if (!dealNorm.includes(filterDealNorm)) {
-        if (filters.deal === "جديد" && (dealNorm.includes("استبدال") || dealNorm.includes("وكالة") || dealNorm.includes("مستعمل"))) return false;
-        if (filters.deal === "مستعمل" && !dealNorm.includes("استبدال") && !dealNorm.includes("وكالة") && !dealNorm.includes("مستعمل")) return false;
+      if (filters.deal === "جديد") {
+        if (dealNorm.includes("استبدال") || dealNorm.includes("وكالة") || dealNorm.includes("مستعمل")) return false;
+      } else {
+        if (!dealNorm.includes(filters.deal)) return false;
       }
     }
 

@@ -19,28 +19,38 @@ export function SoldInventoryList({ items }: Props) {
     );
   }
 
-  function getDealBadge(deal_type: string | null | undefined) {
-    const d = (deal_type ?? "").toLowerCase();
+  function getDealBadge(item: SoldInventoryItem) {
+    const d = (item.deal_type ?? "").toLowerCase();
     if (d.includes("وكالة") || d.includes("برسم البيع")) {
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 shadow-sm border border-amber-200">
           <Star className="h-3 w-3" />
-          بيع وكالة
+          بيع بالوكالة
         </span>
       );
     }
-    if (d.includes("استبدال") || d.includes("حيازة")) {
+
+    const opType = item.buyer_operation_type ?? "";
+    if (opType.includes("trade") || opType.includes("استبدال") || d.includes("استبدال") || d.includes("حيازة")) {
       return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-fuchsia-50 px-2.5 py-1 text-xs font-semibold text-fuchsia-700 shadow-sm border border-fuchsia-200">
-          <RefreshCw className="h-3 w-3" />
-          استبدال
-        </span>
+        <div className="flex flex-col items-end gap-1">
+          <span className="inline-flex items-center gap-1 rounded-full bg-fuchsia-50 px-2.5 py-1 text-xs font-semibold text-fuchsia-700 shadow-sm border border-fuchsia-200">
+            <RefreshCw className="h-3 w-3" />
+            مشتري + استبدال
+          </span>
+          {item.buyer_trade_in_model && (
+            <span className="text-[10px] text-slate-500 max-w-[120px] truncate" title={item.buyer_trade_in_model}>
+              عن: {item.buyer_trade_in_model}
+            </span>
+          )}
+        </div>
       );
     }
+
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700 shadow-sm border border-sky-200">
         <CarFront className="h-3 w-3" />
-        جديد
+        مشتري
       </span>
     );
   }
@@ -106,10 +116,13 @@ export function SoldInventoryList({ items }: Props) {
                   </div>
                 ) : (
                   <div className="flex flex-col">
-                    <span className="font-semibold text-slate-600">مخزون الشركة</span>
-                    <span className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
-                      <Store className="h-3 w-3" />
+                    <span className="font-semibold text-slate-700 flex items-center gap-1">
+                      <Store className="h-3.5 w-3.5 text-slate-400" />
                       {item.branch_name || "الرئيسي"}
+                    </span>
+                    <span className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
+                      <CarFront className="h-3 w-3" />
+                      مخزون الشركة
                     </span>
                   </div>
                 )}
@@ -150,7 +163,7 @@ export function SoldInventoryList({ items }: Props) {
 
             {/* 3. Deal & Price */}
             <div className="flex flex-row items-center justify-between gap-4 border-t border-slate-100 pt-3 lg:w-[20%] lg:flex-col lg:items-end lg:justify-center lg:border-t-0 lg:pt-0">
-              {getDealBadge(item.deal_type)}
+              {getDealBadge(item)}
               <div className="text-right">
                 <div className="font-bold text-slate-800">{formatPrice(item.price)}</div>
               </div>
