@@ -51,13 +51,27 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
   // 2. Fetch associated buyers
   const buyersMap = new Map<string, { id: string; name: string; branch: string | null; op_type: string | null; trade_in_model: string | null; creator_name: string | null }>();
   if (inventoryIds.length > 0) {
-    const orQuery = inventoryIds.map(id => `metadata->>selected_inventory_id.eq.${id}`).join(",");
-    const { data: customerRows, error: custError } = await supabase
-      .from("customers")
-      .select("id, full_name, operation_type, metadata, branch_id, created_by_user_id, branches(name)")
-      .or(orQuery);
+    // Chunk queries to avoid URI too long errors
+    const chunkSize = 50;
+    const customerRows: any[] = [];
+    
+    for (let i = 0; i < inventoryIds.length; i += chunkSize) {
+      const chunk = inventoryIds.slice(i, i + chunkSize);
+      const orQuery = chunk.map(id => `metadata->>selected_inventory_id.eq.${id}`).join(",");
+      
+      const { data: chunkRows, error: custError } = await supabase
+        .from("customers")
+        .select("id, full_name, operation_type, metadata, branch_id, created_by_user_id, branches(name)")
+        .or(orQuery);
+        
+      if (!custError && chunkRows) {
+        customerRows.push(...chunkRows);
+      } else if (custError) {
+        console.error("Error fetching customers chunk:", custError);
+      }
+    }
 
-    if (!custError && customerRows && customerRows.length > 0) {
+    if (customerRows.length > 0) {
       // Fetch latest trade-ins for these buyers
       const buyerIds = customerRows.map(c => c.id);
       const { data: tradeRows } = await supabase
@@ -91,7 +105,10 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
       }
 
       for (const c of customerRows) {
-        const meta = c.metadata as Record<string, unknown> | null;
+        let meta = c.metadata as Record<string, unknown> | null;
+        if (typeof c.metadata === 'string') {
+          try { meta = JSON.parse(c.metadata); } catch (e) {}
+        }
         const selId = meta?.selected_inventory_id as string | undefined;
         if (selId) {
           const opType = (c.operation_type as string | null) ?? (meta?.operation_type_code as string | null) ?? (meta?.operation_type as string | null) ?? null;
