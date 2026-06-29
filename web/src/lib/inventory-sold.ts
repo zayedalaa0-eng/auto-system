@@ -50,14 +50,15 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
   if (inventoryIds.length > 0) {
     const { data: customerRows, error: custError } = await supabase
       .from("customers")
-      .select("id, full_name, selected_inventory_id, branch_id, branches(name)")
-      .in("selected_inventory_id", inventoryIds)
-      .eq("is_active", true);
+      .select("id, full_name, metadata, branch_id, branches(name)")
+      .in("metadata->>selected_inventory_id", inventoryIds);
 
     if (!custError && customerRows) {
       for (const c of customerRows) {
-        if (c.selected_inventory_id) {
-          buyersMap.set(c.selected_inventory_id, {
+        const meta = c.metadata as Record<string, unknown> | null;
+        const selId = meta?.selected_inventory_id as string | undefined;
+        if (selId) {
+          buyersMap.set(selId, {
             id: c.id,
             name: c.full_name,
             branch: Array.isArray(c.branches) ? c.branches[0]?.name : (c.branches as any)?.name ?? null,
