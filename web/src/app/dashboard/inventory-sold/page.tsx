@@ -1,0 +1,62 @@
+import { getScopedProfile } from "@/lib/data";
+import { getSoldInventory, filterSoldInventory } from "@/lib/inventory-sold";
+import { SoldInventoryFilterBar } from "@/components/sold-inventory-filter-bar";
+import { SoldInventoryList } from "@/components/sold-inventory-list";
+import { CarFront } from "lucide-react";
+import { redirect } from "next/navigation";
+import { buildBranchOptions } from "@/lib/customer-report";
+
+type Props = {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
+
+export default async function InventorySoldPage({ searchParams }: Props) {
+  const { profile, capabilities } = await getScopedProfile();
+  if (!profile) {
+    redirect("/");
+  }
+
+  const { isGeneralManager, isShowroomManager } = capabilities;
+  const isManager = isGeneralManager || isShowroomManager;
+
+  const rawParams = await searchParams;
+  const q = typeof rawParams.q === "string" ? rawParams.q : undefined;
+  const branch = typeof rawParams.branch === "string" ? rawParams.branch : undefined;
+  const deal = typeof rawParams.deal === "string" ? rawParams.deal : undefined;
+
+  const items = await getSoldInventory(300); // fetch recent 300 sold cars
+  const filteredItems = filterSoldInventory(items, { q, branch, deal });
+
+  // If user is a branch manager, restrict their view unless they are GM
+  const finalItems = isGeneralManager 
+    ? filteredItems 
+    : filteredItems.filter(item => item.branch_id === profile.branch_id || item.buyer_branch_name === profile.branch_name);
+
+  const branches = await buildBranchOptions();
+  const branchNames = branches.map(b => b.name);
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+            <CarFront className="h-6 w-6 text-emerald-600" />
+            السيارات المباعة
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">سجل متكامل لعمليات البيع، مسارات النقل بين المعارض، وتفاصيل المشترين.</p>
+        </div>
+      </div>
+
+      <div className="legacy-card space-y-4">
+        <SoldInventoryFilterBar branches={branchNames} />
+        
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <div className="mb-4 flex items-center justify-between text-sm text-slate-500">
+            <span>النتائج: <strong className="text-slate-700">{finalItems.length}</strong> سيارة</span>
+          </div>
+          <SoldInventoryList items={finalItems} />
+        </div>
+      </div>
+    </div>
+  );
+}

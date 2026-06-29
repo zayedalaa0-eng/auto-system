@@ -103,6 +103,7 @@ export function SidebarNav({
     { href: "/dashboard/customers", label: "تقرير عملائي", icon: List },
     { href: "/dashboard/search", label: "عملاء المعرض", icon: FileSearch },
     { href: "/dashboard/inventory", label: "المخزون", icon: Warehouse },
+    { href: "/dashboard/inventory-sold", label: "السيارات المباعة", icon: CarFront },
     { href: "/dashboard/notifications", label: "التنبيهات", icon: Bell, badge: unreadCount },
     { href: "/dashboard", label: "الإحصائيات", icon: ChartBar },
     { href: "/dashboard/management", label: "تقرير الإدارة", icon: ChartPie, managerOnly: true },
