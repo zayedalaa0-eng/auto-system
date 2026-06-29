@@ -109,7 +109,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
         if (typeof c.metadata === 'string') {
           try { meta = JSON.parse(c.metadata); } catch (e) {}
         }
-        const selId = (c.selected_inventory_id as string | undefined) ?? (meta?.selected_inventory_id as string | undefined);
+        const selId = meta?.selected_inventory_id as string | undefined;
         if (selId) {
           const opType = (c.operation_type as string | null) ?? (meta?.operation_type_code as string | null) ?? (meta?.operation_type as string | null) ?? null;
           buyersMap.set(selId, {
