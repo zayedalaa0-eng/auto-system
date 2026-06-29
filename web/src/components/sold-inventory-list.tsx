@@ -4,7 +4,6 @@ import { SoldInventoryItem } from "@/lib/inventory-sold";
 import { CarFront, Store, User, RefreshCw, Star, MapPin, Search } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 
 type Props = {
   items: SoldInventoryItem[];
@@ -20,8 +19,8 @@ export function SoldInventoryList({ items }: Props) {
     );
   }
 
-  function getDealBadge(dealType: string | null) {
-    const d = (dealType ?? "").toLowerCase();
+  function getDealBadge(deal_type: string | null | undefined) {
+    const d = (deal_type ?? "").toLowerCase();
     if (d.includes("وكالة") || d.includes("برسم البيع")) {
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 shadow-sm border border-amber-200">
