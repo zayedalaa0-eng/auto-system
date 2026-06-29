@@ -26,7 +26,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
   // 1. Fetch sold inventory
   let query = supabase
     .from("inventory")
-    .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, gearbox, fuel_type, mileage, specs, inspection, source_customer_id, branch_id, branches(name), app_users(full_name)")
+    .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, gearbox, fuel_type, mileage, specs, inspection, source_customer_id, branch_id, branches(name)")
     .like("availability_status", "%مباعة%")
     .eq("is_active", true)
     .order("updated_at", { ascending: false })
@@ -90,7 +90,6 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
       source_customer_id: (item.source_customer_id as string | null) ?? null,
       branch_id: (item.branch_id as string | null) ?? null,
       branch_name: Array.isArray(item.branches) ? item.branches[0]?.name : (item.branches as any)?.name ?? null,
-      assigned_user_name: Array.isArray(item.app_users) ? item.app_users[0]?.full_name : (item.app_users as any)?.full_name ?? null,
       buyer_id: buyer?.id ?? null,
       buyer_name: buyer?.name ?? null,
       buyer_branch_name: buyer?.branch ?? null,
