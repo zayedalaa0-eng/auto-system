@@ -57,11 +57,11 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
     
     for (let i = 0; i < inventoryIds.length; i += chunkSize) {
       const chunk = inventoryIds.slice(i, i + chunkSize);
-      const orQuery = chunk.map(id => `metadata->>selected_inventory_id.eq.${id}`).join(",");
+      const orQuery = chunk.map(id => `selected_inventory_id.eq.${id},metadata->>selected_inventory_id.eq.${id}`).join(",");
       
       const { data: chunkRows, error: custError } = await supabase
         .from("customers")
-        .select("id, full_name, operation_type, metadata, branch_id, created_by_user_id, branches(name)")
+        .select("id, full_name, operation_type, metadata, selected_inventory_id, branch_id, created_by_user_id, branches(name)")
         .or(orQuery);
         
       if (!custError && chunkRows) {
@@ -109,7 +109,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
         if (typeof c.metadata === 'string') {
           try { meta = JSON.parse(c.metadata); } catch (e) {}
         }
-        const selId = meta?.selected_inventory_id as string | undefined;
+        const selId = (c.selected_inventory_id as string | undefined) ?? (meta?.selected_inventory_id as string | undefined);
         if (selId) {
           const opType = (c.operation_type as string | null) ?? (meta?.operation_type_code as string | null) ?? (meta?.operation_type as string | null) ?? null;
           buyersMap.set(selId, {
