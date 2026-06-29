@@ -6,13 +6,16 @@ export async function GET() {
   const { data: invs } = await admin.from("inventory").select("id").limit(10);
   const ids = invs?.map(i => i.id) || [];
   
+  const orQuery = ids.map(id => `metadata->>selected_inventory_id.eq.${id}`).join(",");
   const { data: c1, error: e1 } = await admin
     .from("customers")
-    .select("id, metadata")
-    .in("metadata->>selected_inventory_id", ids);
+    .select("id, metadata, operation_type")
+    .or(orQuery);
     
   return NextResponse.json({
-    ids,
-    inResult: { data: c1, error: e1 }
+    carIds: ids,
+    orQuery,
+    totalCustomers: c1?.length,
+    error: e1
   });
 }

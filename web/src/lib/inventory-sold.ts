@@ -51,20 +51,15 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
   // 2. Fetch associated buyers
   const buyersMap = new Map<string, { id: string; name: string; branch: string | null; op_type: string | null; trade_in_model: string | null; creator_name: string | null }>();
   if (inventoryIds.length > 0) {
+    const orQuery = inventoryIds.map(id => `metadata->>selected_inventory_id.eq.${id}`).join(",");
     const { data: customerRows, error: custError } = await supabase
       .from("customers")
-      .select("id, full_name, operation_type, metadata, branch_id, created_by_user_id, branches(name)");
+      .select("id, full_name, operation_type, metadata, branch_id, created_by_user_id, branches(name)")
+      .or(orQuery);
 
     if (!custError && customerRows && customerRows.length > 0) {
-      // Filter the rows in memory to avoid JSON path escaping issues
-      const matchingCustomers = customerRows.filter(c => {
-        const meta = c.metadata as Record<string, unknown> | null;
-        const selId = meta?.selected_inventory_id as string | undefined;
-        return selId && inventoryIds.includes(selId);
-      });
-
       // Fetch latest trade-ins for these buyers
-      const buyerIds = matchingCustomers.map(c => c.id);
+      const buyerIds = customerRows.map(c => c.id);
       const { data: tradeRows } = await supabase
         .from("trade_ins")
         .select("customer_id, model, updated_at")
@@ -80,7 +75,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
         }
       }
 
-      const creatorIds = Array.from(new Set(matchingCustomers.map(c => c.created_by_user_id).filter(Boolean))) as string[];
+      const creatorIds = Array.from(new Set(customerRows.map(c => c.created_by_user_id).filter(Boolean))) as string[];
       const creatorsMap = new Map<string, string>();
       if (creatorIds.length > 0) {
         const { data: usersData } = await supabase
@@ -95,7 +90,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
         }
       }
 
-      for (const c of matchingCustomers) {
+      for (const c of customerRows) {
         const meta = c.metadata as Record<string, unknown> | null;
         const selId = meta?.selected_inventory_id as string | undefined;
         if (selId) {
