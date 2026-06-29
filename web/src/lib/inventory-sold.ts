@@ -53,7 +53,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
   if (inventoryIds.length > 0) {
     const { data: customerRows, error: custError } = await supabase
       .from("customers")
-      .select("id, full_name, operation_type, metadata, branch_id, created_by, branches(name)")
+      .select("id, full_name, operation_type, metadata, branch_id, created_by_user_id, branches(name)")
       .in("metadata->>selected_inventory_id", inventoryIds);
 
     if (!custError && customerRows && customerRows.length > 0) {
@@ -74,7 +74,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
         }
       }
 
-      const creatorIds = Array.from(new Set(customerRows.map(c => c.created_by).filter(Boolean))) as string[];
+      const creatorIds = Array.from(new Set(customerRows.map(c => c.created_by_user_id).filter(Boolean))) as string[];
       const creatorsMap = new Map<string, string>();
       if (creatorIds.length > 0) {
         const { data: usersData } = await supabase
@@ -100,7 +100,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
             branch: Array.isArray(c.branches) ? c.branches[0]?.name : (c.branches as any)?.name ?? null,
             op_type: opType,
             trade_in_model: latestTradeByCustomer.get(c.id) ?? null,
-            creator_name: c.created_by ? (creatorsMap.get(c.created_by) ?? null) : null,
+            creator_name: c.created_by_user_id ? (creatorsMap.get(c.created_by_user_id) ?? null) : null,
           });
         }
       }
