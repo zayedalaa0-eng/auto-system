@@ -4,7 +4,7 @@ import { SoldInventoryFilterBar } from "@/components/sold-inventory-filter-bar";
 import { SoldInventoryList } from "@/components/sold-inventory-list";
 import { CarFront } from "lucide-react";
 import { redirect } from "next/navigation";
-import { buildBranchOptions } from "@/lib/customer-report";
+
 
 type Props = {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -16,8 +16,7 @@ export default async function InventorySoldPage({ searchParams }: Props) {
     redirect("/");
   }
 
-  const { isGeneralManager, isShowroomManager } = capabilities;
-  const isManager = isGeneralManager || isShowroomManager;
+  const { isGeneralManager, isManager } = capabilities;
 
   const rawParams = await searchParams;
   const q = typeof rawParams.q === "string" ? rawParams.q : undefined;
@@ -32,8 +31,7 @@ export default async function InventorySoldPage({ searchParams }: Props) {
     ? filteredItems 
     : filteredItems.filter(item => item.branch_id === profile.branch_id || item.buyer_branch_name === profile.branch_name);
 
-  const branches = await buildBranchOptions();
-  const branchNames = branches.map(b => b.name);
+  const branchNames = Array.from(new Set(filteredItems.map(item => item.branch_name).filter(Boolean))) as string[];
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
