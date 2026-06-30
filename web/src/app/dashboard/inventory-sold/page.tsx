@@ -13,7 +13,7 @@ type Props = {
 };
 
 export default async function InventorySoldPage({ searchParams }: Props) {
-  const { profile, capabilities } = await getScopedProfile();
+  const { profile, capabilities, isMuallim } = await getScopedProfile();
   if (!profile) {
     redirect("/");
   }
@@ -28,10 +28,24 @@ export default async function InventorySoldPage({ searchParams }: Props) {
   const items = await getSoldInventory(300); // fetch recent 300 sold cars
   const filteredItems = filterSoldInventory(items, { q, branch, deal });
 
-  // If user is a branch manager, restrict their view unless they are GM
-  const finalItems = isGeneralManager 
-    ? filteredItems 
-    : filteredItems.filter(item => item.branch_id === profile.branch_id || item.buyer_branch_name === profile.branch_name);
+  // Filter by branch scope — isMuallim already available from getScopedProfile
+
+  // Filter by branch scope
+  const finalItems = isGeneralManager
+    ? filteredItems
+    : filteredItems.filter(item => {
+        // Car's own branch matches employee's branch
+        if (item.branch_id === profile.branch_id) return true;
+        // Buyer was handled by this branch
+        if (item.buyer_branch_name === profile.branch_name) return true;
+        // Al-Muallim employees also see consignment/trade-in cars (برسم البيع / استبدال)
+        // that they sold — same logic as applyBranchScope for inventory
+        if (isMuallim) {
+          const dealType = (item.deal_type ?? "").trim();
+          if (dealType === "استبدال" || dealType === "برسم البيع") return true;
+        }
+        return false;
+      });
 
   const branchNames = Array.from(new Set(filteredItems.map(item => item.branch_name).filter(Boolean))) as string[];
 
