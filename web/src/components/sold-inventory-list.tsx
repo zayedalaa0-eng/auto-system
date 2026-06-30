@@ -172,8 +172,17 @@ export function SoldInventoryList({ items }: Props) {
             {/* 3. Deal & Price */}
             <div className="flex flex-row items-center justify-between gap-4 border-t border-slate-100 pt-3 lg:w-[20%] lg:flex-col lg:items-end lg:justify-center lg:border-t-0 lg:pt-0">
               {getDealBadge(item)}
-              <div className="text-right">
+              <div className="text-right flex flex-col items-end">
                 <div className="font-bold text-slate-800">{formatPrice(item.price)}</div>
+                {item.deal_date && (
+                  <div className="text-[10px] text-slate-500 mt-1 font-medium">
+                    {new Date(item.deal_date).toLocaleDateString('ar-EG', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>

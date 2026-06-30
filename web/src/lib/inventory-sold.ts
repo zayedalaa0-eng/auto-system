@@ -9,6 +9,7 @@ export type SoldInventoryItem = InventoryItem & {
   buyer_operation_type?: string | null;
   buyer_trade_in_model?: string | null;
   buyer_creator_name?: string | null;
+  deal_date?: string | null;
 };
 
 export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]> {
@@ -27,19 +28,14 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
   const caps = getRoleCapabilities(profile.role);
   
   // 1. Fetch sold inventory
-  let query = supabase
+  const { data: inventoryRows, error: invError } = await supabase
     .from("inventory")
-    .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, gearbox, fuel_type, mileage, specs, inspection, source_customer_id, branch_id, branches(name)")
+    .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, gearbox, fuel_type, mileage, specs, inspection, source_customer_id, branch_id, branches(name), updated_at")
     .like("availability_status", "%مباعة%")
     .eq("is_active", true)
     .order("updated_at", { ascending: false })
     .limit(limit);
 
-  // If not GM and not Al-Muallim, restrict by branch
-  // But wait, what if they sold a car from another branch? We should allow them to see it if either branch_id = theirs OR buyer branch = theirs.
-  // We'll filter in JS to be safe, or just fetch all and filter in JS. For now, fetch limit=250 sold cars and we'll apply scope if needed.
-
-  const { data: inventoryRows, error: invError } = await query;
   if (invError || !inventoryRows) {
     console.error("Error fetching sold inventory:", invError);
     return [];
@@ -50,28 +46,47 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
 
   // 2. Fetch associated buyers
   const buyersMap = new Map<string, { id: string; name: string; branch: string | null; op_type: string | null; trade_in_model: string | null; creator_name: string | null }>();
+  
   if (inventoryIds.length > 0) {
-    // Fetch customers that are buyers (or sell_on_behalf) to filter in memory
-    // because metadata might be a stringified JSON in the DB making PostgREST queries fail.
+    // Strategy: Fetch all closed/sold customers and filter in memory.
+    // This avoids PostgREST JSONB query issues with metadata.
     const { data: customerRows, error: custError } = await supabase
       .from("customers")
       .select("id, full_name, operation_type, metadata, branch_id, created_by_user_id, branches(name)")
-      .in("operation_type", ["buyer", "buyer_tradein", "buyer_tradein_pending", "buyer_tradein_evaluated", "sell_on_behalf", "مشتري", "مشتري + استبدال", "استبدال", "بيع بالوكالة"]);
+      .in("operation_type", [
+        "مشتري", "مشتري + استبدال", "استبدال", "بيع بالوكالة",
+        "buyer", "buyer_tradein", "buyer_tradein_pending", "buyer_tradein_evaluated", "sell_on_behalf"
+      ])
+      .eq("is_active", false); // Closed customers = sold deal completed
 
     if (custError) {
       console.error("Error fetching customers:", custError);
-    } else if (customerRows && customerRows.length > 0) {
-      // Filter in memory to find matching customers for the inventory items
-      const validCustomers = customerRows.filter(c => {
-        let meta = c.metadata as Record<string, unknown> | null;
-        if (typeof c.metadata === 'string') {
-          try { meta = JSON.parse(c.metadata); } catch (e) {}
-        }
-        const selId = meta?.selected_inventory_id as string | undefined;
-        return selId && inventoryIds.includes(selId);
-      });
+    }
 
-      if (validCustomers.length > 0) {
+    // Also fetch recently active customers (might be freshly closed)
+    const { data: activeRows } = await supabase
+      .from("customers")
+      .select("id, full_name, operation_type, metadata, branch_id, created_by_user_id, branches(name)")
+      .in("status", [
+        "تمت عملية البيع", "تمت عملية البيع (للعميل)", "closed", "مكتمل"
+      ]);
+
+    const allCustomers = [...(customerRows ?? []), ...(activeRows ?? [])];
+
+    // Filter in memory: find customers with selected_inventory_id matching our sold cars
+    const inventoryIdSet = new Set(inventoryIds);
+    const validCustomers = allCustomers.filter(c => {
+      let meta: Record<string, unknown> | null = null;
+      if (typeof c.metadata === 'string') {
+        try { meta = JSON.parse(c.metadata); } catch { return false; }
+      } else if (c.metadata && typeof c.metadata === 'object') {
+        meta = c.metadata as Record<string, unknown>;
+      }
+      const selId = meta?.selected_inventory_id as string | undefined;
+      return selId && inventoryIdSet.has(selId);
+    });
+
+    if (validCustomers.length > 0) {
       // Fetch latest trade-ins for these buyers
       const buyerIds = validCustomers.map(c => c.id);
       const { data: tradeRows } = await supabase
@@ -105,13 +120,15 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
       }
 
       for (const c of validCustomers) {
-        let meta = c.metadata as Record<string, unknown> | null;
+        let meta: Record<string, unknown> | null = null;
         if (typeof c.metadata === 'string') {
-          try { meta = JSON.parse(c.metadata); } catch (e) {}
+          try { meta = JSON.parse(c.metadata); } catch { continue; }
+        } else if (c.metadata && typeof c.metadata === 'object') {
+          meta = c.metadata as Record<string, unknown>;
         }
         const selId = meta?.selected_inventory_id as string | undefined;
         if (selId) {
-          const opType = (c.operation_type as string | null) ?? (meta?.operation_type_code as string | null) ?? (meta?.operation_type as string | null) ?? null;
+          const opType = (c.operation_type as string | null) ?? (meta?.operation_type_code as string | null) ?? null;
           buyersMap.set(selId, {
             id: c.id,
             name: c.full_name,
@@ -120,10 +137,9 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
             trade_in_model: latestTradeByCustomer.get(c.id) ?? null,
             creator_name: c.created_by_user_id ? (creatorsMap.get(c.created_by_user_id) ?? null) : null,
           });
-      }
+        }
       }
     }
-  }
   }
 
   // 3. Merge data
@@ -155,6 +171,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
       buyer_operation_type: buyer?.op_type ?? null,
       buyer_trade_in_model: buyer?.trade_in_model ?? null,
       buyer_creator_name: buyer?.creator_name ?? null,
+      deal_date: (item.updated_at as string | null) ?? null,
     };
   });
 
@@ -172,7 +189,7 @@ export function filterSoldInventory(items: SoldInventoryItem[], filters: SoldInv
   
   return items.filter(item => {
     if (filters.branch && filters.branch !== "all" && item.branch_name !== filters.branch && item.buyer_branch_name !== filters.branch) {
-      return false; // must match either seller branch or buyer branch
+      return false;
     }
     
     if (filters.deal && filters.deal !== "all") {
@@ -200,6 +217,7 @@ export function filterSoldInventory(items: SoldInventoryItem[], filters: SoldInv
         item.buyer_name ?? "",
         item.buyer_branch_name ?? "",
         item.deal_type ?? "",
+        item.buyer_creator_name ?? "",
       ].join(" ").toLowerCase();
       if (!haystack.includes(normQ)) return false;
     }
