@@ -26,7 +26,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
   if (!profile) return [];
 
   const caps = getRoleCapabilities(profile.role);
-  
+
   // 1. Fetch sold inventory
   const { data: inventoryRows, error: invError } = await supabase
     .from("inventory")
@@ -44,51 +44,41 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
   const items = inventoryRows as unknown as Array<Record<string, unknown>>;
   const inventoryIds = items.map(i => i.id as string);
 
-  // 2. Fetch associated buyers
-  const buyersMap = new Map<string, { id: string; name: string; branch: string | null; op_type: string | null; trade_in_model: string | null; creator_name: string | null }>();
-  
-  if (inventoryIds.length > 0) {
-    // Strategy: Fetch all closed/sold customers and filter in memory.
-    // This avoids PostgREST JSONB query issues with metadata.
-    const { data: customerRows, error: custError } = await supabase
-      .from("customers")
-      .select("id, full_name, operation_type, metadata, branch_id, created_by_user_id, branches(name)")
-      .in("operation_type", [
-        "مشتري", "مشتري + استبدال", "استبدال", "بيع بالوكالة",
-        "buyer", "buyer_tradein", "buyer_tradein_pending", "buyer_tradein_evaluated", "sell_on_behalf"
-      ])
-      .eq("is_active", false); // Closed customers = sold deal completed
+  // 2. Fetch associated buyers using chunked orQuery (confirmed working via metadata JSONB path)
+  const buyersMap = new Map<string, {
+    id: string;
+    name: string;
+    branch: string | null;
+    op_type: string | null;
+    trade_in_model: string | null;
+    creator_name: string | null;
+  }>();
 
-    if (custError) {
-      console.error("Error fetching customers:", custError);
+  if (inventoryIds.length > 0) {
+    const chunkSize = 40;
+    const allCustomers: any[] = [];
+
+    for (let i = 0; i < inventoryIds.length; i += chunkSize) {
+      const chunk = inventoryIds.slice(i, i + chunkSize);
+      const orQuery = chunk
+        .map(id => `metadata->>selected_inventory_id.eq.${id}`)
+        .join(",");
+
+      const { data: chunkData, error: chunkError } = await supabase
+        .from("customers")
+        .select("id, full_name, operation_type, metadata, branch_id, created_by_user_id, branches(name)")
+        .or(orQuery);
+
+      if (chunkError) {
+        console.error("Error fetching customers chunk:", chunkError);
+      } else if (chunkData) {
+        allCustomers.push(...chunkData);
+      }
     }
 
-    // Also fetch recently active customers (might be freshly closed)
-    const { data: activeRows } = await supabase
-      .from("customers")
-      .select("id, full_name, operation_type, metadata, branch_id, created_by_user_id, branches(name)")
-      .in("status", [
-        "تمت عملية البيع", "تمت عملية البيع (للعميل)", "closed", "مكتمل"
-      ]);
-
-    const allCustomers = [...(customerRows ?? []), ...(activeRows ?? [])];
-
-    // Filter in memory: find customers with selected_inventory_id matching our sold cars
-    const inventoryIdSet = new Set(inventoryIds);
-    const validCustomers = allCustomers.filter(c => {
-      let meta: Record<string, unknown> | null = null;
-      if (typeof c.metadata === 'string') {
-        try { meta = JSON.parse(c.metadata); } catch { return false; }
-      } else if (c.metadata && typeof c.metadata === 'object') {
-        meta = c.metadata as Record<string, unknown>;
-      }
-      const selId = meta?.selected_inventory_id as string | undefined;
-      return selId && inventoryIdSet.has(selId);
-    });
-
-    if (validCustomers.length > 0) {
+    if (allCustomers.length > 0) {
       // Fetch latest trade-ins for these buyers
-      const buyerIds = validCustomers.map(c => c.id);
+      const buyerIds = allCustomers.map(c => c.id);
       const { data: tradeRows } = await supabase
         .from("trade_ins")
         .select("customer_id, model, updated_at")
@@ -104,14 +94,17 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
         }
       }
 
-      const creatorIds = Array.from(new Set(validCustomers.map(c => c.created_by_user_id).filter(Boolean))) as string[];
+      // Fetch creator (salesperson) names
+      const creatorIds = Array.from(
+        new Set(allCustomers.map(c => c.created_by_user_id).filter(Boolean))
+      ) as string[];
       const creatorsMap = new Map<string, string>();
       if (creatorIds.length > 0) {
         const { data: usersData } = await supabase
           .from("app_users")
           .select("auth_user_id, full_name")
           .in("auth_user_id", creatorIds);
-        
+
         for (const u of usersData ?? []) {
           if (u.auth_user_id && u.full_name) {
             creatorsMap.set(u.auth_user_id, u.full_name);
@@ -119,25 +112,36 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
         }
       }
 
-      for (const c of validCustomers) {
+      // Map each customer to their selected_inventory_id
+      for (const c of allCustomers) {
         let meta: Record<string, unknown> | null = null;
-        if (typeof c.metadata === 'string') {
+        if (typeof c.metadata === "string") {
           try { meta = JSON.parse(c.metadata); } catch { continue; }
-        } else if (c.metadata && typeof c.metadata === 'object') {
+        } else if (c.metadata && typeof c.metadata === "object") {
           meta = c.metadata as Record<string, unknown>;
         }
+
         const selId = meta?.selected_inventory_id as string | undefined;
-        if (selId) {
-          const opType = (c.operation_type as string | null) ?? (meta?.operation_type_code as string | null) ?? null;
-          buyersMap.set(selId, {
-            id: c.id,
-            name: c.full_name,
-            branch: Array.isArray(c.branches) ? c.branches[0]?.name : (c.branches as any)?.name ?? null,
-            op_type: opType,
-            trade_in_model: latestTradeByCustomer.get(c.id) ?? null,
-            creator_name: c.created_by_user_id ? (creatorsMap.get(c.created_by_user_id) ?? null) : null,
-          });
-        }
+        if (!selId) continue;
+
+        const opType =
+          (c.operation_type as string | null) ??
+          (meta?.operation_type_code as string | null) ??
+          (meta?.operation_type as string | null) ??
+          null;
+
+        buyersMap.set(selId, {
+          id: c.id,
+          name: c.full_name,
+          branch: Array.isArray(c.branches)
+            ? c.branches[0]?.name
+            : (c.branches as any)?.name ?? null,
+          op_type: opType,
+          trade_in_model: latestTradeByCustomer.get(c.id) ?? null,
+          creator_name: c.created_by_user_id
+            ? (creatorsMap.get(c.created_by_user_id) ?? null)
+            : null,
+        });
       }
     }
   }
@@ -164,7 +168,9 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
       inspection: (item.inspection as string | null) ?? null,
       source_customer_id: (item.source_customer_id as string | null) ?? null,
       branch_id: (item.branch_id as string | null) ?? null,
-      branch_name: Array.isArray(item.branches) ? item.branches[0]?.name : (item.branches as any)?.name ?? null,
+      branch_name: Array.isArray(item.branches)
+        ? item.branches[0]?.name
+        : (item.branches as any)?.name ?? null,
       buyer_id: buyer?.id ?? null,
       buyer_name: buyer?.name ?? null,
       buyer_branch_name: buyer?.branch ?? null,
@@ -184,28 +190,39 @@ export type SoldInventoryFilters = {
   deal?: string;
 };
 
-export function filterSoldInventory(items: SoldInventoryItem[], filters: SoldInventoryFilters): SoldInventoryItem[] {
+export function filterSoldInventory(
+  items: SoldInventoryItem[],
+  filters: SoldInventoryFilters
+): SoldInventoryItem[] {
   const normQ = (filters.q ?? "").trim().toLowerCase();
-  
+
   return items.filter(item => {
-    if (filters.branch && filters.branch !== "all" && item.branch_name !== filters.branch && item.buyer_branch_name !== filters.branch) {
+    if (
+      filters.branch &&
+      filters.branch !== "all" &&
+      item.branch_name !== filters.branch &&
+      item.buyer_branch_name !== filters.branch
+    ) {
       return false;
     }
-    
+
     if (filters.deal && filters.deal !== "all") {
       const d = (item.deal_type ?? "").toLowerCase();
       const opType = (item.buyer_operation_type ?? "").toLowerCase();
-      
+
       let badge = "مشتري";
       if (d.includes("وكالة") || d.includes("برسم البيع")) {
         badge = "وكالة";
-      } else if (opType.includes("trade") || opType.includes("استبدال") || d.includes("استبدال") || d.includes("حيازة")) {
+      } else if (
+        opType.includes("trade") ||
+        opType.includes("استبدال") ||
+        d.includes("استبدال") ||
+        d.includes("حيازة")
+      ) {
         badge = "استبدال";
       }
 
-      if (filters.deal !== badge) {
-        return false;
-      }
+      if (filters.deal !== badge) return false;
     }
 
     if (normQ) {
@@ -218,7 +235,9 @@ export function filterSoldInventory(items: SoldInventoryItem[], filters: SoldInv
         item.buyer_branch_name ?? "",
         item.deal_type ?? "",
         item.buyer_creator_name ?? "",
-      ].join(" ").toLowerCase();
+      ]
+        .join(" ")
+        .toLowerCase();
       if (!haystack.includes(normQ)) return false;
     }
 
