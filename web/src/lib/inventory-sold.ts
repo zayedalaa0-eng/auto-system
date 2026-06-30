@@ -66,7 +66,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
 
       const { data: chunkData, error: chunkError } = await supabase
         .from("customers")
-        .select("id, full_name, operation_type, metadata, branch_id, created_by_user_id, branches(name)")
+        .select("id, full_name, operation_type, metadata, branch_id, assigned_user_id, branches(name), app_users(full_name)")
         .or(orQuery);
 
       if (chunkError) {
@@ -94,23 +94,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
         }
       }
 
-      // Fetch creator (salesperson) names
-      const creatorIds = Array.from(
-        new Set(allCustomers.map(c => c.created_by_user_id).filter(Boolean))
-      ) as string[];
-      const creatorsMap = new Map<string, string>();
-      if (creatorIds.length > 0) {
-        const { data: usersData } = await supabase
-          .from("app_users")
-          .select("auth_user_id, full_name")
-          .in("auth_user_id", creatorIds);
-
-        for (const u of usersData ?? []) {
-          if (u.auth_user_id && u.full_name) {
-            creatorsMap.set(u.auth_user_id, u.full_name);
-          }
-        }
-      }
+      // Salesperson name comes from app_users join in the select query
 
       // Map each customer to their selected_inventory_id
       for (const c of allCustomers) {
@@ -130,6 +114,11 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
           (meta?.operation_type as string | null) ??
           null;
 
+        // Get salesperson name from joined app_users relation
+        const salespersonName: string | null = Array.isArray(c.app_users)
+          ? (c.app_users[0]?.full_name ?? null)
+          : (c.app_users as any)?.full_name ?? null;
+
         buyersMap.set(selId, {
           id: c.id,
           name: c.full_name,
@@ -138,9 +127,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
             : (c.branches as any)?.name ?? null,
           op_type: opType,
           trade_in_model: latestTradeByCustomer.get(c.id) ?? null,
-          creator_name: c.created_by_user_id
-            ? (creatorsMap.get(c.created_by_user_id) ?? null)
-            : null,
+          creator_name: salespersonName,
         });
       }
     }
