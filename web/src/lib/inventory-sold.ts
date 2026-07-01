@@ -8,6 +8,7 @@ export type SoldInventoryItem = InventoryItem & {
   buyer_branch_name?: string | null;
   buyer_operation_type?: string | null;
   buyer_trade_in_model?: string | null;
+  buyer_trade_in_inventory_id?: string | null;
   buyer_creator_name?: string | null;
   deal_date?: string | null;
 };
@@ -51,6 +52,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
     branch: string | null;
     op_type: string | null;
     trade_in_model: string | null;
+    trade_in_inventory_id: string | null;
     creator_name: string | null;
   }>();
 
@@ -96,6 +98,24 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
 
       // Salesperson name comes from app_users join in the select query
 
+      // جلب سيارات الاستبدال من المخزون المرتبطة بالمشترين
+      const tradeInInventoryMap = new Map<string, string>(); // customer_id -> inventory_id
+      if (buyerIds.length > 0) {
+        const { data: tradeInInvRows } = await supabase
+          .from("inventory")
+          .select("id, source_customer_id")
+          .in("source_customer_id", buyerIds)
+          .in("deal_type", ["استبدال", "حيازة"])
+          .eq("is_active", true);
+
+        for (const row of tradeInInvRows ?? []) {
+          const cid = String(row.source_customer_id ?? "");
+          if (cid && !tradeInInventoryMap.has(cid)) {
+            tradeInInventoryMap.set(cid, String(row.id));
+          }
+        }
+      }
+
       // Map each customer to their selected_inventory_id
       for (const c of allCustomers) {
         let meta: Record<string, unknown> | null = null;
@@ -127,6 +147,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
             : (c.branches as any)?.name ?? null,
           op_type: opType,
           trade_in_model: latestTradeByCustomer.get(c.id) ?? null,
+          trade_in_inventory_id: tradeInInventoryMap.get(c.id) ?? null,
           creator_name: salespersonName,
         });
       }
@@ -163,6 +184,7 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
       buyer_branch_name: buyer?.branch ?? null,
       buyer_operation_type: buyer?.op_type ?? null,
       buyer_trade_in_model: buyer?.trade_in_model ?? null,
+      buyer_trade_in_inventory_id: buyer?.trade_in_inventory_id ?? null,
       buyer_creator_name: buyer?.creator_name ?? null,
       deal_date: (item.updated_at as string | null) ?? null,
     };

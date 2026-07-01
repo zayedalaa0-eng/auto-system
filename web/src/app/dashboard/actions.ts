@@ -592,7 +592,14 @@ async function notifyOpportunityForModelAvailability({
     let nonGenericMatchFound = false;
     for (const rT of reqTokens) {
       // نبحث عن الكلمة في اسم السيارة المعروضة
-      const matchedInvT = invTokens.find(iT => iT === rT || iT.includes(rT) || rT.includes(iT));
+      const matchedInvT = invTokens.find(iT => {
+        if (iT === rT) return true;
+        // تقييد المطابقة الجزئية للكلمات الطويلة فقط (4 حروف أو أكثر) لتجنب التطابق الخاطئ للكلمات القصيرة مثل "تي"
+        if (iT.includes(rT) && rT.length >= 4) return true;
+        if (rT.includes(iT) && iT.length >= 4) return true;
+        return false;
+      });
+      
       if (matchedInvT) {
         // يجب ألا تكون الكلمة المطابقة مجرد اسم ماركة، أو رقم سنة، لتعتبر تطابقاً حقيقياً
         const isNum = !isNaN(Number(rT)) || !isNaN(Number(matchedInvT));

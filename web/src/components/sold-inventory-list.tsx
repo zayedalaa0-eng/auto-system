@@ -1,9 +1,8 @@
 "use client";
 
 import { SoldInventoryItem } from "@/lib/inventory-sold";
-import { CarFront, Store, User, RefreshCw, Star, MapPin, Search } from "lucide-react";
+import { CarFront, Store, User, RefreshCw, Star, ExternalLink } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
 
 type Props = {
   items: SoldInventoryItem[];
@@ -39,9 +38,21 @@ export function SoldInventoryList({ items }: Props) {
             مشتري + استبدال
           </span>
           {item.buyer_trade_in_model && (
-            <span className="text-[10px] text-slate-500 max-w-[120px] truncate" title={item.buyer_trade_in_model}>
-              عن: {item.buyer_trade_in_model}
-            </span>
+            item.buyer_trade_in_inventory_id ? (
+              <Link
+                href={`/dashboard/inventory?car=${item.buyer_trade_in_inventory_id}&status=all`}
+                className="inline-flex items-center gap-1 text-[10px] text-fuchsia-600 hover:text-fuchsia-800 hover:underline underline-offset-2 max-w-[130px] truncate transition-colors"
+                title={`عرض سيارة الاستبدال: ${item.buyer_trade_in_model}`}
+              >
+                <RefreshCw className="h-2.5 w-2.5 flex-shrink-0" />
+                <span className="truncate">عن: {item.buyer_trade_in_model}</span>
+                <ExternalLink className="h-2.5 w-2.5 flex-shrink-0 opacity-60" />
+              </Link>
+            ) : (
+              <span className="text-[10px] text-slate-400 max-w-[130px] truncate" title={item.buyer_trade_in_model}>
+                عن: {item.buyer_trade_in_model}
+              </span>
+            )
           )}
         </div>
       );
@@ -60,8 +71,16 @@ export function SoldInventoryList({ items }: Props) {
     return new Intl.NumberFormat("en-US").format(price) + " ₪";
   }
 
+  function formatDate(dateStr: string) {
+    const d = new Date(dateStr);
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-1">
+    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1">
       {items.map((item) => {
         const isAgencyOrTradeIn = (item.deal_type ?? "").includes("استبدال") || (item.deal_type ?? "").includes("وكالة") || (item.deal_type ?? "").includes("برسم البيع");
 
@@ -70,15 +89,26 @@ export function SoldInventoryList({ items }: Props) {
             key={item.id}
             className="group relative flex flex-col lg:flex-row lg:items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-slate-300 hover:shadow-md"
           >
-            {/* 1. Car Info */}
+            {/* 1. Car Info — قابل للضغط */}
             <div className="flex flex-1 items-start gap-4 lg:w-[25%] lg:flex-none">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-400 border border-slate-100 shadow-inner">
+              <Link
+                href={`/dashboard/inventory?car=${item.id}&status=all`}
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-400 border border-slate-100 shadow-inner hover:bg-blue-50 hover:text-blue-500 hover:border-blue-200 transition-all"
+                title={`عرض بطاقة: ${item.model}`}
+              >
                 <CarFront className="h-6 w-6" />
-              </div>
+              </Link>
               <div className="min-w-0">
-                <h3 className="truncate text-base font-bold text-slate-800" title={item.model}>
-                  {item.model}
-                </h3>
+                <Link
+                  href={`/dashboard/inventory?car=${item.id}&status=all`}
+                  className="group/car-link flex items-center gap-1.5 min-w-0"
+                  title={`عرض بطاقة: ${item.model}`}
+                >
+                  <h3 className="truncate text-base font-bold text-slate-800 group-hover/car-link:text-blue-700 transition-colors" title={item.model}>
+                    {item.model}
+                  </h3>
+                  <ExternalLink className="h-3 w-3 text-slate-300 group-hover/car-link:text-blue-400 flex-shrink-0 transition-colors" />
+                </Link>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                   <span className="font-semibold text-slate-700">{item.production_year ?? "سنة ؟"}</span>
                   {item.chassis_no && (
@@ -128,24 +158,28 @@ export function SoldInventoryList({ items }: Props) {
                 )}
               </div>
 
-              {/* Arrow Indicator (Cross-branch visually) */}
+              {/* Arrow */}
               <div className="hidden lg:flex flex-col items-center justify-center px-2">
                 <div className="h-[2px] w-8 bg-gradient-to-l from-slate-200 to-transparent relative">
                   <div className="absolute -left-1 -top-[3px] h-2 w-2 rotate-45 border-b-2 border-l-2 border-slate-300"></div>
                 </div>
               </div>
 
-              {/* Destination / Buyer */}
+              {/* Destination / Buyer — قابل للضغط */}
               <div className="flex-1 min-w-0">
                 <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-emerald-600/70">المشتري / منفذ البيع</div>
                 <div className="flex flex-col">
                   {item.buyer_id ? (
                     <Link
-                      href={`/dashboard/customer-profile/${item.buyer_id}`}
-                      className="truncate font-semibold text-emerald-700 flex items-center gap-1 hover:underline decoration-emerald-300 underline-offset-4"
+                      href={`/dashboard/customers/${item.buyer_id}`}
+                      className="group/buyer-link inline-flex items-center gap-1 truncate font-semibold text-emerald-700 hover:text-emerald-900 transition-colors max-w-full"
+                      title={`فتح ملف العميل: ${item.buyer_name}`}
                     >
-                      <User className="h-3.5 w-3.5" />
-                      {item.buyer_name}
+                      <User className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span className="truncate group-hover/buyer-link:underline underline-offset-2 decoration-emerald-400">
+                        {item.buyer_name}
+                      </span>
+                      <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-40 group-hover/buyer-link:opacity-100 transition-opacity" />
                     </Link>
                   ) : (
                     <span className="font-semibold text-slate-400 flex items-center gap-1">
@@ -175,12 +209,8 @@ export function SoldInventoryList({ items }: Props) {
               <div className="text-right flex flex-col items-end">
                 <div className="font-bold text-slate-800">{formatPrice(item.price)}</div>
                 {item.deal_date && (
-                  <div className="text-[10px] text-slate-500 mt-1 font-medium">
-                    {new Date(item.deal_date).toLocaleDateString('ar-EG', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric'
-                    })}
+                  <div className="mt-1 inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-500 tracking-wide">
+                    {formatDate(item.deal_date)}
                   </div>
                 )}
               </div>
@@ -191,3 +221,4 @@ export function SoldInventoryList({ items }: Props) {
     </div>
   );
 }
+
