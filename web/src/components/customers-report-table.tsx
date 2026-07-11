@@ -51,7 +51,7 @@ function cleanCarPart(part: string): string {
 function parseRequestedCars(
   value: string | null,
   tradeInModel?: string | null,
-): Array<{ name: string; special: boolean }> {
+): Array<{ name: string; model: string; chassis: string | null; special: boolean }> {
   if (!value) return [];
   const tradeNorm = (tradeInModel ?? "").replace(/\s+/g, " ").trim().toLowerCase();
   return value
@@ -59,7 +59,16 @@ function parseRequestedCars(
     .map((raw) => {
       const special = /طلب\s+خاص/i.test(raw);
       const name = cleanCarPart(raw);
-      return { name, special };
+      
+      let model = name;
+      let chassis: string | null = null;
+      const chassisMatch = name.match(/^(.*?)(?:\s*-\s*(?:شاصي|chassis)\s*:?\s*(\S+))$/i);
+      if (chassisMatch) {
+        model = chassisMatch[1].trim();
+        chassis = chassisMatch[2].trim();
+      }
+
+      return { name, model, chassis, special };
     })
     .filter((c) => {
       if (!c.name) return false;
@@ -193,14 +202,21 @@ export function CustomersReportTable({
                                 ?? (i === 0 ? customer.inventory_availability : null);
                               const availBadge = inventoryAvailabilityBadge(status);
                               return (
-                                <div key={i} className="flex items-center gap-1.5 whitespace-nowrap">
-                                  <Car className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
-                                  <span className="text-sm font-semibold text-slate-700 leading-tight">{rc.name}</span>
-                                  {rc.special ? (
-                                    <span className="inline-flex items-center rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-semibold text-rose-600 flex-shrink-0">غير متوفرة بالمعرض</span>
-                                  ) : availBadge ? (
-                                    <span className={`inline-flex items-center text-[11px] font-semibold flex-shrink-0 ${availBadge.cls}`}>{availBadge.label}</span>
-                                  ) : null}
+                                <div key={i} className="flex flex-col gap-0.5">
+                                  <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                    <Car className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
+                                    <span className="text-sm font-semibold text-slate-700 leading-tight">{rc.model}</span>
+                                    {rc.special ? (
+                                      <span className="inline-flex items-center rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-semibold text-rose-600 flex-shrink-0">غير متوفرة بالمعرض</span>
+                                    ) : availBadge ? (
+                                      <span className={`inline-flex items-center text-[11px] font-semibold flex-shrink-0 ${availBadge.cls}`}>{availBadge.label}</span>
+                                    ) : null}
+                                  </div>
+                                  {rc.chassis && (
+                                    <span className="text-[11px] font-mono text-slate-400 pl-5 pr-5 flex items-center gap-1">
+                                      شاصي: {rc.chassis}
+                                    </span>
+                                  )}
                                 </div>
                               );
                             })
