@@ -42,21 +42,8 @@ function isBuyerTradeIn(opType: string | null | undefined) {
 
 function cleanCarPart(part: string): string {
   let p = part.replace(/\(?\s*طلب\s+خاص\s*\)?/gi, "");
-
-  // تقسيم النص بناءً على أي نوع من الشرطات (العادية، الطويلة، أو المتوسطة)
-  const segments = p.split(/\s*[-–—]\s*/);
-  if (segments.length > 1) {
-    // نبحث عن الجزء الذي يحتوي على سنة الصنع (4 أرقام)
-    const yearIndex = segments.findIndex((s) => /^\d{4}$/.test(s.trim()));
-    if (yearIndex !== -1) {
-      // نأخذ الموديل والسنة فقط ونتجاهل ما بعدهما
-      p = segments.slice(0, yearIndex + 1).join(" - ");
-    } else {
-      // إذا لم يكن هناك سنة، نأخذ الجزء الأول فقط
-      p = segments[0];
-    }
-  }
-
+  
+  // الاحتفاظ بكامل النص بما فيه رقم الشاصي لضمان المطابقة الدقيقة
   return p.trim();
 }
 

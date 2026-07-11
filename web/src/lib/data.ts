@@ -497,16 +497,18 @@ async function enrichCustomersWithSaleOfferInReport(
     (c) => !isSellOnBehalf(c.operation_type) && !c.selected_inventory_id,
   );
 
+  const adminClient = hasSupabaseServiceRoleEnv() ? createAdminClient() : supabase;
+
   const [invBySourceResult, invByIdResult, allInventoryResult] = await Promise.all([
     sellOnBehalfIds.length > 0
-      ? supabase
+      ? adminClient
           .from("inventory")
           .select("source_customer_id, availability_status")
           .in("source_customer_id", sellOnBehalfIds)
           .order("updated_at", { ascending: false })
       : Promise.resolve({ data: [] as Array<{ source_customer_id: string | null; availability_status: string }> }),
     selectedInventoryIds.length > 0
-      ? supabase
+      ? adminClient
           .from("inventory")
           .select("id, availability_status")
           .in("id", selectedInventoryIds)

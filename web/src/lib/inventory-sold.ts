@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, hasSupabaseServiceRoleEnv } from "@/lib/supabase/admin";
 import { getRoleCapabilities } from "@/lib/roles";
 import { InventoryItem } from "./data";
 
@@ -28,8 +29,9 @@ export async function getSoldInventory(limit = 250): Promise<SoldInventoryItem[]
 
   const caps = getRoleCapabilities(profile.role);
 
-  // 1. Fetch sold inventory
-  const { data: inventoryRows, error: invError } = await supabase
+  // 1. Fetch sold inventory using admin client to bypass RLS for cross-branch
+  const adminClient = hasSupabaseServiceRoleEnv() ? createAdminClient() : supabase;
+  const { data: inventoryRows, error: invError } = await adminClient
     .from("inventory")
     .select("id, model, owner_name, deal_type, chassis_no, condition_label, availability_status, price, production_year, color, gearbox, fuel_type, mileage, specs, inspection, source_customer_id, branch_id, branches(name), updated_at")
     .like("availability_status", "%مباعة%")
