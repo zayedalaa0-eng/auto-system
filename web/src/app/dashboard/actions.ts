@@ -4139,7 +4139,7 @@ export async function updateStaffProfileAction(formData: FormData) {
 
 export async function addCustomerInterest(inventoryId: string, customerId: string, interestLevel: string, notes: string | null) {
   const supabase = await createClient();
-  const { profile } = await getScopedProfile();
+  const profile = await getCurrentProfile();
   if (!profile) return { error: "غير مصرح" };
 
   const { data: existing, error: existError } = await supabase
@@ -4177,7 +4177,7 @@ export async function addCustomerInterest(inventoryId: string, customerId: strin
 
 export async function removeCustomerInterest(interestId: string, inventoryId: string) {
   const supabase = await createClient();
-  const { profile } = await getScopedProfile();
+  const profile = await getCurrentProfile();
   if (!profile) return { error: "غير مصرح" };
 
   const { error } = await supabase
@@ -4196,7 +4196,7 @@ export async function removeCustomerInterest(interestId: string, inventoryId: st
 
 export async function updateCustomerInterest(interestId: string, inventoryId: string, interestLevel: string, notes: string | null) {
   const supabase = await createClient();
-  const { profile } = await getScopedProfile();
+  const profile = await getCurrentProfile();
   if (!profile) return { error: "غير مصرح" };
 
   const { error } = await supabase
