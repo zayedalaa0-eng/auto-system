@@ -2661,3 +2661,94 @@ export async function getPendingEvaluationWithDetails(): Promise<PendingEvaluati
   return items.filter((item) => item.trade_in_price === null || item.trade_in_price === undefined);
 }
 
+export type CustomerCarInterestItem = {
+  id: string;
+  customer_id: string;
+  inventory_id: string;
+  interest_level: string;
+  notes: string | null;
+  created_at: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_status: string;
+  created_by_name: string | null;
+};
+
+export async function getInterestedCustomers(inventoryId: string): Promise<CustomerCarInterestItem[]> {
+  if (!hasSupabaseEnv()) return [];
+
+  const supabase = await createClient();
+  
+  // 1. Fetch car model
+  const { data: carData } = await supabase
+    .from("inventory")
+    .select("model")
+    .eq("id", inventoryId)
+    .single();
+
+  const model = carData?.model?.trim() || "";
+
+  // 2. Fetch manual interests
+  const { data: manualData, error } = await supabase
+    .from("customer_car_interests")
+    .select(`
+      id,
+      customer_id,
+      inventory_id,
+      interest_level,
+      notes,
+      created_at,
+      customers!inner(full_name, phone, status),
+      app_users!customer_car_interests_created_by_user_id_fkey(full_name)
+    `)
+    .eq("inventory_id", inventoryId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching manual interested customers:", error);
+  }
+
+  const results: CustomerCarInterestItem[] = (manualData || []).map((item: any) => ({
+    id: item.id,
+    customer_id: item.customer_id,
+    inventory_id: item.inventory_id,
+    interest_level: item.interest_level,
+    notes: item.notes,
+    created_at: item.created_at,
+    customer_name: item.customers?.full_name ?? "غير متوفر",
+    customer_phone: item.customers?.phone ?? "غير متوفر",
+    customer_status: item.customers?.status ?? "",
+    created_by_name: item.app_users?.full_name ?? null,
+  }));
+
+  // 3. Fetch auto matched customers
+  if (model.length > 2) {
+    const { data: autoData } = await supabase
+      .from("customers")
+      .select("id, full_name, phone, status, requested_car, created_at")
+      .eq("is_active", true)
+      .ilike("requested_car", `%${model}%`);
+
+    if (autoData) {
+      const manualCustomerIds = new Set(results.map(r => r.customer_id));
+      for (const customer of autoData) {
+        if (!manualCustomerIds.has(customer.id)) {
+          results.push({
+            id: `auto_${customer.id}`,
+            customer_id: customer.id,
+            inventory_id: inventoryId,
+            interest_level: "high",
+            notes: `مطابقة آلية (الطلب: ${customer.requested_car})`,
+            created_at: customer.created_at,
+            customer_name: customer.full_name,
+            customer_phone: customer.phone || "غير متوفر",
+            customer_status: customer.status || "",
+            created_by_name: "النظام",
+          });
+        }
+      }
+    }
+  }
+
+  return results;
+}

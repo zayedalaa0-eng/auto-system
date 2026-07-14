@@ -2093,6 +2093,22 @@ export async function upsertCustomerAction(formData: FormData) {
     existingMetadata = ((existingCustomerRow?.metadata as Record<string, unknown> | null) ?? {});
   }
 
+  const resolvedOpType = hasOperationTypeInput
+    ? operationType
+    : ((existingMetadata.operation_type_code as string | null | undefined) ?? null) || "buyer";
+  const isBuyerType = resolvedOpType !== "sell_on_behalf";
+
+  if (isBuyerType && (status.includes("تمت عملية البيع") || status.includes("حجز"))) {
+    const hasSelectedCar = inventoryIdForStatus || existingMetadata.selected_inventory_id;
+    if (!hasSelectedCar) {
+      redirect(
+        customerId
+          ? `/dashboard/customers/${customerId}/edit?error=${encodeRedirectError("يجب تحديد السيارة المطلوبة من المخزون وتأكيدها عند اختيار هذه الحالة.")}`
+          : `/dashboard/customers/new?error=${encodeRedirectError("يجب تحديد السيارة المطلوبة من المخزون وتأكيدها عند اختيار هذه الحالة.")}`
+      );
+    }
+  }
+
   const payload: Record<string, unknown> = {
     branch_id: branchId,
     assigned_user_id: assignedUserId,
@@ -2535,9 +2551,10 @@ export async function upsertCustomerAction(formData: FormData) {
 
       if (invItem) {
         const newInvStatus = status.includes("تمت عملية البيع") ? "مباعة" : "محجوزة";
+        const adminWriter = createAdminClient();
 
-        // تحديث حالة السيارة في المخزون
-        await supabase
+        // تحديث حالة السيارة في المخزون (بصلاحية المدير لتجاوز قيود RLS الفروع)
+        await adminWriter
           .from("inventory")
           .update({ availability_status: newInvStatus })
           .eq("id", invItem.id);
@@ -2565,7 +2582,7 @@ export async function upsertCustomerAction(formData: FormData) {
             newInvStatus === "مباعة"  ? "تمت عملية البيع (للعميل)" :
             newInvStatus === "محجوزة" ? "حجز (سيارة العميل)"       : null;
           if (sellOnBehalfNewStatus) {
-            await supabase
+            await adminWriter
               .from("customers")
               .update({ status: sellOnBehalfNewStatus, last_contact_at: new Date().toISOString() })
               .eq("id", invItem.source_customer_id);
@@ -4117,5 +4134,81 @@ export async function updateStaffProfileAction(formData: FormData) {
   }
 
   revalidatePath('/dashboard/staff');
+  return { success: true };
+}
+
+export async function addCustomerInterest(inventoryId: string, customerId: string, interestLevel: string, notes: string | null) {
+  const supabase = await createClient();
+  const { profile } = await getScopedProfile();
+  if (!profile) return { error: "غير مصرح" };
+
+  const { data: existing, error: existError } = await supabase
+    .from("customer_car_interests")
+    .select("id")
+    .eq("inventory_id", inventoryId)
+    .eq("customer_id", customerId)
+    .maybeSingle();
+
+  if (existError) {
+    console.error("Error checking existing interest:", existError);
+    return { error: "حدث خطأ أثناء التحقق من وجود الاهتمام." };
+  }
+
+  if (existing) {
+    return { error: "هذا العميل مرتبط بالفعل كمهتم بهذه السيارة." };
+  }
+
+  const { error } = await supabase.from("customer_car_interests").insert({
+    inventory_id: inventoryId,
+    customer_id: customerId,
+    interest_level: interestLevel,
+    notes: notes,
+    created_by_user_id: profile.id,
+  });
+
+  if (error) {
+    console.error("Error adding interest:", error);
+    return { error: "حدث خطأ أثناء حفظ الاهتمام." };
+  }
+
+  revalidatePath(`/dashboard/inventory/${inventoryId}`);
+  return { success: true };
+}
+
+export async function removeCustomerInterest(interestId: string, inventoryId: string) {
+  const supabase = await createClient();
+  const { profile } = await getScopedProfile();
+  if (!profile) return { error: "غير مصرح" };
+
+  const { error } = await supabase
+    .from("customer_car_interests")
+    .delete()
+    .eq("id", interestId);
+
+  if (error) {
+    console.error("Error removing interest:", error);
+    return { error: "حدث خطأ أثناء إزالة الاهتمام." };
+  }
+
+  revalidatePath(`/dashboard/inventory/${inventoryId}`);
+  return { success: true };
+}
+
+export async function updateCustomerInterest(interestId: string, inventoryId: string, interestLevel: string, notes: string | null) {
+  const supabase = await createClient();
+  const { profile } = await getScopedProfile();
+  if (!profile) return { error: "غير مصرح" };
+
+  const { error } = await supabase
+    .from("customer_car_interests")
+    .update({ interest_level: interestLevel, notes: notes })
+    .eq("id", interestId);
+
+  if (error) {
+    console.error("Error updating interest:", error);
+    return { error: "حدث خطأ أثناء تحديث الاهتمام." };
+  }
+
+  revalidatePath(`/dashboard/inventory/${inventoryId}`);
   return { success: true };
 }
