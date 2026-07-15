@@ -1767,16 +1767,20 @@ export function CustomerProfileContent({
                   })()}
 
                   {detailUseCustomRequest && (
-                    <div className="space-y-3 mb-3">
+                    <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4 shadow-sm">
+                      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-blue-800">
+                        <CarFront className="h-4 w-4" />
+                        إضافة سيارة غير متوفرة (طلب خاص)
+                      </div>
                       <div className="grid gap-2 md:grid-cols-[2fr_1fr_auto]">
                         <div>
-                          <input value={detailCustomType} onChange={(e) => setDetailCustomType(e.target.value)} className="legacy-input" placeholder="ابحث أو اكتب نوع السيارة..." list="cars-datalist" autoComplete="off" />
+                          <input value={detailCustomType} onChange={(e) => setDetailCustomType(e.target.value)} className="legacy-input bg-white" placeholder="ابحث أو اكتب نوع السيارة..." list="cars-datalist" autoComplete="off" />
                           <datalist id="cars-datalist">
                             {CAR_MAKES.map(c => <option key={c} value={c} />)}
                           </datalist>
                         </div>
-                        <input value={detailCustomYear} onChange={(e) => setDetailCustomYear(e.target.value)} className="legacy-input" placeholder="الموديل (سنة)" />
-                        <button type="button" className="legacy-btn legacy-btn-info h-[42px] px-6" onClick={addCustomRequestChoice} disabled={!detailCustomType.trim()}>إضافة</button>
+                        <input value={detailCustomYear} onChange={(e) => setDetailCustomYear(e.target.value)} className="legacy-input bg-white" placeholder="الموديل (سنة)" />
+                        <button type="button" className="legacy-btn legacy-btn-info h-[42px] px-6 shadow-sm" onClick={addCustomRequestChoice} disabled={!detailCustomType.trim()}>إضافة</button>
                       </div>
                     </div>
                   )}
