@@ -703,7 +703,6 @@ export function CustomerProfileContent({
   const [detailInvCategory, setDetailInvCategory] = useState<"showroom" | "customer">("showroom");
   const [detailCustomType, setDetailCustomType] = useState("");
   const [detailCustomYear, setDetailCustomYear] = useState("");
-  const [detailCustomNegotiation, setDetailCustomNegotiation] = useState("");
   const [countAsInteraction, setCountAsInteraction] = useState(true);
   const [detailNegotiations, setDetailNegotiations] = useState<Record<string, string>>({});
   const [detailUpdateNote, setDetailUpdateNote] = useState("");
@@ -1034,6 +1033,18 @@ export function CustomerProfileContent({
     if (!item) return;
     setDetailSelectedCars((cur) => cur.some((e) => e.id === item.id) ? cur : [...cur, item]);
     setDetailInventoryToAdd("");
+    markDirty();
+  }
+
+  function addCustomRequestChoice() {
+    const type = detailCustomType.trim();
+    if (!type) return;
+    const year = detailCustomYear.trim();
+    const label = year ? `(طلب خاص) ${type} - موديل ${year}` : `(طلب خاص) ${type}`;
+    const id = `custom_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    setDetailSelectedCars((cur) => [...cur, { id, label }]);
+    setDetailCustomType("");
+    setDetailCustomYear("");
     markDirty();
   }
 
@@ -1760,7 +1771,7 @@ export function CustomerProfileContent({
 
                   {detailUseCustomRequest && (
                     <div className="space-y-3 mb-3">
-                      <div className="grid gap-2 md:grid-cols-[2fr_1fr]">
+                      <div className="grid gap-2 md:grid-cols-[2fr_1fr_auto]">
                         <div>
                           <input value={detailCustomType} onChange={(e) => setDetailCustomType(e.target.value)} className="legacy-input" placeholder="ابحث أو اكتب نوع السيارة..." list="cars-datalist" autoComplete="off" />
                           <datalist id="cars-datalist">
@@ -1768,24 +1779,8 @@ export function CustomerProfileContent({
                           </datalist>
                         </div>
                         <input value={detailCustomYear} onChange={(e) => setDetailCustomYear(e.target.value)} className="legacy-input" placeholder="الموديل (سنة)" />
+                        <button type="button" className="legacy-btn legacy-btn-info h-[42px] px-6" onClick={addCustomRequestChoice} disabled={!detailCustomType.trim()}>إضافة</button>
                       </div>
-                      {detailCustomType.trim() && (
-                        <div className="legacy-negotiation-box legacy-negotiation-box--info">
-                          <div className="legacy-negotiation-box__label">التفاوض: (طلب خاص) {detailCustomType.trim()}{detailCustomYear.trim() ? ` - موديل ${detailCustomYear.trim()}` : ""}</div>
-                          <textarea value={detailCustomNegotiation} onChange={(e) => setDetailCustomNegotiation(e.target.value)} className="legacy-textarea" rows={3} placeholder="ما حدث في التفاوض..." />
-                          <VoiceRecorder
-                            customerId={customer.id}
-                            label={`تفاوض - ${detailCustomType.trim() || "طلب خاص"}`}
-                            onRecorded={(dur) => {
-                              if (!detailCustomNegotiation.trim()) setDetailCustomNegotiation(dur);
-                              markDirty();
-                            }}
-                            onDeleted={() => {
-                              if (detailCustomNegotiation.startsWith("🎤")) setDetailCustomNegotiation("");
-                            }}
-                          />
-                        </div>
-                      )}
                     </div>
                   )}
 
