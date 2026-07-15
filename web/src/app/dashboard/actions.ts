@@ -3300,9 +3300,11 @@ export async function saveCustomerProfileAction(formData: FormData) {
   const newInventoryStatus = status.includes("تمت عملية البيع") ? "مباعة" : status.includes("حجز") ? "محجوزة" : null;
   const selectedInventoryId = selectedInventoryMeta.id;
 
+  const adminWriter = createAdminClient();
+
   // ── تحديث حالة السيارة في المخزون + الانعكاس العكسي على عميل البيع بالوكالة ──
   if (newInventoryStatus && selectedInventoryId) {
-    const markSelectedInventory = await supabase
+    const markSelectedInventory = await adminWriter
       .from("inventory")
       .update({ availability_status: newInventoryStatus })
       .eq("id", selectedInventoryId);
@@ -3311,7 +3313,7 @@ export async function saveCustomerProfileAction(formData: FormData) {
     }
 
     // إذا كانت السيارة تخص عميل بيع بالوكالة → تحديث حالته تلقائياً
-    const { data: invCarOwner } = await supabase
+    const { data: invCarOwner } = await adminWriter
       .from("inventory")
       .select("source_customer_id")
       .eq("id", selectedInventoryId)
@@ -3322,7 +3324,7 @@ export async function saveCustomerProfileAction(formData: FormData) {
         newInventoryStatus === "مباعة"  ? "تمت عملية البيع (للعميل)" :
         newInventoryStatus === "محجوزة" ? "حجز (سيارة العميل)"       : null;
       if (sellOnBehalfNewStatus) {
-        await supabase
+        await adminWriter
           .from("customers")
           .update({ status: sellOnBehalfNewStatus, last_contact_at: new Date().toISOString() })
           .eq("id", invCarOwner.source_customer_id);
@@ -3338,7 +3340,7 @@ export async function saveCustomerProfileAction(formData: FormData) {
 
   // ── الإفراج عن السيارة السابقة إذا تغيّر الاختيار ─────────────────────────
   if (previousSelectedInventoryId && previousSelectedInventoryId !== selectedInventoryId) {
-    const releasePreviousInventory = await supabase
+    const releasePreviousInventory = await adminWriter
       .from("inventory")
       .update({ availability_status: "متوفرة" })
       .eq("id", previousSelectedInventoryId);
@@ -3347,14 +3349,14 @@ export async function saveCustomerProfileAction(formData: FormData) {
     }
 
     // إذا كانت السيارة المُفرَج عنها تخص عميل بيع بالوكالة → إعادة حالته لـ "برسم البيع"
-    const { data: prevInvOwner } = await supabase
+    const { data: prevInvOwner } = await adminWriter
       .from("inventory")
       .select("source_customer_id")
       .eq("id", previousSelectedInventoryId)
       .maybeSingle();
 
     if (prevInvOwner?.source_customer_id && prevInvOwner.source_customer_id !== customerId) {
-      const releaseResult = await supabase
+      const releaseResult = await adminWriter
         .from("customers")
         .update({ status: "برسم البيع", last_contact_at: new Date().toISOString() })
         .eq("id", prevInvOwner.source_customer_id)
@@ -3465,7 +3467,7 @@ export async function saveCustomerProfileAction(formData: FormData) {
     }
 
     await syncTradeInventoryFromCustomer({
-      supabase,
+      supabase: adminWriter,
       customerId,
       branchId,
       customerName: fullName || phone || "مالك",
@@ -3491,7 +3493,7 @@ export async function saveCustomerProfileAction(formData: FormData) {
         .maybeSingle();
       if (existingTrade?.model) {
         await syncTradeInventoryFromCustomer({
-          supabase,
+          supabase: adminWriter,
           customerId,
           branchId,
           customerName: fullName || phone || "مالك",
