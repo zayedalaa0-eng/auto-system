@@ -1020,9 +1020,6 @@ export function CustomerProfileContent({
       const note = detailNegotiations[item.id]?.trim();
       return note ? `التفاوض لسيارة ${item.label}: ${note}` : "";
     }).filter(Boolean),
-    detailUseCustomRequest && detailCustomType.trim() && detailCustomNegotiation.trim()
-      ? `التفاوض للطلب الخاص (${detailCustomType.trim()}${detailCustomYear.trim() ? ` - موديل ${detailCustomYear.trim()}` : ""}): ${detailCustomNegotiation.trim()}`
-      : "",
   ].filter(Boolean).join("\n");
 
   const composedNote = [detailUpdateNote.trim(), detailNegotiationSummary].filter(Boolean).join("\n\n");
